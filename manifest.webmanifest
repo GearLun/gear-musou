@@ -1,0 +1,17 @@
+{
+  "name": "齿轮无双 · 无尽割草",
+  "short_name": "齿轮无双",
+  "description": "无双割草动作游戏：30 层关卡、质变与奇物收集、猫咪老虎伙伴，自动攻击爽快割草",
+  "lang": "zh-CN",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#0c0f0d",
+  "theme_color": "#0c0f0d",
+  "icons": [
+    { "src": "./icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "./icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

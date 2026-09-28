@@ -1,0 +1,94 @@
+════════════════════════════════════════════════════════
+《齿轮无双》部署到 GitHub Pages · 上传说明
+════════════════════════════════════════════════════════
+
+这个文件夹（gh-pages）就是一个**能直接当网站发布**的完整站点：
+  index.html            在线版主文件（自动识别手机/电脑 + PWA）
+  manifest.webmanifest  应用清单（名称/图标/横屏/全屏）
+  sw.js                 离线缓存（首次打开后断网也能玩）
+  icon-192/512/1024.png 应用图标
+  download/             供访客直接下载的单文件版本
+  怎么玩.txt             玩法说明
+  README.md             仓库首页说明（会自动显示在线地址）
+  .nojekyll             告诉 GitHub Pages 不要用 Jekyll 处理
+
+────────────────────────────────────────────────────────
+路线 A：一条命令部署（推荐，需 Node.js，不用装 git）
+────────────────────────────────────────────────────────
+1. 去 GitHub 生成一个**细粒度访问令牌（Fine-grained token）**：
+   https://github.com/settings/personal-access-tokens/new
+     · Repository access  → All repositories（或先手动建好仓库再选 Only select repositories）
+     · Permissions → Repository permissions：
+         Contents ............ Read and write
+         Pages ............... Read and write
+         Administration ...... Read and write（要自动新建仓库才需要）
+     · 生成后复制那串 `github_pat_...`（只显示一次）
+
+2. 在本项目目录（musou-game）执行（把口令换成你自己的）：
+     Windows PowerShell：
+       $env:GITHUB_TOKEN="github_pat_xxx"; node tools/github-deploy.js --repo gear-musou
+     macOS / Linux：
+       GITHUB_TOKEN=github_pat_xxx node tools/github-deploy.js --repo gear-musou
+
+   脚本会自动：新建仓库（若不存在）→ 上传本文件夹全部文件 → 打开 Pages →
+   把真实在线地址写进 README.md → 等网站构建完成后打印地址（一般 1~2 分钟）。
+
+   常用参数：
+     --repo <名字>     仓库名（默认 gear-musou）
+     --owner <用户名>  指定账号（默认用令牌对应的账号）
+     --private         建私有仓库（注意：私有仓库的 Pages 需要 GitHub Pro）
+     --branch <分支>   默认 main
+     --msg "..."       提交信息
+     --no-pages        只推文件、不自动开 Pages
+
+3. 完事后**建议撤销令牌**：https://github.com/settings/tokens
+
+────────────────────────────────────────────────────────
+路线 B：网页手动上传（不想装任何东西）
+────────────────────────────────────────────────────────
+1. 打开 https://github.com/new
+      · Repository name：例如 `gear-musou`
+      · 选 **Public**（免费账号的 Pages 只支持公开仓库）
+      · **不要**勾选 Add a README（保持空仓库）
+      · Create repository
+
+2. 在新仓库页面点 **uploading an existing file**（或 Add file → Upload files），
+   把 **本文件夹（gh-pages）里的所有文件和文件夹**拖进去（注意：拖“里面的内容”，
+   别把 gh-pages 这一层文件夹本身拖进去）→ Commit changes。
+
+3. 打开仓库 **Settings → Pages**：
+      · Source 选 **Deploy from a branch**
+      · Branch 选 **main**、目录选 **/(root)** → Save
+
+4. 等 1~2 分钟，刷新 Settings → Pages，顶部会出现：
+      **Your site is live at https://<用户名>.github.io/gear-musou/**
+   这就是在线地址，手机电脑都能直接打开。
+
+────────────────────────────────────────────────────────
+路线 C：装了 git 的话
+────────────────────────────────────────────────────────
+   cd gh-pages
+   git init -b main
+   git add -A
+   git commit -m "齿轮无双 在线版"
+   git remote add origin https://github.com/<用户名>/<仓库名>.git
+   git push -u origin main
+   然后按上面第 3 步开 Pages。
+
+────────────────────────────────────────────────────────
+以后怎么更新游戏
+────────────────────────────────────────────────────────
+· 在开发目录跑一次 `node tools/build.js`（会重写 gh-pages/index.html 等文件），
+  然后重复路线 A 的脚本（它会覆盖更新，不会重复建仓库），或重走路线 B 的第 2 步。
+· Service Worker 已设为「页面导航网络优先」：更新后玩家**刷新一次即是最新版**；
+  断网时自动回退到上一次缓存的版本，离线照样能玩。
+· 手机「添加到主屏幕」后的图标/名称来自 manifest.webmanifest，改完记得让玩家重装一次。
+
+────────────────────────────────────────────────────────
+小提示 / 常见问题
+────────────────────────────────────────────────────────
+· 打开是 404？确认 Settings → Pages 的 Source 已保存，且仓库根目录有 index.html
+  （本文件夹第一层就有）。刚开 Pages 时等 1~2 分钟。
+· 想用自定义域名：Settings → Pages → Custom domain 填域名并在域名商处按提示加 CNAME。
+· 存档在浏览器本地：换设备、清缓存、无痕模式都会从零开始（属正常）。
+· 二次元/emoji 文件名在 URL 里会被转义，所以 download/ 里用的是 ASCII 文件名。
