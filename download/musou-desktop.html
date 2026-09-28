@@ -265,6 +265,24 @@
     text-shadow: 0 1px 4px rgba(0,0,0,.8);
   }
   body.touch.portrait #portrait-hint { display: block; }
+  /* 🔄 手机端「强制横屏」兜底遮罩：只有「触屏 UI + 竖屏」时才铺满全屏（**电脑端页面永远不出现**），
+     横过来 body.portrait 被摘掉 → 立刻消失。真正锁方向要靠 JS + 全屏（game.js 的 rotateTryLock）：
+     浏览器不允许网页直接锁方向，安卓走全屏+orientation.lock、iOS 只认这层提示。 */
+  #rotate-gate {
+    position: fixed; inset: 0; z-index: 90; display: none;
+    flex-direction: column; align-items: center; justify-content: center; gap: 14px;
+    background: rgba(6,8,7,.9); color: #f2efe2; text-align: center; padding: 20px;
+  }
+  body.touch.portrait #rotate-gate { display: flex; }
+  .rg-ico { font-size: 58px; line-height: 1; animation: rg-spin 2.4s linear infinite; }
+  @keyframes rg-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  .rg-t { font-size: 24px; letter-spacing: .14em; color: var(--gold); font-weight: 700; }
+  .rg-s { font-size: 13px; line-height: 1.8; color: rgba(242,239,226,.66); }
+  .rg-b {
+    margin-top: 4px; padding: 13px 24px; font-size: 16px; font-weight: 700; border-radius: 12px;
+    border: 2px solid var(--gold); background: rgba(255,209,102,.14); color: var(--gold);
+  }
+  /* 📱 跨版本入口的样式已删（改成「只做一个网页 + 主页按钮切换操作方式」，见 #btn-uimode） */
   .over-title { font-size: 64px; color: #e05a43; letter-spacing: .3em; font-weight: 700;
     text-shadow: 0 3px 0 #5a170b, 0 8px 22px rgba(0,0,0,.8); font-family: "STKaiti","KaiTi",serif; }
   .stats { font-size: 20px; line-height: 2; color: var(--ink); }
@@ -434,6 +452,8 @@
       <button class="btn btn2" id="btn-continue" style="display:none;">▶ 继续游戏</button>
       <button class="btn btn2" id="btn-meta">🌟 养成</button>
       <button class="btn btn2" id="btn-codex">📖 图 鉴</button>
+      <!-- 🖥📱 操作方式切换按钮**只在线版有**：由 tools/build.js 注入到 gh-pages/index.html（GitHub Pages）
+           与 deploy/index.html（PWA 部署包），下载的单文件版（齿轮无双*.html）里**没有这个按钮**。 -->
       <!-- 🛠 开发者版本入口：默认隐藏，只有开发者版本里才看得见「🧪 Boss 试验场」 -->
       <button class="btn btn2" id="btn-bosslab" style="display:none;">🧪 Boss 试验场</button>
     </div>
@@ -775,6 +795,16 @@
    </div>
   </div>
 </div>
+<!-- 🔄 手机端强制横屏层：放在 body 最后 → DOM 顺序天然盖住所有面板/界面（不靠 z-index 也能赢）。
+     ⚠️ 这里**只能有 HTML/CSS**：整个游戏只允许一个 script 元素（tests/check_single.js 会数字面量），
+     所以交互逻辑全部写在 game.js 的 rotateGateInit()/rotateTryLock() 里。 -->
+<div id="rotate-gate">
+  <div class="rg-ico">🔄</div>
+  <div class="rg-t">请把手机横过来</div>
+  <div class="rg-s">本作是横屏游戏，横过来画面更大、操作更顺手。<br>点下面的按钮可一键全屏并锁定横屏。</div>
+  <button id="rotate-go" class="rg-b">📱 全屏并锁定横屏</button>
+  <div class="rg-s" id="rotate-tip"></div>
+</div>
 <script>
 'use strict';
 /* ============================================================
@@ -812,6 +842,12 @@ let FX_SHADOW = true;         // 是否允许 shadowBlur 光晕
 let RENDER_DPR_MAX = 2;       // 渲染分辨率上限
 let PART_MAX = 720;           // 粒子数上限
 let fxForceHigh = false;      // ?fx=high：手机上也不减负（调试对照用）
+/* 📱🖥 强制横屏 / 主页「电脑操作·手机操作」切换的模块级状态。
+   ⚠️ **必须声明在这里**：文件靠后的 boot 段落（bindTouchUI(); rotateGateInit(); uiModeToggleInit();）
+   在加载时就调用了它们，声明若放在后面那段函数块里会踩 TDZ
+   「ReferenceError: Cannot access 'xxx' before initialization」—— 踩过，别再挪回去。 */
+let rotateTried = 0, rotateLocked = 0, rotateGateWired = false, rotateAutoOnce = false;
+const UI_MODE_KEY = 'gear-musou-uimode';
 try {
   const q = String((window.location && window.location.search) || '');
   fxForceHigh = /(^|[?&])fx=high(&|$)/.test(q);
@@ -15439,7 +15475,9 @@ $('btn-continue').addEventListener('click', () => {
 refreshContinue();   // 页面加载时检查存档
 metaLoad();          // 局外养成数据
 syncMetaBtn();       // 主页「养成」按钮上显示传承金币余额
-bindTouchUI();       // 触屏设备启用手机端控制
+bindTouchUI();        // 触屏控制绑定（操作方式可在主页用按钮切换）
+rotateGateInit();     // 📱 强制横屏：竖屏遮罩 + 「全屏并锁定横屏」按钮
+uiModeToggleInit();   // 🖥📱 主页「电脑操作 / 手机操作」切换按钮
 
 /* ============================================================
    手机端触屏支持：摇杆 / 闪避 / 奥义 / 暂停
@@ -15540,6 +15578,118 @@ function syncTouchUI() {
     }
   }
 }
+/* ══════════════════════════════════════════════════════════════════════════
+   📱 手机端「强制横屏」 + 电脑版/手机版两个网页的互跳入口
+   —— 背景：浏览器**不允许网页直接锁定屏幕方向**。唯一能真锁的路子是
+      「用户手势 → requestFullscreen() → screen.orientation.lock('landscape')」：
+      安卓 Chrome/Edge 能用，**iOS Safari 完全不支持**（只会静默失败）。
+      所以这里三层叠加：
+        ① PWA 清单里的 "orientation":"landscape"（手机「添加到主屏幕」后由系统锁横屏）
+        ② rotateTryLock()：全屏 + 锁方向；**竖屏时玩家任何一次触摸也会试一次**
+           （这样直接点「开始游戏」就顺手锁上了，不必先找按钮）
+        ③ 外壳里的 #rotate-gate 兜底遮罩（body.touch.portrait → 铺满全屏提示「请把手机横过来」，
+           横过来 body.portrait 被摘掉 → 立刻消失）
+   ⚠️ 这一整套只对**手机端网页**生效：电脑端页面是 force-desk → `.touch` 永不添加 →
+      遮罩永远不出现（用户要求「电脑端就是现在这样」）。逻辑写在 game.js 而不是外壳里，
+      是因为整个游戏只允许一个 script 元素（tests/check_single.js 会数这个字面量）。 */
+function pureTouchDevice() {
+  /* 「纯触屏设备」= 有触摸 + 粗指针 + 无悬停 → 手机/平板。
+     带触摸屏的笔记本、插着鼠标的平板会落到 false（指针是 fine / 有 hover），不吃误判。 */
+  try {
+    const touch = ('ontouchstart' in window) || (navigator.maxTouchPoints || 0) > 0;
+    if (!touch) return false;
+    const mm = window.matchMedia;
+    if (!mm) return true;
+    return !!(mm('(pointer: coarse)').matches || mm('(any-pointer: coarse)').matches) && mm('(hover: none)').matches;
+  } catch (e) { return false; }
+}
+function rotateLockSupport() {
+  try { return !!(screen.orientation && screen.orientation.lock); } catch (e) { return 0; }
+}
+function rotateTryLock() {
+  rotateTried++;
+  try {
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+    if (req) { const p = req.call(el); if (p && p.catch) p.catch(() => {}); }
+  } catch (e) {}
+  try {
+    const so = screen.orientation;
+    if (so && so.lock) {
+      const p = so.lock('landscape');
+      if (p && p.then) p.then(() => { rotateLocked = 1; }, () => {});
+      else rotateLocked = 1;
+      if (p && p.catch) p.catch(() => {});
+    }
+  } catch (e) {}
+}
+function rotateGateInit() {
+  const gate = $('rotate-gate');
+  if (!gate || rotateGateWired) return;
+  rotateGateWired = true;
+  const go = $('rotate-go');
+  if (go && go.addEventListener) {
+    go.addEventListener('click', (e) => { if (e && e.preventDefault) e.preventDefault(); rotateTryLock(); });
+  }
+  const tip = $('rotate-tip');
+  if (tip) {
+    tip.textContent = rotateLockSupport()
+      ? '' : '（本浏览器不支持锁定方向，横过来即可；iOS 请先关掉「竖排方向锁定」）';
+  }
+  /* 竖屏时任何一次触摸/点击都试一次全屏锁横屏（首次点击「开始游戏」就顺手锁上） */
+  const anyTap = () => {
+    if (rotateAutoOnce) return;
+    let portrait = false;
+    try { portrait = !!(document.body && document.body.classList && document.body.classList.contains('portrait')); } catch (e) {}
+    if (!portrait) return;
+    rotateAutoOnce = true;
+    rotateTryLock();
+  };
+  try {
+    document.addEventListener('touchstart', anyTap, { passive: true });
+    document.addEventListener('mousedown', anyTap, { passive: true });
+  } catch (e) {}
+}
+/* 🖥📱 主页「电脑操作 / 手机操作」切换按钮（用户要求：**只做一个网页**，用主页按钮切操作方式；
+   切到手机操作时强制横屏）。切到手机那一下本身是**用户手势** → 直接全屏 + 锁横屏最有效；
+   选择记在 localStorage，下次打开沿用（手机玩家「添加到主屏幕」后不用每次再切）。 */
+function uiModeLoad() {
+  try { const v = localStorage.getItem(UI_MODE_KEY); return (v === 'touch' || v === 'desk') ? v : ''; } catch (e) { return ''; }
+}
+function uiModeSave(v) {
+  try { if (v) localStorage.setItem(UI_MODE_KEY, v); else localStorage.removeItem(UI_MODE_KEY); } catch (e) {}
+}
+function applyTouchBodyCls() {
+  /* ⚠️ 用 add/remove 而不是 classList.toggle(cls, force)：无头测试桩的 classList 只有 add/remove/contains */
+  try {
+    const c = document.body.classList;
+    if (isTouchUI) c.add('touch'); else c.remove('touch');
+  } catch (e) {}
+}
+function uiModeLabel() {
+  const b = $('btn-uimode');
+  if (!b) return;
+  b.textContent = isTouchUI ? '🖥 电脑操作' : '📱 手机操作';
+  try { b.title = isTouchUI ? '切回电脑键鼠操作' : '切到手机触屏操作（自动横屏）'; } catch (e) {}
+}
+function setUiMode(touch, fromUser) {
+  isTouchUI = !!touch;
+  PERF_TOUCH = isTouchUI;
+  applyPerfProfile();
+  applyRenderScale();
+  applyTouchBodyCls();
+  syncTouchUI();
+  uiModeLabel();
+  if (fromUser) {
+    uiModeSave(isTouchUI ? 'touch' : 'desk');
+    if (isTouchUI) rotateTryLock();          // 手机操作 → 立刻全屏 + 锁横屏（借这次点击的手势）
+  }
+}
+function uiModeToggleInit() {
+  const b = $('btn-uimode');
+  if (b && b.addEventListener) b.addEventListener('click', () => setUiMode(!isTouchUI, true));
+  uiModeLabel();
+}
 function bindTouchUI() {
   /* 独立版本强制模式：<body class="force-touch"> 手机版 / <body class="force-desk"> 电脑版 */
   let forcedTouch = false, forcedDesk = false;
@@ -15551,6 +15701,9 @@ function bindTouchUI() {
   try {
     isTouchUI = forcedTouch || (!forcedDesk && (('ontouchstart' in window) || (navigator.maxTouchPoints || 0) > 0));
   } catch (e) { isTouchUI = forcedTouch; }
+  /* 玩家上次在主页用按钮选过操作方式 → 以他的选择为准 */
+  const savedUi = uiModeLoad();
+  if (savedUi) isTouchUI = (savedUi === 'touch');
   /* ⚡ 识别出设备后立刻套用性能档位：手机端 → 关光晕 + 降渲染分辨率 + 粒子预算减半 */
   PERF_TOUCH = isTouchUI;
   applyPerfProfile();
@@ -15562,10 +15715,18 @@ function bindTouchUI() {
     window.addEventListener('resize', onResize);
     window.addEventListener('orientationchange', onResize);
   } catch (e) {}
-  if (!isTouchUI) return;
-  document.body.classList.add('touch');
-  /* 横竖屏提示 */
-  const ori = () => document.body.classList.toggle('portrait', (window.matchMedia && window.matchMedia('(orientation: portrait)').matches) || false);
+  /* 📱🖥 操作方式可以由主页按钮随时切换（setUiMode）→ **这里不能因为「不是触屏」就 return**：
+     触屏控件的监听必须一直绑着（桌面模式下 #touch-ui 是隐藏的，隐藏元素收不到指针事件，
+     所以始终绑定没有副作用），否则切到手机操作后摇杆/闪避键点不动。 */
+  applyTouchBodyCls();
+  /* 横竖屏提示（始终监听：手机操作 + 竖屏 → 外壳的 #rotate-gate 遮罩靠这个类出现） */
+  const ori = () => {
+    try {
+      const c = document.body.classList;
+      const portrait = !!(window.matchMedia && window.matchMedia('(orientation: portrait)').matches);
+      if (portrait) c.add('portrait'); else c.remove('portrait');
+    } catch (e) {}
+  };
   ori();
   if (window.addEventListener) {
     window.addEventListener('orientationchange', ori);
@@ -23754,6 +23915,19 @@ window.__musouForceHurtDir = (n, hx, hy) => {   // 测试钩子：按指定「�
   if (state === 'play' && p.alive) { p.iframes = 0; p.dashT = 0; hurtPlayer(n === undefined ? 10 : n, hx === undefined ? 1 : hx, hy === undefined ? 0 : hy); }
 };
 window.__musouTouchUI = (v) => { isTouchUI = !!v; PERF_TOUCH = isTouchUI; applyPerfProfile(); applyRenderScale(); syncTouchUI(); };   // 测试钩子：强制切换「手机 / 电脑」UI（落点指示器与指针选点）+ 同步性能档位
+window.__musouRotateInfo = () => {   // 测试钩子：强制横屏层 + 操作方式切换的只读状态（外壳有没有那些元素要静态读 index.html，桩里 getElementById 是按需造元素的）
+  let portrait = false;
+  try { portrait = !!(document.body && document.body.classList && document.body.classList.contains('portrait')); } catch (e) {}
+  let touchCls = false;
+  try { touchCls = !!(document.body && document.body.classList && document.body.classList.contains('touch')); } catch (e) {}
+  const b = $('btn-uimode');
+  return { gate: !!$('rotate-gate'), wired: rotateGateWired, tried: rotateTried, locked: rotateLocked,
+           support: rotateLockSupport(), pureTouch: pureTouchDevice(), touch: isTouchUI, bodyTouch: touchCls,
+           mode: isTouchUI ? 'touch' : 'desk', uiBtn: (b && b.textContent) || '', portrait: portrait,
+           saved: uiModeLoad() };
+};
+window.__musouSetUiMode = (v) => setUiMode(!!v, true);   // 测试钩子：等价于点主页那个切换按钮（会写 localStorage）
+window.__musouRotateTry = () => rotateTryLock();   // 无头环境下只累计 tried / 静默失败，不抛异常（用来钉「不支持的浏览器不能崩」）
 window.__musouTouchUIOn = () => (isTouchUI ? 1 : 0);   // 测试钩子：当前是否处于手机（触屏）瞄准模式
 window.__musouTouchUiOn = () => (touchUiOn ? 1 : 0);   // 测试钩子：触屏控制层是否可见（主页应隐藏，进入游戏才显示）
 window.__musouPicking = () => (touchPickOn ? 1 : 0);   // 测试钩子：是否处于「选择面板」状态（升级/质变/奇物/商店 → 屏蔽摇杆与闪避，只留暂停）

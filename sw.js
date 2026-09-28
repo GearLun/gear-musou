@@ -1,7 +1,7 @@
 /* 齿轮无双 - Service Worker：离线可玩（需 https 或 localhost 环境生效）
    策略：页面导航「网络优先」（更新立刻生效、断网回退缓存）；静态资源「缓存优先 + 后台更新」 */
 'use strict';
-const CACHE = 'gear-musou-v2';
+const CACHE = 'gear-musou-v3';
 const ASSETS = [
   './',
   './index.html',
