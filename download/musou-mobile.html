@@ -890,6 +890,17 @@ function applyRenderScale() {
 }
 cv.width = Math.round(VW * DPR); cv.height = Math.round(VH * DPR);
 ctx.scale(DPR, DPR);
+/* 📱 手机端性能档位**一处套用**（用户要求「切换为手机端时别忘了给手机端优化，以免过热和耗电严重」）：
+   boot 阶段与运行时切换操作方式都调它，避免将来只改一处、另一处漏掉：
+     ① applyPerfProfile：关光晕（FX_SHADOW）＋ 渲染分辨率上限 1.25 ＋ 粒子预算 420
+     ② applyShadowPatch：把 ctx.shadowBlur 变成「写进去也不生效」→ 全工程 70+ 处光晕一次性关掉
+     ③ applyRenderScale：按新上限重建画布尺寸
+   （另外 frame() 里还有两条与档位无关的省电措施：连续 90 帧超 24ms 再自适应降分辨率、后台自动暂停） */
+function applyTouchPerf() {
+  applyPerfProfile();
+  applyShadowPatch();
+  applyRenderScale();
+}
 
 /* 小地图（右上角）：与世界 3200×1800 等比，显示角色 / 友方召唤物 / 影分身分身位置 */
 const MM_W = 210, MM_H = Math.round(210 * H / W);   // 210 × 118
@@ -15623,6 +15634,13 @@ function rotateTryLock() {
     }
   } catch (e) {}
 }
+/* 竖屏遮罩是否正盖住整个画面（判据与 CSS `body.touch.portrait #rotate-gate` 完全一致）。
+   frame() 靠它整帧跳过：遮罩是不透明的，画了也看不见 —— 手机竖屏时这样能明显省电省热。 */
+function rotateGateOn() {
+  try {
+    return !!(isTouchUI && document.body && document.body.classList && document.body.classList.contains('portrait'));
+  } catch (e) { return false; }
+}
 function rotateGateInit() {
   const gate = $('rotate-gate');
   if (!gate || rotateGateWired) return;
@@ -15675,8 +15693,9 @@ function uiModeLabel() {
 function setUiMode(touch, fromUser) {
   isTouchUI = !!touch;
   PERF_TOUCH = isTouchUI;
-  applyPerfProfile();
-  applyRenderScale();
+  /* 📱 切到手机操作必须**整套**套上手机档位（关光晕 + 降分辨率 + 粒子预算），否则手机上跑桌面档位
+     就是发热掉电的主因 —— 见 applyTouchPerf() 的说明 */
+  applyTouchPerf();
   applyTouchBodyCls();
   syncTouchUI();
   uiModeLabel();
@@ -15706,9 +15725,7 @@ function bindTouchUI() {
   if (savedUi) isTouchUI = (savedUi === 'touch');
   /* ⚡ 识别出设备后立刻套用性能档位：手机端 → 关光晕 + 降渲染分辨率 + 粒子预算减半 */
   PERF_TOUCH = isTouchUI;
-  applyPerfProfile();
-  applyShadowPatch();
-  applyRenderScale();
+  applyTouchPerf();
   /* 转屏 / 改窗口：重新按当前尺寸铺画布，并强制下一帧重画（画布尺寸变化会清空内容） */
   try {
     const onResize = () => { lastOverlayKey = ''; applyRenderScale(); };
@@ -23247,6 +23264,10 @@ function frame(now) {
       }
     }
   }
+  /* 🔄 手机端竖屏：外壳的 #rotate-gate 遮罩把画面整个盖住了 → 这一帧**既不结算也不重绘**
+     （不透明的遮罩画了也看不见，白烧 CPU/GPU 就是发热掉电）—— 横过来立刻恢复：
+     state 不动，所以等于「被遮住期间自动冻结」，玩家不会因此挨打或被偷跑时间 */
+  if (rotateGateOn()) { syncTouchUI(); syncDashJoyUI(); syncLabBar(false); return; }
   /* 🧊 面板/结算界面打开且这一屏已经画过 → 直接跳过整帧（世界冻结，画面不会变） */
   const ovk = overlayKey();
   if (ovk && ovk === lastOverlayKey) {
@@ -23924,7 +23945,9 @@ window.__musouRotateInfo = () => {   // 测试钩子：强制横屏层 + 操作�
   return { gate: !!$('rotate-gate'), wired: rotateGateWired, tried: rotateTried, locked: rotateLocked,
            support: rotateLockSupport(), pureTouch: pureTouchDevice(), touch: isTouchUI, bodyTouch: touchCls,
            mode: isTouchUI ? 'touch' : 'desk', uiBtn: (b && b.textContent) || '', portrait: portrait,
-           saved: uiModeLoad() };
+           saved: uiModeLoad(),
+           /* 📱 手机档位读数（切换操作方式后必须整套生效：关光晕 / 分辨率上限 1.25 / 粒子 420） */
+           perf: { touch: PERF_TOUCH, shadow: FX_SHADOW, dprMax: RENDER_DPR_MAX, partMax: PART_MAX, gate: rotateGateOn() } };
 };
 window.__musouSetUiMode = (v) => setUiMode(!!v, true);   // 测试钩子：等价于点主页那个切换按钮（会写 localStorage）
 window.__musouRotateTry = () => rotateTryLock();   // 无头环境下只累计 tried / 静默失败，不抛异常（用来钉「不支持的浏览器不能崩」）
