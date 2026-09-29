@@ -423,7 +423,7 @@
   <!-- 开始界面 -->
   <div class="screen show" id="sc-start">
    <div class="home-inner">
-    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.1</small></div>
+    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.2</small></div>
     <div class="keys" id="keys-desk">
       <span><b>WASD</b> / <b>方向键</b></span><span>移动</span>
       <span><b>自动攻击</b></span><span id="kbd-atk-d">自动挥砍，无需按键</span>
@@ -452,7 +452,7 @@
       <button class="role-card" id="btn-diff-e"><span class="rp-ic">🙂</span><span class="rp-tx"><b>简 单</b><small>敌闪 +50% · 敌伤减半</small></span></button>
       <button class="role-card sel" id="btn-diff-h"><span class="rp-ic">😈</span><span class="rp-tx"><b>困 难</b><small>标准数值</small></span></button>
       <button class="role-card hell" id="btn-diff-x"><span class="rp-ic">🔥</span><span class="rp-tx"><b>地 狱</b><small>怪×1.5 · 血×1.5 · 速×1.2</small></span></button>
-      <button class="role-card endless" id="btn-diff-n"><span class="rp-ic">♾</span><span class="rp-tx"><b>无 尽</b><small>关卡无限 · 每 5 层 Boss</small></span></button>
+      <button class="role-card endless" id="btn-diff-n"><span class="rp-ic">♾</span><span class="rp-tx"><b>无 尽</b><small>无穷无尽的敌人...</small></span></button>
     </div>
     <div class="role-tip on" id="diff-tip"></div>
     <div class="start-btns">
@@ -830,7 +830,7 @@
 <script>
 'use strict';
 /* ============================================================
-   草·割无双  MUSOU MOW  —  无双割草 正式版 v1.1
+   草·割无双  MUSOU MOW  —  无双割草 正式版 v1.2
    纯 Canvas 2D + WebAudio 程序化音效，无任何外部资源
    ============================================================ */
 (() => {
@@ -15733,7 +15733,7 @@ function syncDiffUI() {
       : (selDiff === 'hell'
         ? '🔥 地狱 —— 刷怪 ×1.5 · 敌人血 ×1.5 · 移速 ×1.2 · 绿球掉率减半<br><span style="color:#ffb199;">闪光个体必带三条强化词条（绿身 = 5 倍血量）· 30 关世纪之花 或 光明掠夺者 = 通关</span>'
         : (selDiff === 'endless'
-          ? '♾ 无尽 —— 套用 🔥 地狱的加成（刷怪 ×1.5 · 血 ×1.5 · 移速 ×1.2）<br><span style="color:#8fd8ff;">关卡**无限**往后做 · **每 5 层随机遭遇一位 Boss**（基础血量 5000 · 双子魔眼每只 3000）<br>**只有被击败或主动退出才结束**（没有通关结算）</span>'
+          ? '♾ 无尽 —— 无穷无尽的敌人...'
           : '😈 困难 —— 标准数值（敌人出闪 0.25%）<br><span style="color:#a9c39a;">敌人攻击：**每 5 层 +20%**（Boss 单位不涨）</span>'));
   }
 }
