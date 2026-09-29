@@ -416,7 +416,7 @@
   <!-- 开始界面 -->
   <div class="screen show" id="sc-start">
    <div class="home-inner">
-    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.0</small></div>
+    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.1</small></div>
     <div class="keys" id="keys-desk">
       <span><b>WASD</b> / <b>方向键</b></span><span>移动</span>
       <span><b>自动攻击</b></span><span id="kbd-atk-d">自动挥砍，无需按键</span>
@@ -496,9 +496,23 @@
     <div class="cdx-panel" id="meta-body" style="max-height:62vh;"></div>
     <div class="start-btns" style="margin-top:8px;">
       <button class="btn btn2" id="btn-meta-close">关 闭</button>
+      <!-- 🎨 训练家闪光图鉴（只有训练家职业相关；遇到过的闪光宝可梦永久收录，可在这里启用/关闭闪光外观） -->
+      <button class="btn btn2" id="btn-shiny-dex" style="color:#ffe08a;border-color:rgba(255,224,138,.65);">🎨 训练家闪光图鉴</button>
       <button class="btn btn3" id="btn-dev" style="display:none;">🛠 开发者版本：关闭</button>
     </div>
     <div class="hint" id="dev-hint" style="color:#8d8a77;">开发者版本会解锁主页的「🧪 Boss 试验场」（可选全部敌人 · 停敌人攻击 · 无限假人记秒伤 · 局内随便转职）</div>
+   </div>
+  </div>
+
+  <!-- 🎨 训练家闪光图鉴：质变「刷闪！」遇到过的闪光宝可梦永久收录，可逐只启用闪光外观 -->
+  <div class="screen" id="sc-shiny">
+   <div class="ui-inner">
+    <div class="over-title" style="font-size:40px;color:#ffe08a;">🎨 闪 光 图 鉴</div>
+    <div class="cdx-panel" id="shiny-body"></div>
+    <div class="start-btns" style="margin-top:8px;">
+      <button class="btn btn2" id="btn-shiny-close">关 闭</button>
+    </div>
+    <div class="hint" style="color:#8d8a77;">训练家职业的质变「✨ 刷闪！」每波清剿后会让一只基础宝可梦来访；<b>1%~3%</b> 概率是闪光版 —— 遇到即永久收录，可随时启用它的闪光外观（进化后同样是闪光）。</div>
    </div>
   </div>
 
@@ -809,7 +823,7 @@
 <script>
 'use strict';
 /* ============================================================
-   草·割无双  MUSOU MOW  —  无双割草 正式版 v1.0
+   草·割无双  MUSOU MOW  —  无双割草 正式版 v1.1
    纯 Canvas 2D + WebAudio 程序化音效，无任何外部资源
    ============================================================ */
 (() => {
@@ -1046,8 +1060,8 @@ const p = {
   bonus: { dmg: 0, range: 0, spd: 0, move: 0, muso: 0 },
   pickN: { rng: 0, spd: 0, mem: 0, mvm: 0 },
   pickTimes: { dmg: 0, rng: 0, spd: 0, vit: 0, mvm: 0, mus: 0, mem: 0, heal: 0 },   // 本局各升级词条已选次数（暂停面板展示）   // 词条已选次数（广域/疾风 每局上限 10 次；mem = 法师「魔能」法术条上限）
-  mut: { bonus: 0, shield: 0, drone: 0, chi: 0, whirl: 0, blink: 0, dash: 0, master: 0, leech: 0, thunder: 0, mstor: 0, mdura: 0, giant: 0, shieldbash: 0, forge: 0, clone: 0, blade: 0, firestep: 0, cold: 0, bounce: 0, split: 0, xbow: 0, wallb: 0, lava: 0, manapool: 0, rage: 0, multicast: 0, mastery: 0, mag: 0, grenade: 0, decoy: 0, sidekick: 0, deck: 0, wild: 0, possess: 0, multishot: 0, spin: 0, recall: 0, vigor: 0, royal: 0, rampage: 0, skyfall: 0, mom: 0, favor: 0, pack: 0, shopq: 0, sale: 0, trainsoul: 0, starhelp: 0, miracle: 0 },
-  art: { missile: 0, amplifier: 0, scroll: 0, cat: 0, hagen: 0, talisman: 0, turtle: 0, fang: 0, crane: 0, burns: 0, killhand: 0, grind: 0, ion: 0, sari: 0, coinpow: 0, goldmine: 0, hamu: 0, overheal: 0, supershield: 0, tactical: 0, charm: 0, hotdrink: 0, buy1get1: 0, nohand: 0, novrain: 0, rainkeep: 0, carddeck: 0, support: 0 },
+  mut: { bonus: 0, shield: 0, drone: 0, chi: 0, whirl: 0, blink: 0, dash: 0, master: 0, leech: 0, thunder: 0, mstor: 0, mdura: 0, giant: 0, shieldbash: 0, forge: 0, clone: 0, blade: 0, firestep: 0, cold: 0, bounce: 0, split: 0, xbow: 0, wallb: 0, lava: 0, manapool: 0, rage: 0, multicast: 0, mastery: 0, mag: 0, grenade: 0, decoy: 0, sidekick: 0, deck: 0, wild: 0, possess: 0, multishot: 0, spin: 0, recall: 0, vigor: 0, royal: 0, rampage: 0, skyfall: 0, mom: 0, favor: 0, pack: 0, shopq: 0, sale: 0, trainsoul: 0, starhelp: 0, miracle: 0, shinymut: 0 },
+  art: { missile: 0, amplifier: 0, scroll: 0, cat: 0, hagen: 0, talisman: 0, turtle: 0, fang: 0, crane: 0, burns: 0, killhand: 0, grind: 0, ion: 0, sari: 0, coinpow: 0, goldmine: 0, hamu: 0, overheal: 0, supershield: 0, tactical: 0, charm: 0, hotdrink: 0, buy1get1: 0, nohand: 0, novrain: 0, rainkeep: 0, carddeck: 0, support: 0, wish: 0 },
   artPend: 0, fangN: 0, fangT: 0, craneT: 0, hotT: 0, mouseDash: false, sharpenT: 0,
   wm: 0, wmBag: [], wmUid: 0, wmStock: null, wmFree: 0, wmRfN: 0, wmMusouT: 0, wmThrustT: 0,   // 🗡️ 武器大师：分支 / 武器实例（品质·星级·装备标记）/ 货架 / 免费次数 / 无双剩余 / 戳刺动画
   roninDash: null,   // 浪客一闪动画状态（0.2 秒位移 → 到位 0.1 秒蓄势 → 圆弧斩）
@@ -4429,7 +4443,8 @@ function petEvoByLevel(id) { return !PET_WAVE_EVO[id] && !PET_ITEM_EVO[id]; }
    → 星之助战 5 层 = **10 / 20 / 30 / 40 / 50 级**（50 级只在满级那一层出现）。
    ⚠️ 所以它的属性用 `jirachiLv()` **顶替** `p.trainLv`（训练家升级**不给它**加成），见 `petLevelOf()` */
 const JIRACHI_TOP_LV = 50;
-function jirachiLv() { return Math.round(JIRACHI_TOP_LV * ((p.mut && p.mut.starhelp) || 0) / STARHELP_CAP); }
+const WISH_LV_BONUS = 20;      // 🌠 奇物·千年之愿：基拉祈**当前等级与等级上限都 +20**（满层 50 → 70）
+function jirachiLv() { return Math.round(JIRACHI_TOP_LV * ((p.mut && p.mut.starhelp) || 0) / STARHELP_CAP) + (artGot('wish') ? WISH_LV_BONUS : 0); }
 /* 每只宝可梦的「等级」：⭐ 基拉祈只认质变层数 · 其余都吃训练家强化等级（升级 +0.5 伤害 / +1 生命） */
 function petLevelOf(id) { return id === 'jirachi' ? jirachiLv() : (p.trainLv || 0); }
 /* 这只**技能表**走第几段（⚠️ 与「进化段位」`petStageOf` 不是一回事：这两只不进化但会换招）：
@@ -4745,6 +4760,7 @@ const PET_ORBIT_R = 74;             // 待机时围着训练家转的半径
 const PET_MUSOU_SPD_MUL = 1.5;      // 出手间隔 ÷1.5（杰尼龟的水柱结算也跟着变快）
 const PET_MUSOU_HEAL_PER_SEC = 0.2; // 每秒回最大生命的 20%
 const PET_RIDE_LIFT = 30;           // 🧢 骑乘：训练家立绘相对坐骑抬高多少像素（坐到背上）
+const PET_RIDE_HP_MUL = 0.2;       // 🧢 骑乘惩罚（用户要求）：被骑的那只**最大生命 ×1/5**
 /* ⚡ 全体宝可梦的**基础攻击频率倍率**：2 = 出手间隔 ÷2（= 频率翻倍）。
    杰尼龟水柱的**结算间隔**同倍率（0.5s → 0.25s 一跳），但「连喷 5 秒 / 歇 2 秒」的节奏保持不变。
    想再调快/调慢只改这一个数（与无双号令的 ×1.5 叠乘）。 */
@@ -4964,11 +4980,20 @@ const PET_SKILL_SWIFT_STAR = {
 };
 const PET_SKILL_DOOMWISH = {
   id: 'doomwish', name: '破灭之愿', icon: '🌠', kind: 'meteor', cd: 4.0, range: 900, fxEl: 'PSYCHIC',
-  desc: '**基拉祈 50 级解锁**：像「流星群」那样先去地图中心蓄力 0.5 秒，再朝至多五个敌人的位置各砸下一颗愿望星 —— ' +
-    '**范围 ×1.5（落点半径 ' + Math.round(150 * 1.5 * 1.5) + '）· 伤害与流星群相当** · ' + petCdText(4.0),
-  /* 伤害 mul：流星群是 `4.0 × 2.5`，破灭之愿原本再 ×1.5 —— 用户要求「伤害降低为现在的 2/3」
-     → 现在正好回到与流星群相同的 `4.0 × 2.5 × 1.5 × 2/3 = 10`（范围仍是流星群的 1.5 倍） */
-  meteor: { charge: 0.5, n: 5, r: 150 * 1.5 * 1.5, mul: 4.0 * 2.5 * 1.5 * 2 / 3, fall: 0.5, moveSpd: 420, fxEl: 'PSYCHIC' }
+  desc: '**基拉祈 50 级解锁**：原地蓄力 0.5 秒，再朝至多五个敌人的位置各砸下一颗愿望星 —— ' +
+    '**落点半径 ' + Math.round(150 * 1.5) + '（与流星群一致）· 伤害为流星群的 70%** · ' + petCdText(4.0),
+  /* 数值口径（用户逐轮改过三次，别再手抄）：
+     · 流星群 = `4.0 × 2.5`，落点半径 `150 × 1.5`
+     · 破灭之愿原本再 ×1.5 → 上一轮按要求降为 2/3 → 本轮**范围降到与流星群一致**、**伤害再降 30%**
+       → `r = 150 × 1.5`（同流星群）· `mul = 4.0 × 2.5 × 1.5 × 2/3 × 0.7 = 7` */
+  meteor: { charge: 0.5, n: 5, r: 150 * 1.5, mul: 4.0 * 2.5 * 1.5 * 2 / 3 * 0.7, fall: 0.5, moveSpd: 420, fxEl: 'PSYCHIC' }
+};
+/* 🌠✨ **破灭之愿☆**：奇物「千年之愿」带来的升级版（基拉祈已学会破灭之愿时自动生效）
+   —— 范围 +50%（150×1.5×1.5 = 337.5）· 伤害 +50%（7 × 1.5 = 10.5），其余（蓄力/颗数/特效）与破灭之愿相同 */
+const PET_SKILL_DOOMWISH_STAR = {
+  id: 'doomwish2', name: '破灭之愿☆', icon: '🌠', kind: 'meteor', cd: 4.0, range: 900, fxEl: 'PSYCHIC',
+  desc: '**千年之愿强化**：范围 +50% · 伤害 +50%（' + petCdText(4.0) + '）',
+  meteor: { charge: 0.5, n: 5, r: 150 * 1.5 * 1.5, mul: 4.0 * 2.5 * 1.5 * 2 / 3 * 0.7 * 1.5, fall: 0.5, moveSpd: 420, fxEl: 'PSYCHIC' }
 };
 const PET_SKILLS_JIRACHI = [PET_SKILL_SWIFT_STAR, PET_SKILL_LIFEDEW_STAR];                  // 未满 50 级
 const PET_SKILLS_JIRACHI_2 = [PET_SKILL_SWIFT_STAR, PET_SKILL_LIFEDEW_STAR, PET_SKILL_DOOMWISH];   // 50 级：解锁破灭之愿
@@ -5224,8 +5249,11 @@ function petEvoSucc(id, sid) {
 /* 这只宝可梦**当前选用**的技能（没选过 / 存档里的 id 不认识 → 默认技） */
 function petSkillOf(id) {
   const list = petSkillList(id);
-  const want = petEvoSucc(id, (p.petSkill || {})[id] || PET_SKILL_DEF[id]);
+  let want = petEvoSucc(id, (p.petSkill || {})[id] || PET_SKILL_DEF[id]);
+  /* 🌠 奇物·千年之愿（训练家专属）：基拉祈已学会「破灭之愿」→ 实战里自动升级成 **破灭之愿☆** */
+  if (id === 'jirachi' && want === 'doomwish' && artGot('wish')) want = 'doomwish2';
   for (const s of list) if (s.id === want) return s;
+  if (want === 'doomwish2') return PET_SKILL_DOOMWISH_STAR;   // ☆ 版不在技能表里（是质变之外的奇物升级）
   return list[0];
 }
 /* 🔄 换招时把「正在放的那一招」的状态清干净。
@@ -5299,7 +5327,17 @@ function petHeadLoad() {
    ⚠️ **伤害的升级加成不乘进化倍率**（「先乘倍率再加等级」）→ 每级恒定 +0.5（二段 ×2.25 也一样）；
    ⚠️ 「等级」走 `petLevelOf(id)`：⭐ 基拉祈只认星之助战的层数（jirachiLv），其余才是训练家强化等级 */
 const PET_BASE_DMG_SCALE = 0.9;   // 宝可梦基础伤害 ×0.9（用户要求 −10%）
-function petSummonHp(id) { return Math.max(1, Math.round((PET_SUMMON[id].hp + 1 * petLevelOf(id)) * petEvoMul(petStageOf(id)))); }
+/* 生命上限的「未打折」基础值（测试钩子 `__musouTrainerInfo().pets[].hpRaw` 读它来折算骑乘惩罚） */
+function petSummonHpBase(id) {
+  return Math.max(1, Math.round((PET_SUMMON[id].hp + 1 * petLevelOf(id)) * petEvoMul(petStageOf(id))));
+}
+function petSummonHp(id) {
+  const base = petSummonHpBase(id);
+  /* 🧢 骑乘惩罚（用户本轮要求）：**御三家进化到最终阶段、训练家骑上去**之后，那只宝可梦**最大生命降到 1/5**。
+     受击时的扣减顺序仍是「护盾 → 坐骑（这只）→ 训练家」，见 hurtPlayer 里的分段处理。 */
+  const mnt = petMountE();
+  return (mnt && mnt.petId === id) ? Math.max(1, Math.round(base * PET_RIDE_HP_MUL)) : base;
+}
 function petSummonDmg(id) { return Math.max(1, Math.round(PET_SUMMON[id].dmg * PET_BASE_DMG_SCALE * petEvoMul(petStageOf(id)) + 0.5 * petLevelOf(id))); }
 /* 🥚 破壳 buff（水箭龟专属）：训练家闪避时触发 —— 30 秒内 伤害 ×1.5 / 移速 ×1.8；**不叠加，只刷新时间** */
 let petShellT = 0, petShellId = '', petShellDmg = 1, petShellSpd = 1;
@@ -5450,6 +5488,7 @@ function spawnPetAlly(id) {
     x: Math.max(44, Math.min(W - 44, p.x + Math.cos(a2) * 60)),
     y: Math.max(44, Math.min(H - 44, p.y + Math.sin(a2) * 60)),
     hp: petSummonHp(id), maxhp: petSummonHp(id), flash: 0, invT: 1.5, dead: false,
+    petShiny: shinyOn(id) ? 1 : 0,   // ✨ 闪光图鉴：这只启用了闪光外观 → 走 PET_FR[形态][1] 那套贴图（进化后同样是闪光）
     petSt: 'move', petA: 'idle', petF: 0, petAF: 0, petDir: petDir(Math.PI / 2), petScale: S2.scale,
     orbit: rnd(0, TAU), atkT: rnd(0.3, 0.9), fireCd: 0, faintT: 0, jetT: 0, restT: 0, jetTick: 0, jetPrev: null
   };
@@ -5466,6 +5505,14 @@ function petSummonSync() {
   allyUnits = allyUnits.filter(u => u.kind !== 'pet' || want.indexOf(u.petId) >= 0);
   for (const id of want) if (!petAlive(id)) spawnPetAlly(id);
   for (const u of allyUnits) if (u.kind === 'pet' && !u.dead) u.petForm = petFormKey(u.petId);   // 形态跟着角色等级（进化过/读档都对齐）
+  /* 🧢 生命上限随「骑乘惩罚 / 千年之愿（基拉祈等级）」变化 → 每帧对齐一次（≤6 只，开销可忽略）；
+     当前血按比例折算，避免上限变大变小之后血量看起来凭空涨/掉 */
+  for (const u of allyUnits) {
+    if (u.kind !== 'pet' || u.dead) continue;
+    const mh = petSummonHp(u.petId);
+    if (u.maxhp !== mh) { u.hp = Math.max(1, Math.round(u.hp / u.maxhp * mh)); u.maxhp = mh; }
+    u.petShiny = shinyOn(u.petId) ? 1 : 0;   // ✨ 闪光图鉴的开关实时生效（进化后仍是闪光，因为按物种 id 查）
+  }
 }
 /* ⭐ 星之助战：质变层数 > 0 就该有基拉祈（入队 + 按虚拟等级刷新它的面板 —— 加层的瞬间就升一档） */
 function starAidEnsure() {
@@ -5481,6 +5528,94 @@ function starAidSync() {
     const mh = petSummonHp('jirachi');
     if (u.maxhp !== mh) { u.hp = Math.max(1, Math.round(u.hp / u.maxhp * mh)); u.maxhp = mh; }
   }
+}
+/* ══════════════════════════════════════════════════════════════════════════
+   ✨ 训练家「刷闪！」与**闪光图鉴**（用户本轮新增）
+   · 质变「刷闪！」（`shinymut`）：**每波清剿后**一只基础宝可梦**来到训练家身边送金币**（它**不进队伍**），
+     并有小概率是**闪光版**；层数越高金币越多（100 → 500）、闪光概率越大（1% → 3%）。
+   · 遇到闪光 → **永久**写进局外存档 `meta.shinyDex`（只增不减，删档才清）→ 主页养成的
+     「🎨 训练家闪光图鉴」里可以对**每一只**选择是否**启用闪光外观**（`meta.shinyOn`）。
+   · 启用后：训练家出战时那一只（**含进化后的形态**，因为按物种 id 记）走**闪光贴图**
+     —— 贴图本来就是两套：`PET_FR[形态][0]` 普通 / `[1]` 闪光，`drawPet` 还会叠金色光环 + 星尘。 */
+function shinyMutLv() { return (p.mut && p.mut.shinymut) || 0; }
+function shinyVisitGold() { return SHINY_GOLD_PER * shinyMutLv(); }
+/* ⚠️ 别把这个函数叫 `shinyChance()` —— 文件后面（敌人个体）已经有一个同名的 `shinyChance()`，
+   同名函数声明**后者覆盖前者**：刷闪！会静默用上「敌人 0.25% 出闪率」，玩家侧概率全废（踩过）。 */
+function shinyMutChance() {
+  const lv = shinyMutLv();
+  if (lv <= 0) return 0;
+  return Math.min(SHINY_CHANCE_BASE + SHINY_CHANCE_PER * (SHINY_MUT_CAP - 1), SHINY_CHANCE_BASE + SHINY_CHANCE_PER * (lv - 1));
+}
+function shinyGot(id) { return !!(meta.shinyDex && meta.shinyDex[id]); }
+function shinyOn(id) { return !!(meta.shinyOn && meta.shinyOn[id]); }
+function shinyRecord(id) {
+  if (!meta.shinyDex) meta.shinyDex = {};
+  if (!meta.shinyOn) meta.shinyOn = {};
+  const isNew = !meta.shinyDex[id];
+  meta.shinyDex[id] = 1;
+  meta.shinyOn[id] = 1;          // 第一次遇到默认就启用（玩家可在图鉴里关掉）
+  metaSave();
+  return isNew;
+}
+function shinyToggle(id) {
+  if (!shinyGot(id)) return 0;
+  if (!meta.shinyOn) meta.shinyOn = {};
+  meta.shinyOn[id] = shinyOn(id) ? 0 : 1;
+  metaSave();
+  return meta.shinyOn[id];
+}
+/* 来访的宝可梦：停/飘在训练家身边 SHINY_VISIT_T 秒，送完金币就走（用独立 kind，不参与宠物 AI / 索敌 / 队伍） */
+function spawnShinyVisit(id, shiny) {
+  const a2 = rnd(0, TAU);
+  const rad = 58;
+  allyUnits.push({
+    kind: 'shinypet', petId: id, pet: id, petForm: petFormKey(id), petShiny: shiny ? 1 : 0,
+    r: PS(id).r, scaleK: PS(id).scale, petScale: PS(id).scale,
+    x: Math.max(44, Math.min(W - 44, p.x + Math.cos(a2) * rad)),
+    y: Math.max(44, Math.min(H - 44, p.y + Math.sin(a2) * rad)),
+    hp: 1, maxhp: 1, flash: 0, invT: 999, dead: false, visitT: SHINY_VISIT_T, visitShiny: shiny ? 1 : 0,
+    petSt: 'move', petA: 'idle', petF: 0, petAF: 0, petDir: petDir(Math.atan2(p.y - (p.y + Math.sin(a2) * rad), p.x - (p.x + Math.cos(a2) * rad))),
+    orbit: 0, atkT: 999, fireCd: 0, faintT: 0, jetT: 0, restT: 0, jetTick: 0, jetPrev: null, jumpZ: 0
+  });
+  const tint = shiny ? '#ffe08a' : (PET_FX_TINT[petFormElement({ petId: id, petForm: petFormKey(id) })] || '#ffd166');
+  rings.push({ x: p.x, y: p.y, r: 10, vr: 620, life: 0.5, max: 0.5, color: tint, width: 6 });
+  burst(p.x, p.y, shiny ? 30 : 16, tint, shiny ? 420 : 260);
+}
+function updateShinyVisit(u, dt) {
+  u.visitT -= dt;
+  petAnim(u, 'idle'); petTickFrame(u, dt, true);
+  /* 轻轻飘到训练家身边（贴近就停），到期离开 */
+  const dx = p.x - u.x, dy = p.y - u.y, dd = Math.hypot(dx, dy) || 1;
+  const want = 54;
+  if (dd > want) {
+    const step = 190 * dt;
+    u.x += dx / dd * Math.min(step, dd - want); u.y += dy / dd * Math.min(step, dd - want);
+    u.petDir = petDir(Math.atan2(dy, dx));
+  }
+  if (u.visitT <= 0) { u.dead = true; }
+}
+/* 每波清剿后调用（和得蛋/孵化同一条结算点）：来访 + 送金币 + 可能的闪光收录 */
+function shinyMutWaveEnd(wave) {
+  const lv = shinyMutLv();
+  if (lv <= 0) return 0;
+  const id = SHINY_SPECIES[Math.floor(Math.random() * SHINY_SPECIES.length)];
+  const shiny = Math.random() < shinyMutChance();
+  const gold = shinyVisitGold();
+  addCoins(gold);
+  spawnShinyVisit(id, shiny);
+  dbgShinyVisit++;
+  const nm = PS(id).name || id;
+  if (shiny) {
+    const isNew = shinyRecord(id);
+    dbgShinySeen++;
+    if (isNew) dbgShinyNew++;
+    bigBanner('✨ 闪 光 ' + nm + ' 来 了 ✨', '它给你留下 ' + gold + ' 金币就离开了 · 已永久收录进「训练家闪光图鉴」' + (shinyOn(id) ? '（已启用闪光外观）' : ''));
+    sfx.spark();
+  } else {
+    addText(p.x, p.y - 54, '✨ ' + nm + ' 送来 ' + gold + ' 金币', 17, '#ffe08a', '#3a2a00');
+    sfx.pick();
+  }
+  return shiny ? 2 : 1;
 }
 /* 🧬 进化：角色等级到 PET_EVO_LV（20 / 30）→ **已拥有的宝可梦全部进化**：换形态（模型 / 头像 / 名字）＋
    **生命上限与伤害 ×1.5**（PET_EVO_STAT_MUL，叠段位）＋ 技能沿 evo 链升级（抓击→劈开→地球上投…）。
@@ -5643,23 +5778,12 @@ function drawPetTornadoes() {
    实体走 `petMeteors`（和 `petTornadoes` / `petPools` 同一套：`resetRun` 与 `__musouClearField()` 都要清）。 */
 let petMeteors = [];
 const PET_METEOR_H = 520;    // 陨石从画面上方这个高度落下（`t / life` 决定它现在在哪一层）
+const METEOR_STUN_T = 0.5;   // 💫 流星群 / 破灭之愿 落点命中 → 敌人暂停行动 0.5 秒（Boss 无效，铁骑按自身设定也免疫）
 function updatePetMeteor(u, dt, sk, foe, moving) {
   const M = sk.meteor;
-  /* 🏃 起手先**跑到战场正中心**（用户后来补的要求：和雷伊布的打雷一样去地图中心释放）——
-     这一段位置由技能接管（走位那段见到 `u.metP` 就不插手） */
-  if (u.metP === 'go') {
-    const tx = W / 2, ty = H / 2;
-    const dx = tx - u.x, dy = ty - u.y, dd = Math.hypot(dx, dy) || 1;
-    const step = (M.moveSpd || 420) * dt;
-    u.petDir = petDir(Math.atan2(dy, dx));
-    if (dd <= step + 10) { u.x = tx; u.y = ty; u.metP = 'charge'; u.metT = M.charge; u.petA = 'idle'; u.petF = 0; }
-    else {
-      u.x += dx / dd * step; u.y += dy / dd * step;
-      if (Math.random() < 0.6) addPart(u.x, u.y + 6, rnd(-30, 30), rnd(-40, 10), 0.25, rnd(2, 4), '#ffd166', 0);
-      petAnim(u, 'walk'); petTickFrame(u, dt, true);
-    }
-    return;
-  }
+  /* ⚠️ 用户本轮要求：**不再先跑到地图中心**（原来有 `'go'` 段，跑到 W/2,H/2 才蓄力）——
+     现在原地起手蓄力，蓄力段照样有 0.5 秒的抬头动作与粒子（预警信息不丢）。
+     位置仍由 `u.metP` 接管（走位那段见到它就不插手） */
   /* 蓄力段：站在原地抬头蓄力（0.5 秒），蓄满**一次全部砸下去** */
   if (u.metP === 'charge') {
     u.metT -= dt;
@@ -5685,9 +5809,9 @@ function updatePetMeteor(u, dt, sk, foe, moving) {
   }
   if (foe && u.atkT <= 0) {
     u.atkT = petSkillCd(sk) / petRateMul();
-    u.metP = 'go';                                  // 🏃 先跑去地图中心，到了再蓄力（蓄力段把 metP 换成 'charge'）
+    u.metP = 'charge'; u.metT = M.charge;            // 原地起手（不再跑去地图中心）
     u.petAng = petAimAng(u); u.petDir = petDir(u.petAng);
-    petAnim(u, 'walk', true);
+    petAnim(u, 'atk', true);
     rings.push({ x: u.x, y: u.y, r: 10, vr: 520, life: 0.3, max: 0.3, color: '#ffd166', width: 4 });
     noiseBurst(0.25, 0.08, 420, 1.0);
     return;
@@ -5731,6 +5855,10 @@ function updatePetMeteors(dt) {
         const dx = e.x - q.x, dy = e.y - q.y, dd = Math.hypot(dx, dy) || 1;
         if (dd > q.r + e.r) continue;
         hitEnemy(e, dx / dd, dy / dd, 420, q.dmg);
+        /* 💫 用户本轮新增：**流星群 / 破灭之愿**的落点命中会让敌人**暂停行动 0.5 秒**。
+           `e.stun` 是现成的「定身」计时器（每帧递减、>0 时跳过移动/出手）；**Boss 无效**（用户要求），
+           铁骑（cavalry）按它自己的设计「免疫定身/震慑」也一并豁免 —— 见 METEOR_STUN_T / 豁免判据 */
+        if (!e.boss && e.type !== 'cavalry') { e.stun = Math.max(e.stun || 0, METEOR_STUN_T); dbgStuns++; }
         n++;
       }
       const F = petFxPick(q.mfx || 'FIRE', 'cell');
@@ -6371,20 +6499,8 @@ function petThunderHit(u, sk) {
 }
 function updatePetThunder(u, dt, sk, foe, moving) {
   const T2 = sk.thunder;
-  if (u.thunP === 'go') {              // ① 跑到战场中心
-    const tx = W / 2, ty = H / 2;
-    const dx = tx - u.x, dy = ty - u.y, dd = Math.hypot(dx, dy) || 1;
-    const step = (T2.moveSpd || 420) * dt;
-    u.petDir = petDir(Math.atan2(dy, dx));
-    if (dd <= step + 10) { u.x = tx; u.y = ty; u.thunP = 'charge'; u.thunT = T2.charge; u.petA = 'idle'; u.petF = 0; }
-    else {
-      u.x += dx / dd * step; u.y += dy / dd * step;
-      if (Math.random() < 0.7) addPart(u.x, u.y + 6, rnd(-30, 30), rnd(-40, 10), 0.25, rnd(2, 4), PET_FX_TINT.ELECTRIC, 0);
-      petAnim(u, 'walk'); petTickFrame(u, dt, true);
-    }
-    return;
-  }
-  if (u.thunP === 'charge') {          // ② 蓄力 0.5 秒（身上噼里啪啦冒电）
+  /* ⚠️ 用户本轮要求：**不再跑到地图中心**（原来有 `'go'` 段）→ 原地蓄力 0.5 秒后劈雷 */
+  if (u.thunP === 'charge') {          // 蓄力 0.5 秒（身上噼里啪啦冒电）
     u.thunT -= dt;
     petAnim(u, 'atk'); petTickFrame(u, dt, true);
     if (Math.random() < 0.9) {
@@ -6402,7 +6518,7 @@ function updatePetThunder(u, dt, sk, foe, moving) {
   }
   if (foe && u.atkT <= 0) {
     u.atkT = petSkillCd(sk) / petRateMul();
-    u.thunP = 'go';
+    u.thunP = 'charge'; u.thunT = T2.charge;   // 原地起手（不再跑去地图中心）
     noiseBurst(0.2, 0.06, 520, 0.9);
     return;
   }
@@ -8500,10 +8616,19 @@ const BLADE_BUFF_STEP = 0.75;   // 每多一层：增伤 +0.75（2 / 2.75 / 3.5 
 const BLADE_BUFF_MAX = 5.0;     // 上限 ×5
 const RONIN_ONLY_MUTS = ['firestep', 'cold', 'blade'];   // 浪客专属质变（其它职业/普通战士都拿不到）
 /* 🧢 训练家专属质变（用户点名：训练家之魂 / 星之助战 / 羁绊奇迹）—— 别的职业候选池里一律剔除 */
-const TRAINER_ONLY_MUTS = ['trainsoul', 'starhelp', 'miracle'];
+const TRAINER_ONLY_MUTS = ['trainsoul', 'starhelp', 'miracle', 'shinymut'];
 const TRAINER_SOUL_CAP = 5;      // 训练家之魂满层数（+10%/层 → 满层 +50%）
 const STARHELP_CAP = 5;          // 星之助战满层数（满层 = 基拉祈 45 级 = 解锁破灭之愿）
 const MIRACLE_CAP = 4;           // 羁绊奇迹满层数（20/15/10/5 秒）
+/* ✨ 刷闪！（训练家专属质变，用户本轮点名）：每波清剿后**一只基础宝可梦来访送金币**（不进队伍），
+   并有小概率是**闪光**（遇到即永久收录进「训练家闪光图鉴」）。
+   数值：金币 100/层（满 5 层 = 500）· 闪光概率 1% 起、每层 +0.5%（满 5 层 = 3%） */
+const SHINY_MUT_CAP = 5;         // 满层数
+const SHINY_GOLD_PER = 100;      // 每层金币（1 层 100 → 满层 500）
+const SHINY_CHANCE_BASE = 0.01;  // 1 层：1%
+const SHINY_CHANCE_PER = 0.005;  // 每多一层 +0.5%（5 层 = 3%）
+const SHINY_VISIT_T = 2.6;       // 来访的宝可梦在训练家身边停留多久（秒）后离开
+const SHINY_SPECIES = ['bulba', 'charm', 'squirt', 'eevee', 'charcadet', 'dreepy', 'dratini', 'jirachi', 'toge'];
 const SHINY_HP_MUL = 5;   // 🟢 闪光词条·绿身体：血量倍率（本轮由 2 倍提高到 5 倍）
 const CARD_ONLY_MUTS = ['deck', 'wild', 'possess', 'multishot'];   // 🃏 牌皇专属四件套（传统弓/士兵/其它职业都拿不到）
 /* 🃏 牌皇专属质变的数值（放在 MUTS 之前：MUTS 数组字面量里要引用这些 cap）
@@ -10177,6 +10302,7 @@ function roleBanArts(r) {
   /* 🗡️ 武器大师：同样禁 无双秘籍 / 哈姆；反过来「买一送一」是武器大师专属（其他职业禁选） */
   if (!r && isWM()) out.push('scroll', 'hamu');
   if (!r && !isWM()) out.push('buy1get1', 'nohand');   // 🗡️「买一送一」「骑士不徒手而亡」都是武器大师专属
+  if (!r && !isTrainer()) out.push('wish');            // 🧢「千年之愿」是训练家专属（别的职业一律禁选）
   return out;
 }
 const ALL_ROLES = ['warrior', 'archer', 'mage'];
@@ -10637,7 +10763,9 @@ const MUTS = [
   /* —— 🧢 **训练家专属质变**（用户逐条点名；只有选「训练家」才出现，见 TRAINER_ONLY_MUTS）—— */
   { id:'trainsoul', icon:'🧢', name:'训练家之魂', desc:'**所有宝可梦造成的伤害 +10%/层**（满 5 层 = **+50%**）', cap:TRAINER_SOUL_CAP, apply(){ p.mut.trainsoul = Math.min(TRAINER_SOUL_CAP, (p.mut.trainsoul || 0) + 1); } },
   { id:'starhelp', icon:'⭐', name:'星之助战', desc:'宝可梦队列里加入一只 **基拉祈（No.385）**：它的**等级只跟这条质变走**（1 层 = 10 级 → 满 5 层 = **50 级的面板数据**），**50 级解锁「破灭之愿」**', cap:STARHELP_CAP, apply(){ p.mut.starhelp = Math.min(STARHELP_CAP, (p.mut.starhelp || 0) + 1); starAidSync(); } },
-  { id:'miracle', icon:'💖', name:'羁绊奇迹', desc:'宝可梦**该昏厥时保留 1 滴血并无敌 3 秒**；每层缩短这条保命的间隔：**一级 20 秒 → 满 4 层 5 秒一次**（20/15/10/5）', cap:MIRACLE_CAP, apply(){ p.mut.miracle = Math.min(MIRACLE_CAP, (p.mut.miracle || 0) + 1); } }
+  { id:'miracle', icon:'💖', name:'羁绊奇迹', desc:'宝可梦**该昏厥时保留 1 滴血并无敌 3 秒**；每层缩短这条保命的间隔：**一级 20 秒 → 满 4 层 5 秒一次**（20/15/10/5）', cap:MIRACLE_CAP, apply(){ p.mut.miracle = Math.min(MIRACLE_CAP, (p.mut.miracle || 0) + 1); } },
+  /* ✨ 刷闪！（用户本轮点名）：每波清剿后一只**基础宝可梦**来访 —— 送金币、**不进队伍**；小概率是闪光 */
+  { id:'shinymut', icon:'✨', name:'刷闪！', desc:'**每波清剿后**会有一只基础宝可梦（妙蛙种子/小火龙/杰尼龟/伊布/炭小侍/多龙梅西亚/迷你龙/基拉祈/波克比）**来到训练家身边送出 ' + SHINY_GOLD_PER + ' 金币**（它不会进入队伍）；并有 **' + Math.round(SHINY_CHANCE_BASE * 100) + '% 概率遇到闪光版本** —— 遇到即**永久收录**进主页养成的「训练家闪光图鉴」，可随时启用它的闪光外观。每层：金币 **+' + SHINY_GOLD_PER + '**（满 ' + SHINY_MUT_CAP + ' 层 = ' + (SHINY_GOLD_PER * SHINY_MUT_CAP) + '）、闪光概率 **+' + (SHINY_CHANCE_PER * 100).toFixed(1) + '%**（满层 = ' + Math.round((SHINY_CHANCE_BASE + SHINY_CHANCE_PER * (SHINY_MUT_CAP - 1)) * 100) + '%）', cap:SHINY_MUT_CAP, apply(){ p.mut.shinymut = Math.min(SHINY_MUT_CAP, (p.mut.shinymut || 0) + 1); } }
 ];
 /* 当前能抽到的质变全集（角色禁选 + 专属互斥 + 已满级剔除）
    —— 判据抽成 mutBanSet()，这样「一键满质变」用的是**完全同一套**「本职业拿不到什么」的清单 */
@@ -10780,7 +10908,9 @@ const ART_DEFS = {
   charm:     { name:'闪耀护符', icon:'✨', desc:'本局闪光敌人出现概率**翻倍**（困难 0.25% → 0.5%；简单 0.375% → 0.75%）', start:0, w15:0 },
   hotdrink:  { name:'香飘飘热饮', icon:'☕', desc:'**每次使用无双技能后立刻回满自己的生命值**（热饮要现泡：同一杯 **10 秒内只喝一次**，冷却期间发动无双不回血）', start:0, w15:0 },
   buy1get1:  { name:'买一送一', icon:'🛍️', desc:'**武器大师专属**：**每次升级额外再免费拿一把武器**（免费次数翻倍）', start:0, w15:0 },
-  nohand:    { name:'骑士不徒手而亡', icon:'🗡', desc:'**武器大师专属 · 只在开局第一波能拿到**：把**木棍**当成**圣剑**用（三刀一轮的攻击方式，基础伤害 30）；**拿到真圣剑时，圣剑额外 +20% 伤害**', start:1, w15:0 }
+  nohand:    { name:'骑士不徒手而亡', icon:'🗡', desc:'**武器大师专属 · 只在开局第一波能拿到**：把**木棍**当成**圣剑**用（三刀一轮的攻击方式，基础伤害 30）；**拿到真圣剑时，圣剑额外 +20% 伤害**', start:1, w15:0 },
+  /* 🧢 训练家专属奇物（用户本轮点名）：别人一律禁选 —— 见 roleBanArts 里的 `if (!r && !isTrainer())` */
+  wish:      { name:'千年之愿', icon:'🌠', desc:'**训练家专属**：**基拉祈的等级立刻 +20**（上限也同时 +20 → 满层 70 级）；当它学会「破灭之愿」时，那一招自动升级为 **破灭之愿☆**（**范围 +50% · 伤害 +50%**）', start:0, w15:0 }
 };
 function artGot(id) { return p.art[id] === 1; }
 /* ===== 🎒 奇物槽系统 =====
@@ -10881,6 +11011,7 @@ function slotSkip() {
 function oshMax() { return artGot('supershield') ? OSHIELD_MAX_SUPER : OSHIELD_MAX; }
 /* 加护盾统一入口（受上限钳制），返回实际加到的点数 */
 let dbgForge = 0;   // 诊断：质变·即时铸盾累计铸出的护盾值
+let dbgShinyVisit = 0, dbgShinySeen = 0, dbgShinyNew = 0;   // ✨ 刷闪！：来访次数 / 遇到闪光次数 / 首次收录次数
 function addOshield(n) {
   const before = p.oshield || 0;
   p.oshield = Math.min(oshMax(), before + n);
@@ -11248,6 +11379,12 @@ function artGain(id) {
      🛡️骑士禁「无双秘籍 / 哈姆杀所有」，士兵/牌皇禁雨系，传统弓禁士兵专属 … */
   if (roleBanArts().indexOf(id) >= 0) return false;
   p.art[id] = 1;
+  /* 🌠 千年之愿（训练家专属）：基拉祈等级立刻 +20（`jirachiLv()` 读这件奇物）→ 刷新它的面板与生命上限 */
+  if (id === 'wish') {
+    starAidSync();
+    addText(p.x, p.y - 46, '🌠 千年之愿 · 基拉祈 Lv +' + WISH_LV_BONUS, 17, '#ffd166', '#3a2a00');
+    sfx.spark();
+  }
   const d = ART_DEFS[id];
   if (id === 'cat') {
     catE = { x: p.x, y: p.y, ang: rnd(0, TAU), atkCd: 0.9, busy: false, bT: 0, tx: 0, ty: 0, meow: rnd(1, 4), roarT: 3 };
@@ -12003,6 +12140,45 @@ $('meta-body').addEventListener('click', (ev) => {
   if (act === 'buy') { if (metaBuy(id)) { sfx.pick(); flashG = Math.max(flashG, 0.1); } }
   else if (act === 'set') { meta.use[id] = meta.use[id] ? 0 : 1; metaSave(); }
   renderMeta();
+});
+
+/* ══════════════════════════════════════════════════════════════════════════
+   🎨 训练家闪光图鉴（用户本轮新增）：入口在**养成面板**里，逐只列出 9 种基础宝可梦 ——
+   遇到过的显示头像 + 「✅ 闪光外观 / ⚪ 普通外观」切换；没遇到过的显示 🔒 与获取提示。
+   收录与启用都写进局外存档（`meta.shinyDex` / `meta.shinyOn`）→ **换局、读档都在**，只有删档才清。
+   启用的效果：训练家出战时那一只（**含进化后的形态**，按物种 id 记）走 `PET_FR[形态][1]` 闪光贴图。 */
+const SHINY_SPECIES_NAME = { bulba: '妙蛙种子', charm: '小火龙', squirt: '杰尼龟', eevee: '伊布', charcadet: '炭小侍', dreepy: '多龙梅西亚', dratini: '迷你龙', jirachi: '基拉祈', toge: '波克比' };
+function renderShinyDex() {
+  const box = $('shiny-body');
+  if (!box) return;
+  const got = SHINY_SPECIES.filter(shinyGot).length;
+  let h = '<div class="cdx-sec">✨ 已收录 <b style="color:#ffe08a;">' + got + '</b> / ' + SHINY_SPECIES.length + ' 只闪光宝可梦' +
+    '<small style="color:#a9c39a;font-weight:400;margin-left:8px;">训练家质变「✨ 刷闪！」每波清剿后会有宝可梦来访 · 遇到闪光即永久收录</small></div>';
+  if (!got) h += '<div class="cdx-item"><span class="ic">✨</span><b>还没有遇到任何闪光</b><small>选「训练家」开局并拿到质变「✨ 刷闪！」，每波清剿后留意来访的那只宝可梦</small></div>';
+  for (const id of SHINY_SPECIES) {
+    const has = shinyGot(id), on = shinyOn(id);
+    h += '<div class="cdx-item"><span class="ic"><img class="pets-ic" src="' + PET_HEAD[petFormKey(id)] + '" alt="" style="' + (has ? '' : 'filter:grayscale(1) brightness(.6);') + '"></span>' +
+      '<b style="color:' + (has ? '#ffe08a' : '#8d8a77') + '">' + SHINY_SPECIES_NAME[id] + '</b>' +
+      '<small>' + (has ? '✅ 已收录闪光' : '<span style="color:#8d8a77;">未遇到闪光</span>') + '</small>' +
+      '<span style="margin-left:auto;">' +
+      (has ? '<button class="reroll-btn" data-sact="on" data-sid="' + id + '" style="font-size:13px;padding:4px 10px;">' + (on ? '✅ 闪光外观' : '⚪ 普通外观') + '</button>'
+           : '<button class="reroll-btn" data-sact="on" data-sid="' + id + '" disabled style="font-size:13px;padding:4px 10px;opacity:.45;">🔒 未收录</button>') +
+      '</span></div>';
+  }
+  box.innerHTML = h;
+}
+function openShinyDex() { metaLoad(); renderShinyDex(); $('sc-shiny').classList.add('show'); }
+$('btn-shiny-dex').addEventListener('click', openShinyDex);
+$('btn-shiny-close').addEventListener('click', () => $('sc-shiny').classList.remove('show'));
+$('shiny-body').addEventListener('click', (ev) => {
+  const b = ev.target && ev.target.closest ? ev.target.closest('button[data-sact]') : null;
+  if (!b || b.disabled) return;
+  if (b.getAttribute('data-sact') === 'on') {
+    shinyToggle(b.getAttribute('data-sid'));
+    sfx.pick();
+    for (const u of allyUnits) if (u.kind === 'pet') u.petShiny = shinyOn(u.petId) ? 1 : 0;   // 立刻换外观
+  }
+  renderShinyDex();
 });
 
 function killEnemy(e) {
@@ -12885,6 +13061,7 @@ function updateAllies(dt) {
     a.flash = Math.max(0, (a.flash || 0) - dt);
     if (a.invT > 0) a.invT = Math.max(0, a.invT - dt);
     if (a.kind === 'pet') { updatePetAlly(a, dt); continue; }   // 🐸🔥💧 宝可梦
+    if (a.kind === 'shinypet') { updateShinyVisit(a, dt); continue; }   // ✨ 刷闪！：来访的宝可梦（不参战、到点就走）
     if (a.kind === 'sidekick') { updateSidekick(a, dt); continue; }
     if (a.kind === 'decoy') continue;                       // 假人不动、不攻击
     if (a.kind === 'mg') {
@@ -13678,7 +13855,7 @@ function updateThunderClouds(dt) {
 function waterLen() { return mageRange(false) * 0.9; }                 // 水柱长度
 function waterWidth() { return 26 + 14 * (p.mut.mastery || 0); }      // 水柱宽度（术有专攻 +14/层）
 function waterLanes() { return 1 + (p.mut.multicast || 0); }          // 水柱数量（多重施法 +1/层）
-function waterTickDmg() { return Math.max(2, Math.round(mageAtkDmg() * 0.6)); }   // 💧 单道水柱每跳伤害（“翻倍”口径已按用户要求回调；多柱改成各自独立结算，见 updateWaterJet）
+function waterTickDmg() { return Math.max(2, Math.round(mageAtkDmg() * 1.2)); }   // 💧 单道水柱每跳伤害（用户本轮要求：**基础伤害翻倍** → 0.6 → 1.2；多柱各自独立结算，见 updateWaterJet）
 /* 水柱耗蓝速率：以"满魔能（450 = 200 + 25×10）恰好连喷 6 秒"反推 → 75/秒；
    初始法术条 200 → 自动得到 200/75 ≈ 2.67 秒（无魔能词条时的持续时间） */
 const JET_FULL_MEM = 450, JET_FULL_SECS = 6;
@@ -14136,7 +14313,7 @@ function wipeTip(txt) {
 function wipeAllSaves() {
   storeDel();                                                   // 局内进度存档
   try { if (typeof localStorage !== 'undefined') localStorage.removeItem(META_KEY); } catch (e) {}
-  meta = { v: 1, bank: 0, earned: 0, runs: 0, egg: 0, setAll: 0, tree: {}, sets: {}, use: {} };
+  meta = { v: 1, bank: 0, earned: 0, runs: 0, egg: 0, setAll: 0, tree: {}, sets: {}, use: {}, shinyDex: {}, shinyOn: {} };
   metaLoad();                                                   // 归一化成一份全新局外档
   metaSave();
   eggReset(); eggLast = '';                                     // 图鉴彩蛋：连点进度 + 领取标记一起清
@@ -14201,7 +14378,7 @@ const CLASS_SETS = [
 /* 🌟 三套闪光套装**全部集齐**（战士 + 弓箭手 + 法师）→ 一次性 +20000 传承金币。
    `meta.setAll` 是本存档的一次性领取标记：**只有「🗑 清空存档」才会刷新**。 */
 const SET_ALL_REWARD = 20000;
-let meta = { v: 1, bank: 0, earned: 0, runs: 0, tree: {}, sets: {}, use: {} };
+let meta = { v: 1, bank: 0, earned: 0, runs: 0, tree: {}, sets: {}, use: {}, shinyDex: {}, shinyOn: {} };
 function metaLoad() {
   try {
     const s = (typeof localStorage !== 'undefined') ? localStorage.getItem(META_KEY) : null;
@@ -14336,7 +14513,7 @@ function saveWaveInfo() {
 /* 所有可能被 tryOpen / 商店 / 暂停 / 结算弹出的面板。
    读档、重开、败阵、通关时统一用 hideAllPanels() 收干净——只 hide 一部分的话，
    像「战士之道 / 武器选择」这种开局面板就会在读档后残留（点了也没反应，因为 choosing=false）。 */
-const PANEL_IDS = ['sc-start', 'sc-level', 'sc-mut', 'sc-art', 'sc-slot', 'sc-ronin', 'sc-weapon', 'sc-job', 'sc-shop', 'sc-wmshop', 'sc-pause', 'sc-confirm', 'sc-over', 'sc-win', 'sc-meta', 'sc-codex', 'sc-pets'];
+const PANEL_IDS = ['sc-start', 'sc-level', 'sc-mut', 'sc-art', 'sc-slot', 'sc-ronin', 'sc-weapon', 'sc-job', 'sc-shop', 'sc-wmshop', 'sc-pause', 'sc-confirm', 'sc-over', 'sc-win', 'sc-meta', 'sc-codex', 'sc-pets', 'sc-shiny'];
 function hideAllPanels() {
   for (const id of PANEL_IDS) { const el = $(id); if (el && el.classList) el.classList.remove('show'); }
   shopOn = false; shopPend = 0; startConfirm = false;
@@ -14397,8 +14574,8 @@ function loadGame() {
   syncSidekick();
   p.memT = 0;
   shopN = Object.assign({ spd: 0, rng: 0 }, s.shopN || {});
-  p.mut = Object.assign({ bonus: 0, shield: 0, drone: 0, chi: 0, whirl: 0, blink: 0, dash: 0, master: 0, leech: 0, thunder: 0, mstor: 0, mdura: 0, giant: 0, shieldbash: 0, forge: 0, clone: 0, blade: 0, firestep: 0, cold: 0, bounce: 0, split: 0, xbow: 0, wallb: 0, lava: 0, manapool: 0, rage: 0, multicast: 0, mastery: 0, mag: 0, grenade: 0, decoy: 0, sidekick: 0, deck: 0, wild: 0, possess: 0, multishot: 0, spin: 0, recall: 0, vigor: 0, royal: 0, rampage: 0, skyfall: 0, mom: 0, favor: 0, pack: 0, shopq: 0, sale: 0, trainsoul: 0, starhelp: 0, miracle: 0 }, s.mut || {});
-  p.art = Object.assign({ nohand: 0, missile: 0, amplifier: 0, scroll: 0, cat: 0, hagen: 0, talisman: 0, turtle: 0, fang: 0, crane: 0, burns: 0, killhand: 0, grind: 0, ion: 0, sari: 0, coinpow: 0, goldmine: 0, hamu: 0, overheal: 0, supershield: 0, tactical: 0, charm: 0, hotdrink: 0, buy1get1: 0, nohand: 0, novrain: 0, rainkeep: 0, carddeck: 0, support: 0 }, s.art || {});
+  p.mut = Object.assign({ bonus: 0, shield: 0, drone: 0, chi: 0, whirl: 0, blink: 0, dash: 0, master: 0, leech: 0, thunder: 0, mstor: 0, mdura: 0, giant: 0, shieldbash: 0, forge: 0, clone: 0, blade: 0, firestep: 0, cold: 0, bounce: 0, split: 0, xbow: 0, wallb: 0, lava: 0, manapool: 0, rage: 0, multicast: 0, mastery: 0, mag: 0, grenade: 0, decoy: 0, sidekick: 0, deck: 0, wild: 0, possess: 0, multishot: 0, spin: 0, recall: 0, vigor: 0, royal: 0, rampage: 0, skyfall: 0, mom: 0, favor: 0, pack: 0, shopq: 0, sale: 0, trainsoul: 0, starhelp: 0, miracle: 0, shinymut: 0 }, s.mut || {});
+  p.art = Object.assign({ nohand: 0, missile: 0, amplifier: 0, scroll: 0, cat: 0, hagen: 0, talisman: 0, turtle: 0, fang: 0, crane: 0, burns: 0, killhand: 0, grind: 0, ion: 0, sari: 0, coinpow: 0, goldmine: 0, hamu: 0, overheal: 0, supershield: 0, tactical: 0, charm: 0, hotdrink: 0, buy1get1: 0, nohand: 0, novrain: 0, rainkeep: 0, carddeck: 0, support: 0, wish: 0 }, s.art || {});
   /* 🧢 训练家：箭雨体系一律不给 —— **老存档里可能已经带着**（这条禁令是后加的），读档时就地摘掉，
      否则无双会被「十一月雨」顶成箭雨，玩不到「无双号令」 */
   if (isTrainer()) { p.art.novrain = 0; p.art.rainkeep = 0; }
@@ -14497,8 +14674,8 @@ function resetRun() {
   p.bonus = { dmg: 0, range: 0, spd: 0, move: 0, muso: 0 };
   p.pickN = { rng: 0, spd: 0, mem: 0, mvm: 0 };   // 广域/疾风/魔能/冲锋(骑士移速) 每局限选 10 次
   p.pickTimes = { dmg: 0, rng: 0, spd: 0, vit: 0, mvm: 0, mus: 0, mem: 0, heal: 0 };   // 本局已选词条计数（暂停面板）
-  p.mut = { bonus: 0, shield: 0, drone: 0, chi: 0, whirl: 0, blink: 0, dash: 0, master: 0, leech: 0, thunder: 0, mstor: 0, mdura: 0, giant: 0, shieldbash: 0, forge: 0, clone: 0, blade: 0, firestep: 0, cold: 0, bounce: 0, split: 0, xbow: 0, wallb: 0, lava: 0, manapool: 0, rage: 0, multicast: 0, mastery: 0, mag: 0, grenade: 0, decoy: 0, sidekick: 0, deck: 0, wild: 0, possess: 0, multishot: 0, spin: 0, recall: 0, vigor: 0, royal: 0, rampage: 0, skyfall: 0, mom: 0, favor: 0, pack: 0, shopq: 0, sale: 0, trainsoul: 0, starhelp: 0, miracle: 0 };
-  p.art = { nohand: 0, missile: 0, amplifier: 0, scroll: 0, cat: 0, hagen: 0, talisman: 0, turtle: 0, fang: 0, crane: 0, burns: 0, killhand: 0, grind: 0, ion: 0, sari: 0, coinpow: 0, goldmine: 0, hamu: 0, overheal: 0, supershield: 0, tactical: 0, charm: 0, hotdrink: 0, buy1get1: 0, nohand: 0, novrain: 0, rainkeep: 0, carddeck: 0, support: 0 };
+  p.mut = { bonus: 0, shield: 0, drone: 0, chi: 0, whirl: 0, blink: 0, dash: 0, master: 0, leech: 0, thunder: 0, mstor: 0, mdura: 0, giant: 0, shieldbash: 0, forge: 0, clone: 0, blade: 0, firestep: 0, cold: 0, bounce: 0, split: 0, xbow: 0, wallb: 0, lava: 0, manapool: 0, rage: 0, multicast: 0, mastery: 0, mag: 0, grenade: 0, decoy: 0, sidekick: 0, deck: 0, wild: 0, possess: 0, multishot: 0, spin: 0, recall: 0, vigor: 0, royal: 0, rampage: 0, skyfall: 0, mom: 0, favor: 0, pack: 0, shopq: 0, sale: 0, trainsoul: 0, starhelp: 0, miracle: 0, shinymut: 0 };
+  p.art = { nohand: 0, missile: 0, amplifier: 0, scroll: 0, cat: 0, hagen: 0, talisman: 0, turtle: 0, fang: 0, crane: 0, burns: 0, killhand: 0, grind: 0, ion: 0, sari: 0, coinpow: 0, goldmine: 0, hamu: 0, overheal: 0, supershield: 0, tactical: 0, charm: 0, hotdrink: 0, buy1get1: 0, nohand: 0, novrain: 0, rainkeep: 0, carddeck: 0, support: 0, wish: 0 };
   p.artPend = 0; p.fangN = 0; p.fangT = 0; p.craneT = 0; p.hotT = 0; p.mouseDash = false; p.sharpenT = 0;
   hellGiftArt();   // 地狱模式：本轮起**不再**白送「闪耀护符」（留空函数，便于以后再加开局赠礼）
   shopN = { spd: 0, rng: 0 }; shopOn = false; shopPend = 0; shopWaveNext = 1; shopPicks = []; shopShown = new Set();
@@ -14516,7 +14693,7 @@ function resetRun() {
   p.petEvoPick = {}; p.petItemBuy = '';                                // 🔮 道具进化也清空（新的一局重新买）
   petHelpClear();                                                      // 🤝 帮助的蓄力不留到下一局
   p.petSkill = { bulba: 'leaf', charm: 'spark', squirt: 'jet', toge: 'help' };       // 🧢 技能选择也回到默认（宝可梦管理面板）
-  allyUnits = allyUnits.filter(u => u.kind !== 'pet');   // 上一局的宝可梦收回去
+  allyUnits = allyUnits.filter(u => u.kind !== 'pet' && u.kind !== 'shinypet');   // 上一局的宝可梦收回去
   p.hurtT = 0; p.alive = true;
   p.shinySet = metaSetOn() ? 1 : 0;   // 局外：本局是否穿该职业的闪光套装（纯外观：金色光环 + 头顶齿轮）
   coinsTotal = 0; runBanked = false;  // 本局总金币（结算带出用）
@@ -14888,7 +15065,7 @@ function devSetPet(id) {
   p.petKind = id;
   p.petOwned = [id];
   devClass.pet = id;
-  allyUnits = allyUnits.filter(u => u.kind !== 'pet');   // 旧的收回，新的下一帧召唤
+  allyUnits = allyUnits.filter(u => u.kind !== 'pet' && u.kind !== 'shinypet');   // 旧的收回，新的下一帧召唤
   petSummonSync(); petHeadLoad();
   addText(p.x, p.y - 64, '🧢 御三家 → ' + petFormName(id), 18, '#ffd166', '#3a2a00');
   return true;
@@ -15107,7 +15284,7 @@ function startBossLab(type) {
   p.role = 'warrior'; p.weapon = ''; p.ronin = 0; p.knight = 0; p.wm = 0; p.wmBag = []; p.wmStock = null;
   p.weaponPend = 0; p.roninPend = 0; p.jobPend = 0; p.artPend = 0; p.pending = 0; mutPending = 0;
   p.starterPend = 0; p.petKind = ''; p.petOwned = []; p.trainLv = 0;   // 🧢 试验场不用训练家那套
-  allyUnits = allyUnits.filter(u => u.kind !== 'pet');
+  allyUnits = allyUnits.filter(u => u.kind !== 'pet' && u.kind !== 'shinypet');
   choosing = false; curChoices = []; curKind = 'level';
   hideAllPanels();
   /* 🛠 开发者版本：按面板里选中的职业进场（转职 = 状态已清空到初始 + 立刻重开） */
@@ -17673,6 +17850,11 @@ function drawAllies() {
     ctx.save();
     ctx.translate(u.x, u.y);
     /* 🐸🔥💧 宝可梦（训练家的召唤物）：内嵌图集的逐帧贴图（1/3 大小）；昏厥时躺平变灰 */
+    if (u.kind === 'shinypet') {   // ✨ 刷闪！：来访的宝可梦（正常画，不画血条/不躺平）
+      drawPet(u);
+      ctx.restore();
+      continue;
+    }
     if (u.kind === 'pet') {
       if (u.faintT > 0) {
         ctx.globalAlpha = 0.45;
@@ -21039,6 +21221,8 @@ function updateGame(dt, rawDt) {
       }
       /* 🥚 训练家的宝可梦蛋：第 1 波清剿后到手 · 第 5 波清剿后孵化成波克比（图鉴 175） */
       petEggWaveEnd(wave);
+      /* ✨ 刷闪！（质变）：每波清剿后一只基础宝可梦来访送金币，小概率是闪光（收录进闪光图鉴） */
+      shinyMutWaveEnd(wave);
       /* 🐾 捕捉宝可梦：第 10 波（多龙梅西亚 / 迷你龙）· 第 15 波（伊布 / 炭小侍）各弹一次二选一 */
       petCatchWaveEnd(wave);
       /* 🐉 大器晚成（多龙梅西亚 / 迷你龙）：第 20 波清剿后一段 · 第 25 波清剿后二段 */
@@ -23778,6 +23962,24 @@ window.__musouMeta = () => ({   // 当前传承存档快照
   setAll: meta.setAll ? 1 : 0, setOwnN: metaSetsOwned(), setAllReward: SET_ALL_REWARD
 });
 window.__musouMetaSet = (id, lv) => { if (id in meta.tree || META_TREE.some(n => n.id === id)) meta.tree[id] = Math.max(0, lv | 0); metaSave(); syncMetaBtn(); }; // 测试钩子：直接设定技能树等级
+/* ✨ 闪光图鉴测试钩子 */
+window.__musouShinyDex = () => ({
+  species: SHINY_SPECIES.slice(), names: Object.assign({}, SHINY_SPECIES_NAME),
+  dex: Object.assign({}, meta.shinyDex || {}), on: Object.assign({}, meta.shinyOn || {}),
+  gotN: SHINY_SPECIES.filter(shinyGot).length, cap: SHINY_MUT_CAP,
+  lv: shinyMutLv(), gold: shinyVisitGold(), chance: +shinyMutChance().toFixed(4),
+  visitN: dbgShinyVisit, seenN: dbgShinySeen, newN: dbgShinyNew,
+  visitors: allyUnits.filter(u => u.kind === 'shinypet').map(u => ({ id: u.petId, shiny: u.visitShiny ? 1 : 0, t: +(u.visitT || 0).toFixed(2), petShiny: u.petShiny ? 1 : 0 })),
+  panel: ($('sc-shiny') && $('sc-shiny').classList && $('sc-shiny').classList.contains('show')) ? 1 : 0,
+  bodyLen: (($('shiny-body') || {}).innerHTML || '').length,
+  html: ($('shiny-body') || {}).innerHTML || ''    // 面板 HTML（收录/启用状态都渲染在里面，测试按它断言）
+});
+window.__musouShinyToggle = (id) => shinyToggle(id);                 // 测试钩子：切某只的闪光外观
+window.__musouShinyRecord = (id) => shinyRecord(id);                 // 测试钩子：直接把某只记进图鉴（跳过随机）
+window.__musouShinyWave = () => { const r = shinyMutWaveEnd(wave); return r; };   // 测试钩子：手动触发一次「每波结束」的来访结算
+window.__musouShinyOpen = () => { openShinyDex(); return window.__musouShinyDex(); };   // 测试钩子：打开图鉴面板
+window.__musouShinyClose = () => { $('sc-shiny').classList.remove('show'); };
+window.__musouPetSkillOf = (id) => skDump(petSkillOf(id));   // 测试钩子：某只宝可梦**当前实际生效**的那一招（含奇物·千年之愿把破灭之愿换成破灭之愿☆）
 window.__musouMetaBank = (v) => { meta.bank = Math.max(0, v | 0); metaSave(); syncMetaBtn(); };   // 测试钩子：设定传承金币
 window.__musouMetaSetOwn = (role, own, use) => { meta.sets[role] = own ? 1 : 0; meta.use[role] = use ? 1 : 0; metaSave(); }; // 测试钩子：设定套装解锁/启用
 window.__musouSetAll = () => ({ sets: metaSetsOwned(), need: CLASS_SETS.length, claimed: meta.setAll ? 1 : 0, reward: SET_ALL_REWARD, bank: meta.bank, gain: lastSetAllGain }); // 测试钩子：三职业闪光套装集齐奖励状态
@@ -24125,12 +24327,14 @@ window.__musouGiantProbe = () => { // 测试钩子：100 伤害打总大将的�
   const an = Math.atan2(H / 2 - p.y, W / 2 - p.x);
   g.x = Math.max(90, Math.min(W - 90, p.x + Math.cos(an) * 560));
   g.y = Math.max(90, Math.min(H - 90, p.y + Math.sin(an) * 560));
-  const fangSave = p.fangN, shSave = p.sharpenT, bSave = p.art.burns, hSave = p.art.hagen, kSave2 = p.art.killhand;
-  p.fangN = 0; p.sharpenT = 0; p.art.burns = 0; p.art.hagen = 0; p.art.killhand = 0;
+  const fangSave = p.fangN, shSave = p.sharpenT, bSave = p.art.burns, hSave = p.art.hagen, kSave2 = p.art.killhand, cpSave = p.art.coinpow;
+  /* ⚠️ 也要中和「金币的力量」（每 1000 金币 +6% 伤害）：它读的是**手上金币**，而这段用例前后会 +/-500 金币
+     → 不中和的话「+1%/次闪光追猎」的比值会被它盖住（seed 202 踩过：实测 1.0743 ≈ 1.01×1.06） */
+  p.fangN = 0; p.sharpenT = 0; p.art.burns = 0; p.art.hagen = 0; p.art.killhand = 0; p.art.coinpow = 0;
   const before = g.hp;
   hitEnemy(g, 0, 0, 0, 100);
   const drop = before - g.hp;
-  p.fangN = fangSave; p.sharpenT = shSave; p.art.burns = bSave; p.art.hagen = hSave; p.art.killhand = kSave2;
+  p.fangN = fangSave; p.sharpenT = shSave; p.art.burns = bSave; p.art.hagen = hSave; p.art.killhand = kSave2; p.art.coinpow = cpSave;
   hitEnemy(g, 0, 0, 0, 99999999);   // 清场
   return drop;
 };
@@ -24559,6 +24763,8 @@ window.__musouPetShotFrame = (form, ang, ph) => {
 window.__musouTrainerInfo = () => {
   const pets = allyUnits.filter(u => u.kind === 'pet' && !u.dead).map(u => ({
     id: u.petId, hp: Math.round(u.hp), maxhp: u.maxhp, dmg: petSummonDmg(u.petId),
+    hpRaw: petSummonHpBase(u.petId),   // 🧢 未打折的生命上限（骑乘的那只是 maxhp = round(hpRaw × rideHpMul)）
+    shiny: u.petShiny ? 1 : 0,         // ✨ 闪光图鉴启用的那只走闪光贴图（进化后同样是闪光，因为按物种 id 查）
     hitDmg: petHitDmgBase(u.petId, 1), dmgScale: petDmgScale(u.petId),   // ⚖️ 降伤口径（御三家 0.7 / 其余 0.5）
     x: Math.round(u.x), y: Math.round(u.y), d: Math.round(Math.hypot(u.x - p.x, u.y - p.y)),
     atk: +Math.max(0, u.atkT || 0).toFixed(3),   // 出手冷却：刚出手那一帧 = 本次出手间隔（无双期间应 ÷1.5）
@@ -24594,6 +24800,8 @@ window.__musouTrainerInfo = () => {
     stageOf: petOwned().map(id => petStageOf(id)),
     formKeys: Object.keys(PET_PNG), formNames: Object.assign({}, PET_FORM_NAME), formTable: Object.assign({}, PET_FORM),
     dmgBonus: 0.5 * (p.trainLv || 0), hpBonus: 1 * (p.trainLv || 0), musouBonus: +(0.05 * (p.trainLv || 0)).toFixed(3),
+    /* 🧢 骑乘状态（用户本轮：被骑的那只最大生命 ×1/5）——测试据此折算期望值 */
+    ridePet: (function () { const m = petMountE(); return m ? m.petId : ''; })(), rideHpMul: PET_RIDE_HP_MUL,
     petShots: dbgPetShots, booms: dbgPetBooms, waterHits: dbgPetWaterHits, levels: dbgPetLevels, faints: dbgPetFaints,
     meleeHits: dbgPetMelee, slams: dbgPetSlam,   // 🐾 近战命中次数（抓击/藤鞭/砸地）· 🚀 跳砸/猛冲落地次数
     jetTicks: dbgJetTicks, auraTicks: dbgPetAura, dashes: dbgPetDash,   // 💧 光束结算节拍 · 🌡️ 环绕结算次数 · ☄️ 猛冲次数
@@ -24606,7 +24814,8 @@ window.__musouTrainerInfo = () => {
     petUiCd: PET_UI_CD, petMenuCd: +petMenuCdLeft().toFixed(2),
     /* 🧢 训练家专属质变读数（用户点名那三个）：训练家之魂 / 星之助战 / 羁绊奇迹 */
     soulLv: (p.mut && p.mut.trainsoul) || 0, soulMul: +petSoulMul().toFixed(4),
-    starLv: (p.mut && p.mut.starhelp) || 0, jirachiLv: jirachiLv(), jirachiTop: JIRACHI_TOP_LV, starCap: STARHELP_CAP,
+    starLv: (p.mut && p.mut.starhelp) || 0, jirachiLv: jirachiLv(), jirachiTop: JIRACHI_TOP_LV + (artGot('wish') ? WISH_LV_BONUS : 0), starCap: STARHELP_CAP,
+    shinyLv: shinyMutLv(), shinyGold: shinyVisitGold(), shinyChance: +shinyMutChance().toFixed(4), shinyDex: Object.assign({}, meta.shinyDex || {}), shinyOn: Object.assign({}, meta.shinyOn || {}),
     miracleLv: petMiracleLv(), miracleCap: MIRACLE_CAP, miracleCd: petMiracleCd(), miracleT: +petMiracleT.toFixed(3), miracleN: dbgPetMiracle,
     trainerMuts: TRAINER_ONLY_MUTS.slice(),
     /* 🧢 无双号令读数：是否生效 / 攻速倍率 / 每秒回血比例 / 无双期间「即刻满血归队」次数 */
@@ -24788,7 +24997,7 @@ window.__musouTrainerPick = (id) => {   // 测试钩子：直接选职业+御三
   return true;
 };
 window.__musouPetGrant = (id) => petGrant(id);           // 测试钩子：再收一只宝可梦（最多 6 只）
-window.__musouPetRecall = () => { allyUnits = allyUnits.filter(u => u.kind !== 'pet'); return true; };   // 测试钩子：把宝可梦收回去
+window.__musouPetRecall = () => { allyUnits = allyUnits.filter(u => u.kind !== 'pet' && u.kind !== 'shinypet'); return true; };   // 测试钩子：把宝可梦收回去
 window.__musouPetAttack = () => {                        // 测试钩子：立刻让所有宝可梦出手一次
   let n = 0;
   for (const u of allyUnits) {
