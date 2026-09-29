@@ -971,7 +971,8 @@ function hellMode() { return diffMode === 'hell'; }
    移速 ×1.2 / 绿球掉率减半 / 闪光必带三词条 / Boss 后翻倍按 ×2 档），**每 5 层随机遭遇一位 Boss**，
    无尽里的 Boss 基础血量一律 **5000**（双子魔眼每只 **3000**），总大将也在随机池里、血量同样 5000。
    只认「被击败」或「自己退出（暂停 → 保存并回主页）」结束，**没有通关结算**。
-   ⚠️ 地狱的**随机奇遇**（`hellEvPick`）不给无尽：那套事件是绑在 30/35 关地狱战役上的，无尽只取数值口径。 */
+   ⚠️ 地狱那套**随机奇遇**（`hellEvPick` / `hellRingOn` / `hellDarkOn` / `mageHexR`）**无尽也吃**
+   —— 用户明确要求两个模式共用同一套事件（上轮漏给无尽 = bug）。 */
 function endlessMode() { return diffMode === 'endless'; }
 function hellBonusOn() { return hellMode() || endlessMode(); }   // 「按地狱的加成形式」的那些数值倍率
 const WAVE_MAX_ENDLESS = 9999;  // 无尽：不设终点（只认阵亡 / 主动退出）
@@ -988,9 +989,11 @@ const HELL_SPAWN_MUL = 1.5;     // 地狱：刷怪量 = 困难 ×1.5
 const HELL_HP_MUL = 1.5;        // 地狱：敌人基础血量 = 困难 ×1.5
 const HELL_SPD_MUL = 1.2;       // 地狱：敌人移速 = 困难 ×1.2
 const HELL_DROP_MUL = 0.5;      // 地狱：绿球掉率减半（1% → 0.5%）
-/* ===== 地狱模式·奇遇事件（每一波随机一个；Boss 波不触发）=====
+/* ===== 🔥 地狱 / ♾ 无尽 的奇遇事件（每一波随机一个；Boss 波不触发）=====
+   ⚠️ 两个模式**共用同一套事件**（用户明确要求「无尽模式也拥有和地狱模式相同的奇遇事件」，
+   上轮误把无尽排除在外 = bug）。判定统一走 `hellBonusOn()`，别再写成 `hellMode()`。
    —— 只显示名称在战斗 HUD（小地图下方），详细效果写进主页「图鉴」 */
-const HELL_SURGE_SHINY = 10;    // 闪光大量出现：本波前 10 只必定闪光
+const HELL_SURGE_SHINY = 5;     // 闪光大量出现：本波前 5 只必定闪光（用户本轮：10 → 5）
 const HELL_CAV_EXTRA = 5;       // 骑兵乱入：本波额外混入 5 只铁骑
 const HELL_BRUTE_N = 5;         // 绿巨人团建：开场立刻刷 5 只战将
 const HELL_BRUTE_MUL = 3;       // 绿巨人团建：本波战将血量 ×3（身体变绿）
@@ -1021,7 +1024,7 @@ const CMD_CAV_DASH = 0.55;      // 冲锋时长（800px/s ≈ 440px），冲完�
 const CMD_CAV_R0 = 300, CMD_CAV_R1 = 700;   // 召唤位置：以玩家为中心的**随机方位 + 随机距离**（再夹进地图内）
 const CMD_CAV_HP = 40, CMD_CAV_DMG = 30;    // 一次性骑兵的血量 / 撞击伤害
 const HELL_EVENTS = [
-  { id:'shiny',  icon:'✨', name:'闪光大量出现！',     desc:'本波**前 10 只敌人必定是闪光个体**（闪光必掉质变宝箱）' },
+  { id:'shiny',  icon:'✨', name:'闪光大量出现！',     desc:'本波**前 5 只敌人必定是闪光个体**（闪光必掉质变宝箱）' },
   { id:'cav',    icon:'🐎', name:'骑兵乱入！',         desc:'本波**额外混入 5 只「铁骑」**（免疫控制、只会直线冲锋）' },
   { id:'runner', icon:'🏇', name:'轻骑士大军！',       desc:'本波**只刷「轻骑贼」**（敌人总数不变）——越跑越快、数量极多' },
   { id:'ring',   icon:'🔥', name:'炽热擂台！',         desc:'战场**四周燃起火焰**：站在地图边缘每 0.5 秒扣 **10 血**（**无视护盾**）、**站在地图中心区域安全**（小地图上的橙色边框就是火海，绿框内安全）' },
@@ -1033,7 +1036,7 @@ const HELL_EVENTS = [
   { id:'art',    icon:'🎁', name:'这个没人要吗？',     desc:'本波清剿结束后**额外获得一次奇物三选一**' },
   { id:'plain',  icon:'🌤️', name:'平平无奇的一天...',  desc:'没有任何特殊效果（就是普普通通的一波）' }
 ];
-let hellEv = null;              // 本波生效的奇遇（null = 非地狱 / Boss 波）
+let hellEv = null;              // 本波生效的奇遇（null = 非地狱/无尽 / Boss 波）
 let hellRest = {};              // 本波奇遇的运行时状态（剩余必闪数 / 边缘计时…）
 let hellPits = [];              // 法师的新绝招：地面火坑
 let blackHoles = [];           // 哈姆杀所有·黑洞（无双技）
@@ -1429,9 +1432,11 @@ function waveCompBase(k) {
   for (let i = q.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = q[i]; q[i] = q[j]; q[j] = t; }
   return q;
 }
-/* 本波奇遇抽取：地狱限定；Boss 波（总大将 / 世界吞噬者 / 双子魔眼 / 世纪之花）不触发 */
+/* 本波奇遇抽取：🔥 地狱 / ♾ 无尽限定；Boss 波（总大将 / 世界吞噬者 / 双子魔眼 / 世纪之花 / 无尽每 5 层的随机 Boss）不触发
+   ⚠️ 用户明确要求「无尽模式也拥有和地狱模式相同的奇遇事件」—— 别再用 `hellMode()` 把无尽挡在外面
+   （`hellBonusOn()` = 地狱 or 无尽）；判据统一走它，不然又会出现「无尽没有奇遇」这种漏项。 */
 function hellEvPick(k) {
-  if (!hellMode()) return null;
+  if (!hellBonusOn()) return null;
   const comp = waveComp(k);
   for (const t of comp) { const d = ETYPES[t]; if (d && d.boss) return null; }
   return HELL_EVENTS[Math.floor(Math.random() * HELL_EVENTS.length)];
@@ -1439,7 +1444,7 @@ function hellEvPick(k) {
 function hellEvName() { return hellEv ? hellEv.name : '无'; }
 /* 炽热擂台：地图四周 300px 火海（中心安全） */
 function inHellRing(x, y) { return x < HELL_RING_W || x > W - HELL_RING_W || y < HELL_RING_W || y > H - HELL_RING_W; }
-function hellRingOn() { return hellMode() && !!hellEv && hellEv.id === 'ring'; }   // 本波是否为「炽热擂台」（小地图据此画火海边框）
+function hellRingOn() { return hellBonusOn() && !!hellEv && hellEv.id === 'ring'; }   // 本波是否为「炽热擂台」（小地图据此画火海边框）
 /* 🎡 终焉齿轮场地：**只要场上有终焉齿轮，整张图就是炽热擂台同款场地**（四周火海 + 中心安全区）。
    gearArena 每帧在 updateHellHazards 开头按「场上有没有齿轮」同步一次 —— 这样杀死它 / 清场 / 换 Boss
    都会自动收回场地，不用在每条清理路径上各写一遍（少写一处就会留下「鬼火海」）。 */
@@ -1447,7 +1452,7 @@ let gearArena = 0;
 function gearAlive() { for (const e of enemies) if (!e.dead && e.gear) return true; return false; }
 function arenaRing() { return hellRingOn() || gearArena === 1; }
 /* 🌑 黑暗游戏：**敌我双方**的攻击伤害 ×2（玩家打敌人、敌人打玩家都翻倍） */
-function hellDarkOn() { return hellMode() && !!hellEv && hellEv.id === 'dark'; }
+function hellDarkOn() { return hellBonusOn() && !!hellEv && hellEv.id === 'dark'; }
 function eqDmgMul() { return hellDarkOn() ? HELL_DARK_MUL : 1; }   // 本波伤害倍率（双向）
 function startWave(k) {
   wave = k;
@@ -1467,7 +1472,7 @@ function startWave(k) {
   }
   spawnInt = Math.max(0.02, 0.13 - k * 0.004);
   spawnT = 0.4;
-  /* ---- 地狱奇遇：本波抽一个事件，并把开场效果接上 ---- */
+  /* ---- 🔥 地狱 / ♾ 无尽 奇遇：本波抽一个事件，并把开场效果接上 ---- */
   hellEv = hellEvPick(k);
   hellRest = { shinyLeft: 0, ringT: 0 };
   hellPits = [];
@@ -1527,7 +1532,7 @@ function spawnEnemy(type, forceShiny, noShiny, probe) {
   let a = rnd(0, TAU), d = rnd(460, 920);
   let x = p.x + Math.cos(a) * d, y = p.y + Math.sin(a) * d;
   x = Math.max(50, Math.min(W - 50, x)); y = Math.max(50, Math.min(H - 50, y));
-  /* 地狱奇遇·闪光大量出现：本波前 10 只必闪（探针的 forceShiny 不消耗这个额度）
+  /* 地狱/无尽奇遇·闪光大量出现：本波前 5 只必闪（探针的 forceShiny 不消耗这个额度）
      noShiny = 探针专用：**强制非闪光**（否则 0.5% 出闪 + 必带 5 倍血量会把血量探针读数放大 5 倍 —— 历史偶发失败源） */
   const surge = !forceShiny && !noShiny && hellRest.shinyLeft > 0;
   if (surge) hellRest.shinyLeft--;
@@ -8717,7 +8722,7 @@ const MAGE_HEX_SPD = 660;   // 追踪速度（px/s）
 const MAGE_HEX_FUSE = 0.5;  // 重合后的引信时长（秒）——期间走出圈外完全免伤
 const MAGE_HEX_MAX = 4.0;   // 引导最长时间（追不上就放弃）
 /* 🧙 地狱奇遇·法师的新绝招：本波妖法师的法阵更大（半径 ×1.5）——读这里，别直接读 MAGE_HEX_R */
-function mageHexR() { return MAGE_HEX_R * (hellMode() && hellEv && hellEv.id === 'mage' ? HELL_MAGE_HEX_MUL : 1); }
+function mageHexR() { return MAGE_HEX_R * (hellBonusOn() && hellEv && hellEv.id === 'mage' ? HELL_MAGE_HEX_MUL : 1); }
 /* 敌方远程单位（弓兵 / 妖法师）：射程与索敌都拉到「屏幕外也能打到玩家」——
    屏幕 1280×720 的半对角线 ≈ 734px，所以给到 1400+ 才能从屏幕外开火；
    同时它们会保持距离（太近就后撤），不会自己贴脸送死 */
@@ -12115,6 +12120,7 @@ function fillCodex() {
     + '**每被打掉 1/5 最大生命 → 原地瘫痪 8 秒**：这 8 秒**致盲解除**、它**受到伤害 +30%**，8 秒后重新站起（致盲与隐身回归，瘫痪进度条重新计算）</small></div>';
   h += '<div class="cdx-item"><span class="ic">☠</span><b>退役 Boss：灭世魔君 / 终焉齿轮</b><small>'
     + '代码与演出保留，但**任何正常波次都不会再出现**（旧存档/旧攻略里提到的它们已被世界吞噬者 / 双子魔眼 / 世纪之花取代）</small></div>';
+  h += '<div class="cdx-sec">✦ 奇遇事件 · 每波随机 1 个（🔥 地狱 / ♾ 无尽 · Boss 波不触发）</div>';
   for (const ev of HELL_EVENTS) {
     h += '<div class="cdx-item"><span class="ic">' + ev.icon + '</span><b>' + ev.name + '</b><small>' + ev.desc + '</small></div>';
   }
@@ -23272,8 +23278,8 @@ function drawMiniMap() {
   ctx.font = 'bold 11px "Microsoft YaHei",sans-serif';
   ctx.textAlign = 'left';
   ctx.fillText('战场', bx + 8, by + 15);
-  /* 地狱奇遇：小地图下方只显示事件名字（详细效果看主页「图鉴」） */
-  if (hellMode() && hellEv) {
+  /* 地狱 / 无尽奇遇：小地图下方只显示事件名字（详细效果看主页「图鉴」） */
+  if (hellBonusOn() && hellEv) {
     const label = hellEv.icon + ' ' + hellEv.name;
     ctx.font = 'bold 12px "Microsoft YaHei",sans-serif';
     const tw = ctx.measureText ? ctx.measureText(label).width : label.length * 12;
@@ -24014,7 +24020,7 @@ window.__musouAffSample = (n, type) => { // 测试钩子：连续强制出闪 N 
     dist[cnt]++;
     const expHp = Math.round(Math.round(base.hp * hpMulAll) * (e.aff.hp ? SHINY_HP_MUL : 1));
     const expDmg = Math.round(base.dmg * enemyDmgMul(t, wave) * (e.aff.atk ? 2 : 1));
-    const expSpd = base.spd * (1 + wave * 0.004) * (hellMode() ? HELL_SPD_MUL : 1) * (e.aff.spd ? 1.5 : 1);
+    const expSpd = base.spd * (1 + wave * 0.004) * (hellBonusOn() ? HELL_SPD_MUL : 1) * (e.aff.spd ? 1.5 : 1);
     if (e.maxhp !== expHp || Math.round(e.dmg) !== expDmg || Math.abs(e.spd - expSpd) > 1e-6) bad++;
     e.dead = true;   // 采样后立刻移除，避免污染场景
   }
