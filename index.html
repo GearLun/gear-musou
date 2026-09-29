@@ -4408,16 +4408,17 @@ function petStageOf(id) {
 }
 /* 这一只吃不吃**等级进化**（大器晚成与道具进化都不吃，各走各的路） */
 function petEvoByLevel(id) { return !PET_WAVE_EVO[id] && !PET_ITEM_EVO[id]; }
-/* ⭐ **基拉祈的等级**（用户要求：「基拉祈的等级**只根据质变的等级**提升，质变满级时基拉祈相当于有
-   45 级时的面板数据」）→ 星之助战 5 层 = **9 / 18 / 27 / 36 / 45 级**。
+/* ⭐ **基拉祈的等级**（用户要求：「基拉祈的等级**只根据质变的等级**提升」；随后改口径：
+   「星之助战满级时，基拉祈的等级改为 **50 级**，并且破灭之愿也需要 50 级才能学习」）
+   → 星之助战 5 层 = **10 / 20 / 30 / 40 / 50 级**（50 级只在满级那一层出现）。
    ⚠️ 所以它的属性用 `jirachiLv()` **顶替** `p.trainLv`（训练家升级**不给它**加成），见 `petLevelOf()` */
-const JIRACHI_TOP_LV = 45;
+const JIRACHI_TOP_LV = 50;
 function jirachiLv() { return Math.round(JIRACHI_TOP_LV * ((p.mut && p.mut.starhelp) || 0) / STARHELP_CAP); }
-/* 每只宝可梦的「等级」：⭐ 基拉祈只认质变层数 · 其余都吃训练家强化等级（升级 +1 伤害 / +2 生命） */
+/* 每只宝可梦的「等级」：⭐ 基拉祈只认质变层数 · 其余都吃训练家强化等级（升级 +0.5 伤害 / +1 生命） */
 function petLevelOf(id) { return id === 'jirachi' ? jirachiLv() : (p.trainLv || 0); }
 /* 这只**技能表**走第几段（⚠️ 与「进化段位」`petStageOf` 不是一回事：这两只不进化但会换招）：
    · 🐣 波克比：角色等级 20 / 30 → 帮助☆ / 生命水滴☆
-   · ⭐ 基拉祈：45 级（= 星之助战满层）→ 解锁破灭之愿 */
+   · ⭐ 基拉祈：**50 级**（= 星之助战满层）→ 解锁破灭之愿 */
 function petSkillStage(id) {
   if (id === 'toge') return p.lvl >= PET_EVO_LV[1] ? 2 : (p.lvl >= PET_EVO_LV[0] ? 1 : 0);
   if (id === 'jirachi') return jirachiLv() >= JIRACHI_TOP_LV ? (PET_SKILLS.jirachi.length - 1) : 0;
@@ -4711,7 +4712,7 @@ function drawPet(e) {
    🧢 训练家（弓箭手分支 · **只在开发者版本 / 开发者开关打开时出现**）
    开局在「选武器」页里多一项「训练家」，选完立刻挑一只**御三家**当伙伴；
    御三家会一直跟在身边保护他，最多同时放 6 只（`PET_MAX`，后续再加新宝可梦只要扩 PET_SUMMON）。
-   · **升级不弹词条面板**：每升一级自动给「所有宝可梦」+1 伤害、+2 生命上限、+10% 无双充能效率
+   · **升级不弹词条面板**：每升一级自动给「所有宝可梦」+0.5 伤害、+1 生命上限、+5% 无双充能效率
    · 质变池只留**全职业通用**的那些（各分支专属、含无人机/士兵/牌皇/武器大师等一律禁选）
    · 屏幕右侧有宝可梦列表面板（头像 + 血条）
    ============================================================ */
@@ -4911,17 +4912,17 @@ const PET_SKILLS_SQUIRT_2 = [
    · `support: 1` = 冷却好了就放，**不需要敌人**（见 updatePetAlly 的支援技分支） */
 const PET_SKILLS_TOGE = [
   { id: 'help', name: '帮助', icon: '🤝', kind: 'help', cd: 1, fixedTick: 1, range: 0, def: 1, support: 1, evo: 'helpstar',
-    desc: '使用后，**全部宝可梦下次攻击的伤害 +50%** · ' + petCdText(1, 1),
-    help: { mul: 1.5 } },
+    desc: '使用后，**全部宝可梦下次攻击的伤害 +30%** · ' + petCdText(1, 1),
+    help: { mul: 1.3 } },
   { id: 'lifedew', name: '生命水滴', icon: '💧', kind: 'heal', cd: 1, fixedTick: 1, range: 0, support: 1, evo: 'lifedewstar',
     desc: '**所有宝可梦立刻回复 10% 最大生命** · ' + petCdText(1, 1),
     heal: { pct: 0.1 } }
 ];
-/* 🤝 帮助☆（波克比 **20 级**自动换上来，用户要求）：伤害增幅 **50% → 80%** */
+/* 🤝 帮助☆（波克比 **20 级**自动换上来）：伤害增幅 **30% → 50%**（用户要求两档都下调） */
 const PET_SKILL_HELP_STAR = {
   id: 'helpstar', name: '帮助☆', icon: '🤝', kind: 'help', cd: 1, fixedTick: 1, range: 0, support: 1,
-  desc: '使用后，**全部宝可梦下次攻击的伤害 +80%**（帮助的强化版）· ' + petCdText(1, 1),
-  help: { mul: 1.8 }
+  desc: '使用后，**全部宝可梦下次攻击的伤害 +50%**（帮助的强化版）· ' + petCdText(1, 1),
+  help: { mul: 1.5 }
 };
 /* 💧 生命水滴☆（波克比 **30 级** / ⭐ 基拉祈 **共用同一份定义** —— 用户说「与基拉祈的技能相同」）：
    每秒回 **20%**（生命水滴的两倍）· `follow: 1` = 选中它时这只**跟着训练家走** */
@@ -4937,8 +4938,9 @@ const PET_SKILLS_TOGE_2 = [PET_SKILL_HELP_STAR, PET_SKILL_LIFEDEW_STAR];    // 3
 /* ⭐ 基拉祈（图鉴 385，训练家质变「星之助战」招来）：三招 —— 用户逐条点名
    · 高速星星☆ = 伊布的「高速星星」但**一次 8 颗 · 伤害翻三倍**（同基础伤害 × mul 0.5×3）
    · 生命水滴☆ = 与波克比 30 级同一份定义（20%/秒 + 跟随）
-   · 破灭之愿 = **45 级解锁**（= 星之助战满层）：像「流星群」那样先去地图中心蓄力 0.5 秒，
-     再朝至多五个敌人的位置各砸一颗愿望星 —— **范围再 ×1.5（150×1.5×1.5 = 337.5）· 伤害同时 ×1.5（4.0×2.5×1.5 = 15）** */
+   · 破灭之愿 = **50 级解锁**（= 星之助战满层）：像「流星群」那样先去地图中心蓄力 0.5 秒，
+     再朝至多五个敌人的位置各砸一颗愿望星 —— **范围再 ×1.5（150×1.5×1.5 = 337.5）·
+     伤害原本 ×1.5，本轮按要求降为 2/3 → 恰好与流星群持平（4.0×2.5×1.5×2/3 = 10）** */
 const PET_SKILL_SWIFT_STAR = {
   id: 'swiftstar', name: '高速星星☆', icon: '🌟', kind: 'shot', cd: 1.7, range: 860, def: 1,
   desc: '一次射出 **8 颗自动追踪的星星**，伤害是「高速星星」的 **3 倍** · ' + petCdText(1.7),
@@ -4946,12 +4948,14 @@ const PET_SKILL_SWIFT_STAR = {
 };
 const PET_SKILL_DOOMWISH = {
   id: 'doomwish', name: '破灭之愿', icon: '🌠', kind: 'meteor', cd: 4.0, range: 900, fxEl: 'PSYCHIC',
-  desc: '**基拉祈 45 级解锁**：像「流星群」那样先去地图中心蓄力 0.5 秒，再朝至多五个敌人的位置各砸下一颗愿望星 —— ' +
-    '**范围 ×1.5（落点半径 ' + Math.round(150 * 1.5 * 1.5) + '）· 伤害同时 ×1.5** · ' + petCdText(4.0),
-  meteor: { charge: 0.5, n: 5, r: 150 * 1.5 * 1.5, mul: 4.0 * 2.5 * 1.5, fall: 0.5, moveSpd: 420, fxEl: 'PSYCHIC' }
+  desc: '**基拉祈 50 级解锁**：像「流星群」那样先去地图中心蓄力 0.5 秒，再朝至多五个敌人的位置各砸下一颗愿望星 —— ' +
+    '**范围 ×1.5（落点半径 ' + Math.round(150 * 1.5 * 1.5) + '）· 伤害与流星群相当** · ' + petCdText(4.0),
+  /* 伤害 mul：流星群是 `4.0 × 2.5`，破灭之愿原本再 ×1.5 —— 用户要求「伤害降低为现在的 2/3」
+     → 现在正好回到与流星群相同的 `4.0 × 2.5 × 1.5 × 2/3 = 10`（范围仍是流星群的 1.5 倍） */
+  meteor: { charge: 0.5, n: 5, r: 150 * 1.5 * 1.5, mul: 4.0 * 2.5 * 1.5 * 2 / 3, fall: 0.5, moveSpd: 420, fxEl: 'PSYCHIC' }
 };
-const PET_SKILLS_JIRACHI = [PET_SKILL_SWIFT_STAR, PET_SKILL_LIFEDEW_STAR];                  // 未满 45 级
-const PET_SKILLS_JIRACHI_2 = [PET_SKILL_SWIFT_STAR, PET_SKILL_LIFEDEW_STAR, PET_SKILL_DOOMWISH];   // 45 级：解锁破灭之愿
+const PET_SKILLS_JIRACHI = [PET_SKILL_SWIFT_STAR, PET_SKILL_LIFEDEW_STAR];                  // 未满 50 级
+const PET_SKILLS_JIRACHI_2 = [PET_SKILL_SWIFT_STAR, PET_SKILL_LIFEDEW_STAR, PET_SKILL_DOOMWISH];   // 50 级：解锁破灭之愿
 /* ⚡ 电光一闪（伊布 / 多龙梅西亚共用同一份定义 —— 用户说多龙梅西亚的这招「和伊布一样」）：
    照搬 6~10 波成年哈吉咪的索敌扑击（950px/s 冲过去撞一下） */
 const PET_SKILL_QUICKATTACK = {
@@ -5270,16 +5274,17 @@ function petHeadLoad() {
     } catch (e) { return; }
   }
 }
-/* 🐸🔥💧 宝可梦的实时属性：**生命上限 = (基础 + 2×等级) × 进化倍率**，**伤害 = 基础 × 进化倍率 + 等级**。
+/* 🐸🔥💧 宝可梦的实时属性：**生命上限 = (基础 + 1×等级) × 进化倍率**，**伤害 = 基础 × 倍率 + 0.5×等级**。
    💧 用户要求「训练家职业的所有宝可梦，**基础伤害降低 10%**」→ `PET_BASE_DMG_SCALE` 只乘在**物种基础伤害**上
-   （升级那 +1 不缩水，仍是每级 +1；固定数值类招式如龙息/热风/龙卷风走各自那条口径，不受这里影响）。
-   ⚠️ **伤害的升级加成不乘进化倍率**（用户要求「训练家升级的攻击加成由 +2 改为 +1」）：
-   以前写的是 `(基础 + 等级) × 倍率`，二段（×2.25）时每级实涨 ≈2.25 → 玩家看到的是 **+2**；
-   现在改成「先乘倍率再加等级」→ **每级恒定 +1**（不管几段）。
+   （升级那部分不缩水；固定数值类招式如龙息/热风/龙卷风走各自那条口径，不受这里影响）。
+   📈 **升级数值**（用户最新口径：「每级提升 **0.5 攻击 / 1 血量 / 5% 无双充能效率**」）：
+   以前是 +1 伤害 / +2 生命 / +10% 充能 —— 改这里就要同步改 `gainMusou` 的 `tr` 系数、
+   `trainerLevelUp` 的横幅文案、`__musouTrainerInfo()` 的 dmgBonus/hpBonus/musouBonus，以及冒烟 S42。
+   ⚠️ **伤害的升级加成不乘进化倍率**（「先乘倍率再加等级」）→ 每级恒定 +0.5（二段 ×2.25 也一样）；
    ⚠️ 「等级」走 `petLevelOf(id)`：⭐ 基拉祈只认星之助战的层数（jirachiLv），其余才是训练家强化等级 */
 const PET_BASE_DMG_SCALE = 0.9;   // 宝可梦基础伤害 ×0.9（用户要求 −10%）
-function petSummonHp(id) { return Math.max(1, Math.round((PET_SUMMON[id].hp + 2 * petLevelOf(id)) * petEvoMul(petStageOf(id)))); }
-function petSummonDmg(id) { return Math.max(1, Math.round(PET_SUMMON[id].dmg * PET_BASE_DMG_SCALE * petEvoMul(petStageOf(id)) + petLevelOf(id))); }
+function petSummonHp(id) { return Math.max(1, Math.round((PET_SUMMON[id].hp + 1 * petLevelOf(id)) * petEvoMul(petStageOf(id)))); }
+function petSummonDmg(id) { return Math.max(1, Math.round(PET_SUMMON[id].dmg * PET_BASE_DMG_SCALE * petEvoMul(petStageOf(id)) + 0.5 * petLevelOf(id))); }
 /* 🥚 破壳 buff（水箭龟专属）：训练家闪避时触发 —— 30 秒内 伤害 ×1.5 / 移速 ×1.8；**不叠加，只刷新时间** */
 let petShellT = 0, petShellId = '', petShellDmg = 1, petShellSpd = 1;
 function petShellOn(id) { return petShellT > 0 && petShellId === id; }
@@ -7728,8 +7733,8 @@ function musouDmgMul() { return 1 + MDURA_DMG_PER * (p.mut.mdura || 0); }
    获取效率整体降至 1/10（命中/击杀/金球 全途径一致） */
 function gainMusou(n) {
   if (!p.alive || p.musouT > 0) return;
-  /* 🧢 训练家：每升一级「无双技能充能效率 +10%」（p.trainLv 层） */
-  const tr = isTrainer() ? 1 + 0.1 * (p.trainLv || 0) : 1;
+  /* 🧢 训练家：每升一级「无双技能充能效率 +5%」（p.trainLv 层） */
+  const tr = isTrainer() ? 1 + 0.05 * (p.trainLv || 0) : 1;
   p.musou = Math.min(musouCap(), p.musou + n * 0.1 * metaMusouMul() * tr);   // 局外「气脉」每级 +6%
 }
 
@@ -7968,11 +7973,11 @@ function openCatchUp() {
   paintChoices('catch');
   $('sc-weapon').classList.add('show');
 }
-/* 🧢 训练家升级：不弹词条面板，直接给所有宝可梦 +1 伤害 / +2 生命上限 / +10% 无双充能效率 */
+/* 🧢 训练家升级：不弹词条面板，直接给所有宝可梦 +0.5 伤害 / +1 生命上限 / +5% 无双充能效率 */
 function trainerSkillUp() {
   p.trainLv = (p.trainLv || 0) + 1;
   const dmgUp = petSummonDmg(p.petKind || 'bulba');
-  addText(p.x, p.y - 58, '🧢 宝可梦强化 Lv' + p.trainLv + '：伤害 +1 · 生命上限 +2 · 无双充能 +10%', 18, '#ffd166', '#3a2a00');
+  addText(p.x, p.y - 58, '🧢 宝可梦强化 Lv' + p.trainLv + '：伤害 +0.5 · 生命上限 +1 · 无双充能 +5%', 18, '#ffd166', '#3a2a00');
   addRing(p.x, p.y, '#ffd166', 9);
   burst(p.x, p.y, 14, '#ffe9a8', 280);
   sfx.level();
@@ -10073,16 +10078,19 @@ const SUPPORT_RING_R = 650;                                     // 奇物·支�
 const SUPPORT_SPD_MUL = 1.3;                                    // 部队车线速度 = 角色初始移速（330）×1.3 = 429px/s
 const SUPPORT_REGEN = 10;                                       // 车上维修员：每秒自修 10 点
 const SUPPORT_MG_RNG = 560, SUPPORT_RK_RNG = 620, SUPPORT_RK_CD = 1.0;   // 车载机枪射程 / 火箭炮射程 / 火箭炮间隔
-const OSHIELD_MAX = 100;                                        // 过量治疗护盾上限（本轮起不再是无限叠加）
-const OSHIELD_MAX_SUPER = 300;                                  // 奇物·超级护盾：护盾值上限提升到 300
+const OSHIELD_MAX = 50;                                         // 过量治疗护盾上限（用户本轮要求：50 点）
+const OSHIELD_MAX_SUPER = 200;                                  // 奇物·超级护盾：护盾值上限 50 → 200（用户本轮要求）
 const SUPERSHIELD_WAVE = 30;                                    // 奇物·超级护盾：每波清剿完毕获得 30 点护盾
 const SHIELDBASH_PER = 0.1;                                     // 质变·护盾猛击：每层 +10% 伤害
 const SHIELDBASH_CAP = 5;                                       // 满 5 层 = 1.5 倍
 const SHIELDBASH_ARTS = ['supershield', 'overheal'];            // 护盾类奇物（护盾猛击的收益来源；本轮起**不再**作为选取门槛）
-/* 质变·即时铸盾：每秒自动铸出 FORGE_PER×层数 点护盾值（受护盾上限 100/300 限制） */
+/* 质变·即时铸盾：每秒自动铸出 FORGE_PER×层数 点护盾值（受护盾上限 50/200 限制）
+   ⚠️ 用户本轮加了一条门槛：**3 秒内不受到任何伤害**才会铸盾（`p.noHitT` 就是「距上次受伤的时间」，
+   受伤时在 `hurtPlayer` 里归 0）—— 见 FORGE_CALM 与 updateGame 里的铸盾分支 */
 const FORGE_PER = 1;                                            // 每层每秒 +1 点护盾值
 const FORGE_CAP = 5;                                            // 满 5 层 = 每秒 +5
 const FORGE_TICK = 1.0;                                         // 结算节拍（秒）
+const FORGE_CALM = 3.0;                                         // 用户本轮要求：**3 秒内不受到任何伤害**才会铸盾
 /* 质变·落雷：累计击杀触发天雷（**天雷本身没有冷却**）——
    触发所需击杀 = 30 - 2×层数（1 层 28 杀 → 满 10 层 10 杀），每次随机轰击 THUNDER_TARGETS 名敌人；
    **天雷自己劈死的敌人不计入这个进度**（否则会「雷劈死 → 又攒够 → 再劈」自我连锁） */
@@ -10569,7 +10577,7 @@ const MUTS = [
   { id:'giant',   icon:'🗿', name:'巨人杀手', desc:'对 Boss 级敌人伤害 +15%/层', cap:5, apply(){ p.mut.giant = Math.min(5, (p.mut.giant || 0) + 1); } },
   /* —— 通用条件质变：需先持指定奇物才会出现在质变池 —— */
   { id:'shieldbash', icon:'💢', name:'护盾猛击', desc:'**只要身上有护盾**，造成的伤害 +10%/层（满 5 层 = **1.5 倍**）；护盾被打光即失效、补上护盾立刻恢复（**无需任何奇物，随时可拿**）', cap:5, apply(){ p.mut.shieldbash = Math.min(5, (p.mut.shieldbash || 0) + 1); } },
-  { id:'forge', icon:'🔨', name:'即时铸盾', desc:'**每秒自动铸出 1 点护盾值**（每层 +1/秒，满 5 层 = **每秒 5 点**）；受护盾上限限制（100，持超级护盾 300）', cap:FORGE_CAP, apply(){ p.mut.forge = Math.min(FORGE_CAP, (p.mut.forge || 0) + 1); } },
+  { id:'forge', icon:'🔨', name:'即时铸盾', desc:'**每秒自动铸出 1 点护盾值**（每层 +1/秒，满 5 层 = **每秒 5 点**），但**必须 3 秒内不受到任何伤害**才会铸（受伤就重新计时）；受护盾上限限制（50，持超级护盾 200）', cap:FORGE_CAP, apply(){ p.mut.forge = Math.min(FORGE_CAP, (p.mut.forge || 0) + 1); } },
   /* —— 战士专属质变（弓箭手候选池自动剔除）—— */
   { id:'clone',   icon:'👥', name:'影分身十字斩', desc:'大地图正中心的镜像分身同步普攻，伤害 = 本体 20%/层。**只在「地图正中心那块幕布」（中央 1280×720 视区 ×1.3 = 1664×936）内生效**——本体走出范围，分身立即消失（小地图紫点同步消失）；浪客持有时分身会同步「闪避路径斩 + 落点圆弧斩」', cap:5, apply(){ p.mut.clone = Math.min(5, (p.mut.clone || 0) + 1); } },
   /* —— 浪客专属质变（只有战士选了「浪客」才会出现）—— */
@@ -10612,7 +10620,7 @@ const MUTS = [
   { id:'skyfall', icon:'☄️', name:'天降长矛', desc:'**每 10 秒**天降一根长矛砸向敌群：落点 **120px** 范围内的敌人吃一记范围伤害，**落点会留下长矛**供给「长枪回收」捡回；每层**间隔 −1.25 秒**（满 5 层 = **5 秒**）、**伤害 +35%**、**范围 +24px**', cap:5, apply(){ p.mut.skyfall = Math.min(5, (p.mut.skyfall || 0) + 1); if (!(p.skyT > 0)) p.skyT = skyCd(); } },
   /* —— 🧢 **训练家专属质变**（用户逐条点名；只有选「训练家」才出现，见 TRAINER_ONLY_MUTS）—— */
   { id:'trainsoul', icon:'🧢', name:'训练家之魂', desc:'**所有宝可梦造成的伤害 +10%/层**（满 5 层 = **+50%**）', cap:TRAINER_SOUL_CAP, apply(){ p.mut.trainsoul = Math.min(TRAINER_SOUL_CAP, (p.mut.trainsoul || 0) + 1); } },
-  { id:'starhelp', icon:'⭐', name:'星之助战', desc:'宝可梦队列里加入一只 **基拉祈（No.385）**：它的**等级只跟这条质变走**（1 层 = 9 级 → 满 5 层 = **45 级的面板数据**），**45 级解锁「破灭之愿」**', cap:STARHELP_CAP, apply(){ p.mut.starhelp = Math.min(STARHELP_CAP, (p.mut.starhelp || 0) + 1); starAidSync(); } },
+  { id:'starhelp', icon:'⭐', name:'星之助战', desc:'宝可梦队列里加入一只 **基拉祈（No.385）**：它的**等级只跟这条质变走**（1 层 = 10 级 → 满 5 层 = **50 级的面板数据**），**50 级解锁「破灭之愿」**', cap:STARHELP_CAP, apply(){ p.mut.starhelp = Math.min(STARHELP_CAP, (p.mut.starhelp || 0) + 1); starAidSync(); } },
   { id:'miracle', icon:'💖', name:'羁绊奇迹', desc:'宝可梦**该昏厥时保留 1 滴血并无敌 3 秒**；每层缩短这条保命的间隔：**一级 20 秒 → 满 4 层 5 秒一次**（20/15/10/5）', cap:MIRACLE_CAP, apply(){ p.mut.miracle = Math.min(MIRACLE_CAP, (p.mut.miracle || 0) + 1); } }
 ];
 /* 当前能抽到的质变全集（角色禁选 + 专属互斥 + 已满级剔除）
@@ -10747,8 +10755,8 @@ const ART_DEFS = {
   goldmine:  { name:'挖金矿咯', icon:'⛏️', desc:'击杀 5% 掉宝箱（1-10 金币）；1% 撞大运：+999 金币并秒杀全屏', start:0, w15:0 },
   novrain:   { name:'十一月雨', icon:'🌧️', desc:'弓箭手专属：无双变为「十一月雨」——全屏箭雨 5 秒，每 0.5 秒造成普攻 1/3 的伤害', start:0, w15:0 },
   rainkeep:  { name:'雨一直下', icon:'☔', desc:'需先有十一月雨（第 20 波必刷）：气足时雨停自动续放，雨附带灼伤、每持续 1 秒伤害 +2%，断气重置', start:0, w15:0 },
-  overheal:  { name:'过量治疗', icon:'💚', desc:'**只有质变·夺命的回血**在满血时溢出的部分按 1/5 转为护盾（最低 1 点，**上限 100**），受击优先扣除；**绿球 / 士兵召唤物治疗等其它回血来源不再产生护盾**', start:0, w15:0 },
-  supershield:{ name:'超级护盾', icon:'🛡', desc:'**每波清剿完毕获得 30 点护盾**，并且**护盾值上限 100 → 300**（护盾受击优先扣除）', start:0, w15:0 },
+  overheal:  { name:'过量治疗', icon:'💚', desc:'**只有质变·夺命的回血**在满血时溢出的部分按 1/5 转为护盾（最低 1 点，**上限 50**），受击优先扣除；**绿球 / 士兵召唤物治疗等其它回血来源不再产生护盾**', start:0, w15:0 },
+  supershield:{ name:'超级护盾', icon:'🛡', desc:'**每波清剿完毕获得 30 点护盾**，并且**护盾值上限 50 → 200**（护盾受击优先扣除）', start:0, w15:0 },
   hamu:      { name:'哈姆杀所有', icon:'🐹', desc:'**只在开局第一波能拿到**（第 5/10/15/20/25 波奇物奖励与商店都不再出售）。攻击范围固定 400%、取消攻速加成；升级只出移速/生命上限/无双充能，商店不售攻速范围；每 20 生命上限 +8 伤害；无双变为黑洞（4 秒、可多个）：吸附敌军，旁敌每 0.5 秒 3 伤并灼烧，Boss 战时自动追击，命中 Boss 或期满爆炸巨伤（与《无双秘籍》互斥）', start:1, w15:0 },
   tactical:  { name:'战术目镜', icon:'🥽', desc:'士兵专属：步枪子弹**自动瞄准最近的敌人**，并且**无限穿透**（打穿一排敌人继续飞）——注意子弹仍是直线飞行，**不会拐弯追踪**', start:0, w15:0 },
   support:   { name:'支援部队', icon:'🚙', desc:'士兵专属：无双召唤物**额外多一支「特种部队车」**——机枪 + 火箭炮自动开火，沿**地图正中心的固定圆**巡视全场（移速 = 角色初始移速 ×1.3）；**100 血 + 登场无敌 5 秒**，车上维修员**每秒自修 10 点**；四支部队齐备后按无双 = 核弹', start:0, w15:0 },
@@ -10774,7 +10782,7 @@ function artLose(id) {
   p.art[id] = 0;
   if (id === 'cat' || id === 'hagen') catE = null;
   if (id === 'talisman') swordE = null;
-  if (id === 'supershield') p.oshield = Math.min(OSHIELD_MAX, p.oshield || 0);   // 上限从 300 退回 100
+  if (id === 'supershield') p.oshield = Math.min(OSHIELD_MAX, p.oshield || 0);   // 上限从 200 退回 50
   if (id === 'support') allyUnits = allyUnits.filter(u => u.kind !== 'car');
   if (id === 'carddeck') { /* 权重是动态读的，无需额外收尾 */ }
   addText(p.x, p.y - 46, '丢弃了 ' + ART_DEFS[id].icon + ART_DEFS[id].name, 15, '#ff9d7a', '#3a1400');
@@ -10853,7 +10861,7 @@ function slotSkip() {
   if (shop) { coins += SHOP_PICK_COST; shopPendingPick = null; shopPaint(); saveGame(shopWaveNext, 0); }
   else tryOpen();
 }
-/* 护盾值上限：持奇物·超级护盾时 100 → 300 */
+/* 护盾值上限：持奇物·超级护盾时 50 → 200 */
 function oshMax() { return artGot('supershield') ? OSHIELD_MAX_SUPER : OSHIELD_MAX; }
 /* 加护盾统一入口（受上限钳制），返回实际加到的点数 */
 let dbgForge = 0;   // 诊断：质变·即时铸盾累计铸出的护盾值
@@ -11109,7 +11117,7 @@ function updateCharmUnits(dt) {
   }
 }
 /* 统一回血入口：先补血；**只有夺命质变的回血**（fromLeech=true）在持奇物·过量治疗时
-   把溢出的治疗量按 1/5 转护盾（最低 1 点，上限 100/300）。
+   把溢出的治疗量按 1/5 转护盾（最低 1 点，上限 50/200）。
    —— 绿球拾取、士兵医疗小队等其它回血来源只回血、不再产生护盾（用户点名改动） */
 /* 护盾涨落的「视觉节拍」：只在真正涨了护盾时闪一圈 + 响一声，且每 0.25 秒最多一次。
    历史问题：这里原先每加 1 点护盾就飘一行「💚 护盾 +1」文字，配「夺命 + 过量治疗」时每秒弹好几次，糊满屏幕 */
@@ -11136,7 +11144,7 @@ function healOverflow(n, fromLeech) {
   if (over <= 0) return 0;
   const gain = Math.max(1, Math.round(over / 5));
   const beforeOsh = p.oshield || 0;
-  p.oshield = Math.min(oshMax(), beforeOsh + gain);   // 护盾上限：100（持超级护盾则 300）
+  p.oshield = Math.min(oshMax(), beforeOsh + gain);   // 护盾上限：50（持超级护盾则 200）
   if (p.oshield > beforeOsh) oshFx(gain, 'overheal');   // 只走特效，不再飘字
   return gain;
 }
@@ -13963,6 +13971,7 @@ function hurtPlayer(dmg, hx, hy, pierceShield, noIframe, shieldMul) {
   if (!pierceShield && p.shieldC > 0) {
     p.shieldC = Math.max(0, p.shieldC - Math.min(p.shieldC, sMul > 1 ? 2 : 1));
     p.hurtAge = 0;
+    p.noHitT = 0;   // 挨了一下（哪怕被守护盾吃掉）→ 即时铸盾的「3 秒静置」也要重新计时
     p.iframes = 0.5;
     addRing(p.x, p.y, '#ffe9a8', 8);
     addRing(p.x, p.y, '#fff', 4);
@@ -13997,6 +14006,7 @@ function hurtPlayer(dmg, hx, hy, pierceShield, noIframe, shieldMul) {
     if (dmg <= 0) {   // 完全被护盾吃下：不掉血
       p.iframes = 0.4;
       p.hurtAge = 0;
+      p.noHitT = 0;   // 同上：护盾承伤也算「受到伤害」，即时铸盾重新静置 3 秒
       p.hurtT = 0.12;
       tone(760, 420, 'sine', 0.08, 0.05);
       return;
@@ -14357,7 +14367,7 @@ function loadGame() {
   p.lvl = s.lvl || 1; p.xp = s.xp || 0; p.xpNeed = s.xpNeed || 8; p.pending = 0;
   p.maxhp = s.maxhp || baseHp(); p.hp = Math.min(p.maxhp, s.hp || p.maxhp);
   p.shieldC = Math.min(3, s.shieldC || 0);
-  p.oshield = Math.min(OSHIELD_MAX_SUPER, Math.max(0, s.oshield || 0));   // 按绝对上限 300 收（是否持超级护盾要等下面还原 p.art 才知道）
+  p.oshield = Math.min(OSHIELD_MAX_SUPER, Math.max(0, s.oshield || 0));   // 按绝对上限 200 收（是否持超级护盾要等下面还原 p.art 才知道）
   p.fangN = s.fangN || 0;
   p.fangT = s.fangT || 0;
   p.bonus = Object.assign({ dmg: 0, range: 0, spd: 0, move: 0, muso: 0 }, s.bonus || {});
@@ -20290,15 +20300,21 @@ function updateGame(dt, rawDt) {
   }
   if (p.noHitT < 99) p.noHitT += dt;
 
-  /* 质变·即时铸盾：每秒自动铸出 FORGE_PER×层数 点护盾值（受护盾上限 100/300 限制）
+  /* 质变·即时铸盾：每秒自动铸出 FORGE_PER×层数 点护盾值（受护盾上限 50/200 限制）
+     ⚠️ 用户本轮加的门槛：**3 秒内不受到任何伤害**才会铸盾（`p.noHitT` = 距上次受伤的时间，受伤时归 0）；
+     不满 3 秒时把节拍计时器清掉 → 受伤后要重新「静置 3 秒 + 走完一个 1 秒节拍」才出第一点
      —— 只走 oshFx 光环/粒子，不飘字（见「飘字策略」） */
   if (p.mut.forge > 0) {
-    p.forgeT = (p.forgeT || 0) + dt;
-    if (p.forgeT >= FORGE_TICK) {
-      p.forgeT -= FORGE_TICK;
-      const got = addOshield(FORGE_PER * p.mut.forge);
-      if (got > 0) oshFx(got, 'forge');
-      dbgForge += got;   // 只累加**真正铸进去**的点数（满盾时为 0）
+    if (p.noHitT < FORGE_CALM) {
+      p.forgeT = 0;
+    } else {
+      p.forgeT = (p.forgeT || 0) + dt;
+      if (p.forgeT >= FORGE_TICK) {
+        p.forgeT -= FORGE_TICK;
+        const got = addOshield(FORGE_PER * p.mut.forge);
+        if (got > 0) oshFx(got, 'forge');
+        dbgForge += got;   // 只累加**真正铸进去**的点数（满盾时为 0）
+      }
     }
   }
   /* 质变·守护盾：5 秒未受伤则满充护盾 */
@@ -20996,7 +21012,7 @@ function updateGame(dt, rawDt) {
       /* 每波清剿完毕：护盾清零 + 全图掉落一次性吸走（顺序：先清护盾，再发超级护盾的 +30） */
       wipeShieldsAtWaveEnd();
       vacuumOrbs();
-      /* 奇物·超级护盾：每波清剿完毕 +30 护盾（上限 100，持本奇物则 300）
+      /* 奇物·超级护盾：每波清剿完毕 +30 护盾（上限 50，持本奇物则 200）
          —— 同样只走特效（蓝色光环 + 粒子），不再飘字 */
       if (artGot('supershield')) {
         addOshield(SUPERSHIELD_WAVE);
@@ -23363,7 +23379,7 @@ window.__musouDebug = () => ({ kills, score, coins, wave, state, alive: p.alive,
   musouMul: +musouDmgMul().toFixed(3), mduraPer: MDURA_DMG_PER, meteorDmg: meteors.length ? meteors[0].dmg : 0,
   mutFullKills: p.mutFullKills || 0, mutFullDmgMul: +mutFullDmgMul().toFixed(4), mutFullCoin: MUT_FULL_COIN, mutFullPer: MUT_FULL_DMG_PER,
   decoyBooms: dbgDecoyBooms, decoyBoomR: 130,
-  oshieldMax: oshMax(),   // 当前护盾上限（持奇物·超级护盾 = 300，否则 100）
+  oshieldMax: oshMax(),   // 当前护盾上限（持奇物·超级护盾 = 200，否则 50）
   medicHealP: MEDIC_HEAL_P, medicHealU: MEDIC_HEAL_U,
   allies: allyUnits.filter(u => !u.dead).map(u => ({ k: u.kind, hp: Math.round(u.hp), maxhp: u.maxhp, x: Math.round(u.x), y: Math.round(u.y), invT: +(u.invT || 0).toFixed(2) })),
   rockets: gunRockets.length, nadeLive: gunNades.length,
@@ -23444,7 +23460,7 @@ window.__musouDebug = () => ({ kills, score, coins, wave, state, alive: p.alive,
   shotClears: dbgShotClears, shotClearN: dbgShotClearN,   // 无双清弹幕次数 / 累计清掉的弹数
   orbs: orbs.length, orbVacuum: dbgWaveVacuum, shieldWipes: dbgShieldWipes,   // 掉落物 / 每波吸取总数 / 护盾清零次数
   thunNeed: thunderNeed(), thunC: p.thunC, thunStrikes: dbgStrikeN, thunStrikeHits: dbgStrikeHits, thunTargets: THUNDER_TARGETS, thunDmg: thunderDmg(), thunSplashR: THUNDER_SPLASH_R, thunSplashDmg: THUNDER_SPLASH_DMG, atkNow: Math.max(1, Math.round(atkDmgNow())),   // 质变·落雷：本次需求击杀 / 已攒击杀 / 累计劈雷次数与命中数（无冷却）/ 单体伤害（=普通攻击）/ 溅射
-  forge: p.mut.forge || 0, forgePer: FORGE_PER, forgeCap: FORGE_CAP, forgeT: +(p.forgeT || 0).toFixed(2), forgeTotal: dbgForge,   // 质变·即时铸盾：层数 / 每层每秒 / 上限 / 计时 / 累计铸盾量
+  forge: p.mut.forge || 0, forgePer: FORGE_PER, forgeCap: FORGE_CAP, forgeCalm: FORGE_CALM, forgeT: +(p.forgeT || 0).toFixed(2), forgeTotal: dbgForge, noHitT: +(p.noHitT || 0).toFixed(2),   // 质变·即时铸盾：层数 / 每层每秒 / 上限 / 静置门槛 / 计时 / 累计铸盾量 / 距上次受伤的时间
   foeArcherRng: FOE_ARCHER_RNG, foeMageRng: FOE_MAGE_RNG });
 window.__musouResetActive = () => { if (state === 'play') { p.musouT = 0; artCutT = 0; p.wmMusouT = 0; wmAltTimers = {}; } }; // 测试钩子：终止进行中的无双/秘奥义（含武器大师的「万武齐鸣」）
 window.__musouClearTimed = () => { if (state === 'play') { p.fangN = 0; p.fangT = 0; p.sharpenT = 0; p.craneT = 0; } }; // 测试钩子：清掉奇物留下的**残留计时加成**（贪狼叠伤 / 磨刀 +50% / 云中鹤加速）——`__musouArtSet` 摘奇物不会回收已累积的计时器
@@ -24559,7 +24575,7 @@ window.__musouTrainerInfo = () => {
     formOf: petOwned().map(id => petFormKey(id)), nameOf: petOwned().map(id => petFormName(id)),
     stageOf: petOwned().map(id => petStageOf(id)),
     formKeys: Object.keys(PET_PNG), formNames: Object.assign({}, PET_FORM_NAME), formTable: Object.assign({}, PET_FORM),
-    dmgBonus: p.trainLv || 0, hpBonus: 2 * (p.trainLv || 0), musouBonus: +(0.1 * (p.trainLv || 0)).toFixed(3),
+    dmgBonus: 0.5 * (p.trainLv || 0), hpBonus: 1 * (p.trainLv || 0), musouBonus: +(0.05 * (p.trainLv || 0)).toFixed(3),
     petShots: dbgPetShots, booms: dbgPetBooms, waterHits: dbgPetWaterHits, levels: dbgPetLevels, faints: dbgPetFaints,
     meleeHits: dbgPetMelee, slams: dbgPetSlam,   // 🐾 近战命中次数（抓击/藤鞭/砸地）· 🚀 跳砸/猛冲落地次数
     jetTicks: dbgJetTicks, auraTicks: dbgPetAura, dashes: dbgPetDash,   // 💧 光束结算节拍 · 🌡️ 环绕结算次数 · ☄️ 猛冲次数
@@ -24870,7 +24886,7 @@ window.__musouMana = (v, t) => { if (state === 'play') { p.mem = Math.max(0, Mat
 window.__musouDropOrb = (kind) => { if (state === 'play') { orbs.push({ x: p.x, y: p.y, kind: kind || 'hp', vx: 0, vy: 0, dead: false }); return true; } return false; }; // 测试钩子：在玩家脚下掉一个球（默认绿球/回血球）
 window.__musouDropOrbAt = (kind, x, y) => { if (state === 'play') { orbs.push({ x: x, y: y, kind: kind || 'hp', vx: 0, vy: 0, dead: false }); return orbs.length - 1; } return -1; }; // 测试钩子：在指定世界坐标掉一个球（验证「每波结束全图吸取」）
 window.__musouOrbList = () => orbs.map(o => ({ kind: o.kind, x: Math.round(o.x), y: Math.round(o.y) }));   // 测试钩子：场上掉落物清单
-window.__musouOshield = (v) => { if (state === 'play') p.oshield = Math.max(0, Math.min(oshMax(), v | 0)); }; // 测试钩子：设定护盾值（按当前上限钳制：100 / 持超级护盾 300）
+window.__musouOshield = (v) => { if (state === 'play') p.oshield = Math.max(0, Math.min(oshMax(), v | 0)); }; // 测试钩子：设定护盾值（按当前上限钳制：50 / 持超级护盾 200）
 window.__musouBonusSet = (k, v) => { if (state === 'play' && k in p.bonus) p.bonus[k] = v; }; // 测试钩子：直接设定成长加成（如 dmg），用于精确核对基础伤害
 window.__musouJobPanel = () => { if (state === 'play' && p.alive) { p.jobPend = 1; tryOpen(); return true; } return false; }; // 测试钩子：弹出魔法转职面板
 window.__musouJob = (j) => { if (state === 'play') p.job = (j === 'water') ? 'water' : (j === 'thunder' ? 'thunder' : (j === 'light' ? 'light' : (j === 'fire' ? 'fire' : ''))); }; // 测试钩子：直接设定元素专精
