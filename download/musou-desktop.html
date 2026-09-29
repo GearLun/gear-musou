@@ -397,6 +397,13 @@
   .role-card.hell:hover { border-color: #d8674a; }
   .role-card.hell.sel { border-color: #ff7a52; box-shadow: 0 0 20px rgba(255, 122, 82, .5); }
   .role-card.hell.sel b { color: #ffd0bd; }
+ /* ♾ 无尽模式卡：青蓝配色（与地狱的橙红区分开） */
+ .role-card.endless { border-color: #24506b; background: rgba(10, 22, 32, .82); }
+ .role-card.endless b { color: #8fd8ff; }
+ .role-card.endless small { color: #6fa8c4; }
+ .role-card.endless:hover { border-color: #3f9fd0; }
+ .role-card.endless.sel { border-color: #8fd8ff; box-shadow: 0 0 20px rgba(143, 216, 255, .5); }
+ .role-card.endless.sel b { color: #d6f2ff; }
 </style>
 </head>
 <body class="force-desk">
@@ -445,6 +452,7 @@
       <button class="role-card" id="btn-diff-e"><span class="rp-ic">🙂</span><span class="rp-tx"><b>简 单</b><small>敌闪 +50% · 敌伤减半</small></span></button>
       <button class="role-card sel" id="btn-diff-h"><span class="rp-ic">😈</span><span class="rp-tx"><b>困 难</b><small>标准数值</small></span></button>
       <button class="role-card hell" id="btn-diff-x"><span class="rp-ic">🔥</span><span class="rp-tx"><b>地 狱</b><small>怪×1.5 · 血×1.5 · 速×1.2</small></span></button>
+      <button class="role-card endless" id="btn-diff-n"><span class="rp-ic">♾</span><span class="rp-tx"><b>无 尽</b><small>关卡无限 · 每 5 层 Boss</small></span></button>
     </div>
     <div class="role-tip on" id="diff-tip"></div>
     <div class="start-btns">
@@ -610,7 +618,7 @@
     </div>
     <div class="reroll-row">
       <button class="btn" id="shop-close">离 开 商 店</button>
-      <span class="reroll-tip">第 9 / 19 / 29 层专属补给（🔥地狱：第 34 关清剿后再开一次） · 价格逐次翻倍</span>
+      <span class="reroll-tip">第 9 / 19 / 29 层专属补给（🔥地狱：第 34 关清剿后再开一次 · ♾无尽：每 10 层一次） · 价格逐次翻倍</span>
     </div>
    </div>
   </div>
@@ -954,10 +962,27 @@ let shopRandBought = 0;         // 本次开店已购买的随机奇物次数（
 let shopShown = new Set();      // 本次开店已经出现过的奇物（刷新不会重复出现同一件）
 let probeTgt = [];              // 测试探针：弓箭手射程靶引用
 let selRole = 'warrior';        // 主页当前选中的角色（warrior/archer），开局生效
-let selDiff = 'hard';           // 主页当前选中的难度（hard 困难=标准数值 / easy 简单 / hell 地狱）
-let diffMode = 'hard';          // 本局实际难度：easy 敌人闪光率 +50%、伤害减半；hell 刷怪×1.5、敌人血×1.5、移速×1.2、绿球减半、闪光必带三词条
+let selDiff = 'hard';           // 主页当前选中的难度（hard 困难=标准数值 / easy 简单 / hell 地狱 / endless 无尽）
+let diffMode = 'hard';          // 本局实际难度：easy 敌人闪光率 +50%、伤害减半；hell 刷怪×1.5、敌人血×1.5、移速×1.2、绿球减半、闪光必带三词条；endless 无尽（吃地狱那套加成 + 关卡无限）
 function easyMode() { return diffMode === 'easy'; }
 function hellMode() { return diffMode === 'hell'; }
+/* ♾ **无尽模式**（用户本轮新增）：**关卡无限往后做**，套用**地狱模式那套加成**（刷怪 ×1.5 / 血量 ×1.5 /
+   移速 ×1.2 / 绿球掉率减半 / 闪光必带三词条 / Boss 后翻倍按 ×2 档），**每 5 层随机遭遇一位 Boss**，
+   无尽里的 Boss 基础血量一律 **5000**（双子魔眼每只 **3000**），总大将也在随机池里、血量同样 5000。
+   只认「被击败」或「自己退出（暂停 → 保存并回主页）」结束，**没有通关结算**。
+   ⚠️ 地狱的**随机奇遇**（`hellEvPick`）不给无尽：那套事件是绑在 30/35 关地狱战役上的，无尽只取数值口径。 */
+function endlessMode() { return diffMode === 'endless'; }
+function hellBonusOn() { return hellMode() || endlessMode(); }   // 「按地狱的加成形式」的那些数值倍率
+const WAVE_MAX_ENDLESS = 9999;  // 无尽：不设终点（只认阵亡 / 主动退出）
+const ENDLESS_BOSS_HP = 5000;       // ♾ 无尽模式：Boss **基础血量**统一 5000
+const ENDLESS_BOSS_HP_TWIN = 3000;  // ♾ 双子魔眼：**每只** 3000（它本来就是 3000）
+/* ♾ 无尽里某位 Boss 的**基础血量**（换掉基数，之后的每波里程碑 / 难度 / 翻倍曲线照常吃） */
+function endlessBossBaseHp(type) { return (type === 'final5') ? ENDLESS_BOSS_HP_TWIN : ENDLESS_BOSS_HP; }
+/* ♾ 无尽模式的随机 Boss 池：**总大将也在里面**（血量同样 5000）——
+   10/20/30 关那些「二选一 / 三选一」的编排在无尽里取消，改成每 5 层从这个池子随机抽一位。
+   ⚠️ 终焉齿轮（final2）也在池子里：它被杀时**不结算通关**（见 killEnemy 里的 endless 分支），场地火海自动收回。 */
+const ENDLESS_BOSSES = ['general', 'final3', 'commander', 'slimeKing', 'final5', 'final6', 'sprinter', 'final4', 'plunder', 'final2'];
+function endlessBossPick() { return ENDLESS_BOSSES[Math.floor(Math.random() * ENDLESS_BOSSES.length)]; }
 const HELL_SPAWN_MUL = 1.5;     // 地狱：刷怪量 = 困难 ×1.5
 const HELL_HP_MUL = 1.5;        // 地狱：敌人基础血量 = 困难 ×1.5
 const HELL_SPD_MUL = 1.2;       // 地狱：敌人移速 = 困难 ×1.2
@@ -1295,8 +1320,14 @@ const WAVE_MAX_NORMAL = 30;
 const WAVE_MAX_HELL = 35;
 const GEAR_WAVE = 35;              // 地狱终章：终焉齿轮
 const HELL_SHOP_WAVE = 34;         // 第 34 关清剿后额外开一次商店（备战终焉齿轮）
-function waveMax() { return hellMode() ? WAVE_MAX_HELL : WAVE_MAX_NORMAL; }
+function waveMax() { return endlessMode() ? WAVE_MAX_ENDLESS : (hellMode() ? WAVE_MAX_HELL : WAVE_MAX_NORMAL); }
 function clampWave(k) { return Math.max(1, Math.min(waveMax(), k | 0)); }
+/* 奇物奖励波：普通/地狱 = **第 5 / 10 / 15 / 20 / 25 层**清剿后各一件；
+   ♾ 无尽 = **每 5 层一件**（正好是「打完一位随机 Boss 给一件」的节奏） */
+function artWaveOn(k) { return endlessMode() ? (k % 5 === 0) : (k === 5 || k === 10 || k === 15 || k === 20 || k === 25); }
+/* 商店波：普通/地狱 = 第 9 / 19 / 29 层清剿后（🔥 地狱第 34 层再开一次）；
+   ♾ 无尽 = **每 10 层一次**（9 / 19 / 29 / 39 …），否则越打越没有补刀的机会 */
+function shopWaveOn(k) { return endlessMode() ? (k % 10 === 9) : (k === 9 || k === 19 || k === 29); }
 /* 第 10 关 Boss 三选一：🪱 世界吞噬者 / 🎖️ 指挥官 / 🟢 超级史莱姆 */
 function wave10Boss() {
   const r = Math.random();
@@ -1329,7 +1360,9 @@ function waveComp(k) {
 function waveCompBase(k) {
   const q = [];
   const s15 = x => Math.round(x * 1.5);   // 总量再 ×1.5
-  if (k === 30) {   /* 第 30 关：终焉决战 —— 🌸 世纪之花 / 💡 光明掠夺者 二选一（击败即通关） */
+  const endless = endlessMode();          // ♾ 无尽：**跳过关卡编排**（10/20/30/35 那些二选一），
+  /*                                       改用「通用构成 + 每 5 层随机一位 Boss」 */
+  if (k === 30 && !endless) {   /* 第 30 关：终焉决战 —— 🌸 世纪之花 / 💡 光明掠夺者 二选一（击败即通关） */
     const gMul = 2.5;
     const grunts = Math.min(310, Math.round((6 + 5 * k) * gMul));
     for (let i = 0; i < grunts; i++) q.push('grunt');
@@ -1342,7 +1375,7 @@ function waveCompBase(k) {
     q.push(wave30Boss());   // 🌸 世纪之花 / 💡 光明掠夺者 **二选一**（击败即通关）
     return q;
   }
-  if (k === 20) {   /* 第 20 关：大 BOSS 决战 —— 🌙 双子魔眼 压轴（两只；讨伐后战场堕入黑暗，征程继续） */
+  if (k === 20 && !endless) {   /* 第 20 关：大 BOSS 决战 —— 🌙 双子魔眼 压轴（两只；讨伐后战场堕入黑暗，征程继续） */
     const gMul = 2.5;
     const grunts = Math.min(310, Math.round((6 + 5 * k) * gMul));
     for (let i = 0; i < grunts; i++) q.push('grunt');
@@ -1369,15 +1402,25 @@ function waveCompBase(k) {
     for (let i = 0; i < cv; i++) q.push('cavalry');
   }
   /* 第 10 关：🪱 世界吞噬者 / 🎖️ 指挥官 **二选一**（讨伐后征程继续） */
-  if (k === 10) {
+  if (k === 10 && !endless) {
     for (let i = q.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = q[i]; q[i] = q[j]; q[j] = t; }
     q.push(wave10Boss());
     return q;
   }
   /* 🔥 地狱第 35 关（终章）：🎡 终焉齿轮 压轴 —— 击败它才是地狱通关 */
-  if (k === GEAR_WAVE) {
+  if (k === GEAR_WAVE && !endless) {
     for (let i = q.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = q[i]; q[i] = q[j]; q[j] = t; }
     q.push('final2');
+    return q;
+  }
+  /* ♾ 无尽模式：**每 5 层随机遭遇一位 Boss**（池子里含总大将；不含 10/20/30 那套二选一编排） */
+  if (endless) {
+    if (k % 5 === 0) {
+      for (let i = q.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = q[i]; q[i] = q[j]; q[j] = t; }
+      q.push(endlessBossPick());
+      return q;
+    }
+    for (let i = q.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = q[i]; q[i] = q[j]; q[j] = t; }
     return q;
   }
   /* 总大将：每五波一位（5/15/25 关；10 关双 Boss 二选一、20 关双子/虚空二选一、30 关世纪之花、35 关终焉齿轮） */
@@ -1407,9 +1450,12 @@ function hellDarkOn() { return hellMode() && !!hellEv && hellEv.id === 'dark'; }
 function eqDmgMul() { return hellDarkOn() ? HELL_DARK_MUL : 1; }   // 本波伤害倍率（双向）
 function startWave(k) {
   wave = k;
+  /* ♾ 无尽模式：血量档位**按层数**走（每 10 层一档、最多 2 档 = ×2/×4），
+     与「打死的是哪一位随机 Boss」解耦 —— 否则无尽第 5 层抽到双子魔眼就会白送 ×2 档。 */
+  if (endlessMode()) hpBoost = Math.min(2, Math.floor(k / 10));
   spawnQ = waveComp(k);
-  if (hellMode()) {
-    /* 地狱：刷怪量 ×1.5 —— 按原构成再补一份「一半数量」的杂兵，最后洗牌。
+  if (hellBonusOn()) {
+    /* 地狱 / 无尽：刷怪量 ×1.5 —— 按原构成再补一份「一半数量」的杂兵，最后洗牌。
        ⚠ **Boss 不参与复制**（总大将 / 世界吞噬者 / 双子魔眼 / 世纪之花 / 废案 Boss 各只能有一只） */
     const mobs = spawnQ.filter(t => !(ETYPES[t] && ETYPES[t].boss));
     const extraN = Math.round(mobs.length * (HELL_SPAWN_MUL - 1));
@@ -1446,10 +1492,16 @@ function startWave(k) {
   if (spawnQ.includes('mage')) types.push('妖法师');
   const cvN = spawnQ.filter(t => t === 'cavalry').length;
   if (cvN) types.push('铁骑 ×' + cvN);
-  if (k === 5) types.unshift('⚠ 敌人血量 ×2');
-  if (k === 10) types.unshift('⚠ 敌人血量再 ×2');
-  if (k === 15) types.unshift('⚠ 敌人血量再 ×1.5');
-  if (k === 20) types.unshift('⚠ 20层起 敌人血量再 ×1.5');
+  if (!endlessMode()) {
+    if (k === 5) types.unshift('⚠ 敌人血量 ×2');
+    if (k === 10) types.unshift('⚠ 敌人血量再 ×2');
+    if (k === 15) types.unshift('⚠ 敌人血量再 ×1.5');
+    if (k === 20) types.unshift('⚠ 20层起 敌人血量再 ×1.5');
+  } else {
+    /* ♾ 无尽：显示「层数 + 本层血量档位 +（Boss 层）随机到的是谁」 */
+    types.unshift('♾ 第 ' + k + ' 层' + (hpBoost ? ' · 敌人血量 ×' + hpBoostMul() : ''));
+    if (k % 5 === 0) types.unshift('👑 每 5 层 · 随机 Boss 层');
+  }
   if (hellEv) types.unshift(hellEv.icon + ' 奇遇：' + hellEv.name);
   bigBanner('第 ' + k + ' 波', types.join(' · '));
   if (hellEv) {
@@ -1467,7 +1519,7 @@ function startWave(k) {
 }
 function spawnEnemy(type, forceShiny, noShiny, probe) {
   const t = ETYPES[type];
-  /* 血量成长：杂兵每波 **+20%**；第5/10/15/20波 ×2/×4/×6/×9；
+  /* 血量成长：杂兵每波 **+30%**；第5/10/15/20波 ×2/×4/×6/×9；
      ⚠ 里程碑那两个 ×2 是「杂兵加成」——Boss 类豁免（Boss 用 bossWaveHpMul 自己的曲线）；
      击败 10/20 层 Boss 后 hpBoostMul 再各翻一倍（Boss 与杂兵都吃） */
   const hpMul = enemyHpMul(type, wave);
@@ -1481,8 +1533,8 @@ function spawnEnemy(type, forceShiny, noShiny, probe) {
   const e = {
     type, x, y, vx: 0, vy: 0, kx: 0, ky: 0,
     hp: Math.round(t.hp * hpMul), maxhp: Math.round(t.hp * hpMul),
-    r: t.r, spd: t.spd * (1 + wave * 0.004) * (hellMode() ? HELL_SPD_MUL : 1),
-    /* 伤害 = 基础值 × 每波 +10% 成长（**Boss 单位不吃**，见 enemyDmgMul）；闪光「双倍攻击」在下面再乘 */
+    r: t.r, spd: t.spd * (1 + wave * 0.004) * (hellBonusOn() ? HELL_SPD_MUL : 1),
+    /* 伤害 = 基础值 × 「每 5 层 +20%」成长（**Boss 单位不吃**，见 enemyDmgMul）；闪光「双倍攻击」在下面再乘 */
     dmg: t.dmg * enemyDmgMul(type, wave), score: t.score,
     col: t.col, dark: t.dark, acc: t.acc, resist: t.resist,
     ranged: t.ranged || 0, boss: t.boss || 0,
@@ -1535,7 +1587,7 @@ function spawnEnemy(type, forceShiny, noShiny, probe) {
     e.cmdT = 1.2;              // 开场 1.2 秒就来第一轮（试验场里一进去就能看到招式）
     e.cmdQ = [];               // 轮内待发的三波（{n, t}）
     e.wanderT = 0; e.wx = e.x; e.wy = e.y;
-    e.spd = 150 * (hellMode() ? HELL_SPD_MUL : 1);
+    e.spd = 150 * (hellBonusOn() ? HELL_SPD_MUL : 1);
   }
   if (type === 'final') { e.hexT = 0; }   // 废案 Boss 无场地阵，占位
   /* Boss 通用战技状态机（蓄力冲撞 / 瞬移）：总大将沿用灭世魔君的全套行为 */
@@ -1617,16 +1669,27 @@ function spawnEnemy(type, forceShiny, noShiny, probe) {
     const q0 = trackPoint(0);
     e.x = q0.x; e.y = q0.y; e.spS = 0; e.ang = q0.ang;
     e.spDashT = rnd(SPRINT.dashGap[0], SPRINT.dashGap[1]);
-  }  /* —— 闪光个体的强化词条（不写文字，全靠外观/特效表达）——
+  }  /* ─────────── ♾ 无尽模式：Boss「基础血量」统一 ───────────
+     用户要求：无尽里**每位 Boss 的基础血量都是 5000**（双子魔眼**每只 3000**，它本来就是 3000），
+     **总大将也在随机池里、基础血量同样是 5000**。
+     口径与历史上那些「XX 的基础血量改为 N」完全一致 = **换掉基数**：之后的每波里程碑曲线
+     （×2 / ×4 / ×6 / ×9）、地狱加成（×1.5）、Boss 后翻倍（×2 / ×4）照常吃 —— 所以这里按
+     `bossWaveHpMul(wave)` 重算一次（而不是钉成常数 5000）。
+     ⚠️ 废案 Boss `final`（灭世魔君）不走这条：它有自己的里程碑口径，也不在无尽的随机池里。 */
+  if (endlessMode() && e.boss && type !== 'final') {
+    const ehp = Math.round(endlessBossBaseHp(type) * bossWaveHpMul(wave));
+    e.hp = ehp; e.maxhp = ehp;
+  }
+  /* —— 闪光个体的强化词条（不写文字，全靠外观/特效表达）——
      🔴 武器变红 = 双倍攻击力 · 🟢 身体变绿 = **5 倍血量** · 💨 奔跑尘迹 = 1.5 倍移速
      必定至少带 1 条（各 50% 独立抽取，若全空则随机补 1 条），最多三条全占；
-     **地狱模式：闪光个体必定三条全带** */
+     **地狱 / 无尽模式：闪光个体必定三条全带** */
   if (type === 'final3' || type === 'final4' || type === 'slimeKing' || type === 'plunder' || type === 'sprinter') {
     /* 测试沙盒 Boss 永不闪光：「地狱闪光必带三条词条」里有一条是 5 倍血量，会把设计血量放大 */
     e.shiny = false; e.aff = null;
   }
   if (e.shiny) {
-    const aff = hellMode()
+    const aff = hellBonusOn()
       ? { atk: true, hp: true, spd: true }
       : { atk: Math.random() < 0.5, hp: Math.random() < 0.5, spd: Math.random() < 0.5 };
     if (!aff.atk && !aff.hp && !aff.spd) {
@@ -2246,33 +2309,35 @@ function tickHexes(dt) {
    ★ 额外成长：**击败第 10 / 20 层 Boss 后，全场敌人血量再各乘一档**：
      🔥 地狱 = **×2 / 档**（累计 ×4）；😈 困难 / 🙂 简单 = **×1.5 / 档**（累计 ×2.25） */
 const MOB_HP_PER_WAVE = 0.30;
-/* 敌人**伤害**随波数的成长（用户本轮新增）：**每波 +10%**（同样是「以基础值为基准的线性叠加」，
-   与血量同款口径：`1 + 0.10 × (波−1)`）。⚠️ **Boss 单位不吃这条**（用户明确要求）——
+/* 敌人**伤害**随波数的成长（用户本轮改口径）：**每 5 层 +20%**（阶梯式，不是每层线性）
+   → `1 + 0.20 × floor((波−1)/5)`：1~5 层 ×1.00 · 6~10 ×1.20 · 11~15 ×1.40 · 16~20 ×1.60 ·
+     21~25 ×1.80 · 26~30 ×2.00 · 31~35 ×2.20 …（无尽模式继续往上走）
+   ⚠️ **Boss 单位仍不吃这条**（用户之前明确要求「Boss 单位不会增加伤害」，本轮只改增幅算法，没取消豁免）——
    「Boss 单位」判据用 `ETYPES[type].boss`（总大将/指挥官/世界吞噬者/超级史莱姆/双子魔眼/虚空执剑者/
    超级跑者/世纪之花/光明掠夺者/终焉齿轮 都带这个标记），召唤物（小史莱姆/骷髅头）与铁骑等都算普通敌人、照吃 */
-const MOB_DMG_PER_WAVE = 0.10;
+const MOB_DMG_PER_5WAVE = 0.20;
 const HP_BOOST_HELL = 2;      // 地狱模式：每次 Boss 后翻倍
 const HP_BOOST_NORMAL = 1.5;  // 简单 / 困难：每次 Boss 后 ×1.5
 let hpBoost = 0;                                   // 本局已触发的「Boss 后加成」次数（最多 2）
-function hpBoostStep() { return hellMode() ? HP_BOOST_HELL : HP_BOOST_NORMAL; }
+function hpBoostStep() { return hellBonusOn() ? HP_BOOST_HELL : HP_BOOST_NORMAL; }
 function hpBoostMul() { return Math.pow(hpBoostStep(), Math.max(0, hpBoost | 0)); }
 function mobHpMul(k) { return 1 + (Math.max(1, k || 1) - 1) * MOB_HP_PER_WAVE; }
-function mobDmgMul(k) { return 1 + (Math.max(1, k || 1) - 1) * MOB_DMG_PER_WAVE; }
-/* 敌人实际伤害倍率：Boss 单位恒为 1（不吃每波成长），其余按每波 +10% */
+function mobDmgMul(k) { return 1 + MOB_DMG_PER_5WAVE * Math.floor((Math.max(1, k || 1) - 1) / 5); }
+/* 敌人实际伤害倍率：Boss 单位恒为 1（不吃增幅），其余按「每 5 层 +20%」 */
 function enemyDmgMul(type, k) {
   const t = ETYPES[type];
   return (t && t.boss) ? 1 : mobDmgMul(k);
 }
 /* ⚠ 敌人的**真实**血量倍率（生产与测试钩子共用这一个函数，避免两处公式漂移）：
-   杂兵 = 每波曲线 ×2（杂兵加成）× 地狱 × Boss 后翻倍；Boss 不吃那个 ×2（走 bossWaveHpMul 的里程碑曲线） */
+   杂兵 = 每波曲线 ×2（杂兵加成）× 地狱/无尽 × Boss 后翻倍；Boss 不吃那个 ×2（走 bossWaveHpMul 的里程碑曲线） */
 function enemyHpMul(type, k) {
   const isBoss = type === 'final' || type === 'final2' || type === 'final3' || type === 'final4' || type === 'final5' || type === 'final6' || type === 'slimeKing' || type === 'plunder' || type === 'sprinter';
-  return mobHpMul(k) * (isBoss ? 1 : 2) * (hellMode() ? HELL_HP_MUL : 1) * hpBoostMul();
+  return mobHpMul(k) * (isBoss ? 1 : 2) * (hellBonusOn() ? HELL_HP_MUL : 1) * hpBoostMul();
 }
 function bossWaveHpMul(k) {
   const w = Math.max(1, k || 1);
   const m = w >= 20 ? 9 : (w >= 15 ? 6 : (w >= 10 ? 4 : (w >= 5 ? 2 : 1)));
-  return m * (hellMode() ? HELL_HP_MUL : 1) * hpBoostMul();
+  return m * (hellBonusOn() ? HELL_HP_MUL : 1) * hpBoostMul();
 }
 const BOSS_TEST = {
   /* 🪱 世界吞噬者：钻地 → 破土扑击 */
@@ -12277,7 +12342,7 @@ function killEnemy(e) {
     burst(e.x, e.y, 9, t.col, 320);
     sfx.kill();
     if (!noOrb) {
-      if (Math.random() < 0.01 * (hellMode() ? HELL_DROP_MUL : 1)) orbs.push({ x: e.x, y: e.y, kind: 'hp', vx: 0, vy: 0, dead: false });   // 回复球掉率 1%（地狱减半 → 0.5%）
+      if (Math.random() < 0.01 * (hellBonusOn() ? HELL_DROP_MUL : 1)) orbs.push({ x: e.x, y: e.y, kind: 'hp', vx: 0, vy: 0, dead: false });   // 回复球掉率 1%（地狱/无尽减半 → 0.5%）
       if (Math.random() < 0.05) orbs.push({ x: e.x, y: e.y, kind: 'ms', vx: 0, vy: 0, dead: false });
     }
   }
@@ -12299,7 +12364,19 @@ function killEnemy(e) {
     mIdx++;
   }
   tryOpen();   // 有质变宝箱/升级在排队则弹出
-  if (e.type === 'final4' || e.type === 'plunder') {
+  /* ♾ 无尽模式：**任何 Boss 被讨伐都只是「继续」** —— 没有通关结算，血量档位由层数决定（见 startWave），
+     所以这里统一走一条「无尽讨伐」横幅，不再落进下面那些「第 10 / 20 / 30 关里程碑」分支。
+     ⚠️ 双子魔眼要**两只都倒下**、超级史莱姆要**最后一只小史莱姆倒下**才算讨伐（与普通模式同判据） */
+  if (endlessMode() && e.boss
+    && !(e.type === 'final5' && enemies.some(o => !o.dead && o.type === 'final5'))
+    && !(e.type === 'slimeKing' && enemies.some(o => !o.dead && (o.type === 'slimeKing' || o.type === 'slimeMini')))) {
+    if (e.type === 'final3' || e.type === 'commander') for (const s of wormSegs(e)) s.dead = true;
+    if (e.type === 'final2') { for (const hx of hexes) if (hx.warn) hx.warn.dead = true; hexes = []; }
+    if (e.type === 'final4' || e.type === 'plunder' || e.type === 'final5' || e.type === 'final6' || e.type === 'sprinter') setSceneDark();
+    const lb = (ETYPES[e.type] && ETYPES[e.type].label) || 'Boss';
+    bigBanner('♾ ' + lb + ' 已被讨伐', '无尽征程继续 —— 第 ' + (wave + 1) + ' 层在等你（每 5 层一位 Boss）');
+    slowT = Math.max(slowT, 0.4);
+  } else if (e.type === 'final4' || e.type === 'plunder') {
     /* 🌸/💡 第 30 关 Boss（二选一）被击败 → 简单/困难：通关；**地狱：征程继续（还有 31~35 关）** */
     const bn = e.type === 'plunder' ? '💡 光明掠夺者 已被讨伐 💡' : '🌸 世纪之花 已被讨伐 🌸';
     if (hellMode() && wave < GEAR_WAVE) {
@@ -14547,7 +14624,7 @@ function loadGame() {
   p.wmMusouT = 0; p.wmThrustT = 0;
   p.roninPend = 0;    // 读档：战法已定，不再弹战法面板
   selRole = p.role;
-  diffMode = (s.diff === 'easy') ? 'easy' : (s.diff === 'hell' ? 'hell' : 'hard');        // 存档绑定难度（旧档缺省困难）
+  diffMode = (s.diff === 'easy') ? 'easy' : (s.diff === 'hell') ? 'hell' : (s.diff === 'endless' ? 'endless' : 'hard');        // 存档绑定难度（旧档缺省困难）
   selDiff = diffMode;
   choosing = false; p.artPend = 0; curChoices = []; curKind = 'level';
   /* 读档：把 resetRun() 顺手弹出来的开局面板（战士之道 / 武器 / 开局奇物…）**全部收起来**，
@@ -14752,7 +14829,8 @@ function showOver() {
   const carry = metaBankRun();
   $('ov-stats').innerHTML =
     '击破 <b>' + kills + '</b> 人&nbsp;&nbsp;得分 <b>' + score + '</b>' +
-    '<br>抵达 <b>第 ' + wave + '</b> 波&nbsp;&nbsp;坚持 <b>' + Math.floor(time) + '</b> 秒' +
+    '<br>' + (endlessMode() ? '♾ <b>无尽模式</b> · 撑到 <b>第 ' + wave + '</b> 层' : '抵达 <b>第 ' + wave + '</b> 波') +
+    '&nbsp;&nbsp;坚持 <b>' + Math.floor(time) + '</b> 秒' +
     '<br>最终等级 <b>Lv' + p.lvl + '</b>&nbsp;&nbsp;闪光捕获 <b>' + shinies + '</b> 只' +
     '<br>🪙 金币 <b>' + coins + '</b>' +
     '<br>💠 传承带出 <b>+' + carry + '</b>（本局总金币 ' + coinsTotal + ' ×1%）&nbsp;余额 <b>' + meta.bank + '</b>' +
@@ -15559,7 +15637,8 @@ function openStartConfirm() {
     body.innerHTML =
       '<div class="cdx-sec">⚠ 检测到进行中的存档</div>' +
       '<div class="cdx-item"><span class="ic">📜</span><b>当前进度</b><small>第 <b style="color:#ffd166;">' + s.wave + '</b> 波 · ' +
-      (ROLE_NAME[s.role] || ROLE_NAME.warrior) + ' · ' + (s.diff === 'easy' ? '🙂简单' : '😈困难') +
+      (ROLE_NAME[s.role] || ROLE_NAME.warrior) + ' · ' +
+      (s.diff === 'easy' ? '🙂简单' : (s.diff === 'hell' ? '🔥地狱' : (s.diff === 'endless' ? '♾无尽' : '😈困难'))) +
       ' · 击杀 ' + (s.kills || 0) + ' · 得分 ' + (s.score || 0) + '</small></div>' +
       '<div class="cdx-item"><span class="ic">🪙</span><b>本局总金币</b><small>' + (s.coinsTotal || 0) + '（已花掉的不影响结算）</small></div>' +
       '<div class="cdx-item"><span class="ic">💠</span><b>放弃 = 结算带出</b><small>按 <b style="color:#ffd166;">1%</b> 结算：' +
@@ -15638,30 +15717,35 @@ $('btn-role-w').addEventListener('click', () => chooseRole('warrior'));
 $('btn-role-a').addEventListener('click', () => chooseRole('archer'));
 const roleBindM = $('btn-role-m'); if (roleBindM) roleBindM.addEventListener('click', () => chooseRole('mage'));
 /* 主页难度选择：困难 = 现有标准数值（默认）；简单 = 敌人闪光率 +50%、敌人伤害减半；
-   地狱 = 刷怪 ×1.5、敌人血 ×1.5、移速 ×1.2、绿球掉率减半、闪光必带三词条（**不再白送闪耀护符**） */
+   地狱 = 刷怪 ×1.5、敌人血 ×1.5、移速 ×1.2、绿球掉率减半、闪光必带三词条（**不再白送闪耀护符**）；
+   ♾ 无尽 = 吃地狱那套加成，但**关卡无限**、**每 5 层随机一位 Boss**（无尽里的 Boss 基础血量统一 5000） */
 function syncDiffUI() {
   const on = (id, yes) => { const el = $(id); if (!el) return; if (yes) el.classList.add('sel'); else el.classList.remove('sel'); };
   on('btn-diff-h', selDiff === 'hard');
   on('btn-diff-e', selDiff === 'easy');
   on('btn-diff-x', selDiff === 'hell');
+  on('btn-diff-n', selDiff === 'endless');
   const tip = $('diff-tip');
   if (tip) {
     tip.classList.add('on');
     tip.innerHTML = selDiff === 'easy'
       ? '🙂 简单 —— 敌人出闪 +50%（0.375%），敌人伤害减半'
       : (selDiff === 'hell'
-        ? '🔥 地狱 —— 刷怪 ×1.5 · 敌人血 ×1.5 · 移速 ×1.2 · 绿球掉率减半<br><span style="color:#ffb199;">闪光个体必带三条强化词条（绿身 = 5 倍血量）</span>'
-        : '😈 困难 —— 标准数值（敌人出闪 0.25%）');
+        ? '🔥 地狱 —— 刷怪 ×1.5 · 敌人血 ×1.5 · 移速 ×1.2 · 绿球掉率减半<br><span style="color:#ffb199;">闪光个体必带三条强化词条（绿身 = 5 倍血量）· 30 关世纪之花 或 光明掠夺者 = 通关</span>'
+        : (selDiff === 'endless'
+          ? '♾ 无尽 —— 套用 🔥 地狱的加成（刷怪 ×1.5 · 血 ×1.5 · 移速 ×1.2）<br><span style="color:#8fd8ff;">关卡**无限**往后做 · **每 5 层随机遭遇一位 Boss**（基础血量 5000 · 双子魔眼每只 3000）<br>**只有被击败或主动退出才结束**（没有通关结算）</span>'
+          : '😈 困难 —— 标准数值（敌人出闪 0.25%）<br><span style="color:#a9c39a;">敌人攻击：**每 5 层 +20%**（Boss 单位不涨）</span>'));
   }
 }
 function chooseDiff(d) {
-  selDiff = (d === 'easy') ? 'easy' : (d === 'hell' ? 'hell' : 'hard');
+  selDiff = (d === 'easy') ? 'easy' : (d === 'hell' ? 'hell' : (d === 'endless' ? 'endless' : 'hard'));
   syncDiffUI();
 }
 const diffBind = (id, d) => { const el = $(id); if (el) el.addEventListener('click', () => chooseDiff(d)); };
 diffBind('btn-diff-h', 'hard');
 diffBind('btn-diff-e', 'easy');
 diffBind('btn-diff-x', 'hell');
+diffBind('btn-diff-n', 'endless');
 /* 主页「继续游戏」按钮 */
 function refreshContinue() {
   const b = $('btn-continue');
@@ -15669,9 +15753,9 @@ function refreshContinue() {
   if (hasSave() && s) {
     b.style.display = '';
     b.innerHTML = '▶ 继续 · 第 ' + s.wave + ' 波（' + (ROLE_NAME[s.role] || ROLE_NAME.warrior) +
-      (s.diff === 'easy' ? ' · 🙂简单' : ' · 😈困难') + '）';
+      (s.diff === 'easy' ? ' · 🙂简单' : (s.diff === 'hell' ? ' · 🔥地狱' : (s.diff === 'endless' ? ' · ♾无尽' : ' · 😈困难'))) + '）';
     selRole = (s.role === 'archer') ? 'archer' : (s.role === 'mage' ? 'mage' : 'warrior');   // 卡片高亮跟随存档角色
-    selDiff = (s.diff === 'easy') ? 'easy' : (s.diff === 'hell' ? 'hell' : 'hard');          // 卡片高亮跟随存档难度
+    selDiff = (s.diff === 'easy') ? 'easy' : (s.diff === 'hell' ? 'hell' : (s.diff === 'endless' ? 'endless' : 'hard'));   // 卡片高亮跟随存档难度
   } else {
     b.style.display = 'none';
   }
@@ -21227,10 +21311,9 @@ function updateGame(dt, rawDt) {
       /* 🐉 大器晚成（多龙梅西亚 / 迷你龙）：第 20 波清剿后一段 · 第 25 波清剿后二段 */
       petWaveEvoCheck(wave);
       /* 每波结束自动存档（奇物奖励波记录待补发标记） */
-      saveGame(wave + 1, wave % 5 === 0 && wave <= 25 ? wave : 0);
-      /* 奇物：第 5/10/15/20/25 波清剿完毕各得一件 */
-      if (wave === 5 || wave === 10 || wave === 15) triggerArtPick(wave);
-      else if (wave === 20 || wave === 25) triggerArtPick(wave);
+      saveGame(wave + 1, artWaveOn(wave) ? wave : 0);
+      /* 奇物：第 5/10/15/20/25 波清剿完毕各得一件（♾ 无尽：每 5 层一件） */
+      if (artWaveOn(wave)) triggerArtPick(wave);
       /* 地狱奇遇·这个没人要吗？：本波清剿后再额外送一次奇物三选一 */
       if (hellEv && hellEv.id === 'art') {
         artWv = wave;
@@ -21238,8 +21321,8 @@ function updateGame(dt, rawDt) {
         p.artPend += 1;
         tryOpen();   // 面板马上就弹出来了，不再叠加飘字
       }
-      if (wave === 9 || wave === 19 || wave === 29) {
-        openShopOrQueue(wave + 1);   // 第 9/19/29 层清剿后开启商店（关闭后进入下一层）
+      if (shopWaveOn(wave)) {
+        openShopOrQueue(wave + 1);   // 第 9/19/29 层清剿后开启商店（关闭后进入下一层）；♾ 无尽每 10 层一次
       } else if (hellMode() && wave === HELL_SHOP_WAVE) {
         openShopOrQueue(wave + 1);   // 🔥 地狱第 34 关清剿后**额外**再开一次商店（备战第 35 关的终焉齿轮）
       } else {
@@ -23595,8 +23678,9 @@ window.__musouDebug = () => ({ kills, score, coins, wave, state, alive: p.alive,
   orbsList: orbs.map(o => ({ k: o.kind, x: Math.round(o.x), y: Math.round(o.y) })),
   textsList: texts.map(t => t.txt),               // 诊断：当前屏幕上的飘字（核对「不再刷屏」）
   diff: diffMode, selDiff, selRole, shinyP: shinyChance(), easyDmgMul: easyMode() ? 0.5 : 1, hell: hellMode() ? 1 : 0,
+  endless: endlessMode() ? 1 : 0, hellBonus: hellBonusOn() ? 1 : 0, waveMax: waveMax(), endWaveMax: WAVE_MAX_ENDLESS,
   hellSpawnMul: HELL_SPAWN_MUL, hellHpMul: HELL_HP_MUL, hellSpdMul: HELL_SPD_MUL, hellDropMul: HELL_DROP_MUL,
-  spawnQ: spawnQ.length, greenDrop: +(0.01 * (hellMode() ? HELL_DROP_MUL : 1)).toFixed(4),   // 地狱：场上待刷怪数 / 绿球掉率
+  spawnQ: spawnQ.length, greenDrop: +(0.01 * (hellBonusOn() ? HELL_DROP_MUL : 1)).toFixed(4),   // 场上传刷怪数 / 绿球掉率（地狱 / 无尽减半）
   hellEv: hellEv ? { id: hellEv.id, name: hellEv.name } : null,             // 本波地狱奇遇（null = 无 / 非地狱 / Boss 波）
   hellShinyLeft: hellRest.shinyLeft || 0, hellPits: hellPits.length,        // 奇遇·闪光大量出现 剩余必闪数 / 场上火坑
   hellRingT: +(hellRest.ringT || 0).toFixed(2), hellEvN: dbgHellEv,         // 奇遇·炽热擂台 计时 / 奇遇触发总次数
@@ -23675,14 +23759,19 @@ window.__musouSaveNow = () => { if (state === 'play' && p.alive) saveGame(wave, 
 window.__musouContinueTest = () => { if (state === 'play') loadGame(); }; // 测试钩子：模拟"刷新后继续"
 window.__musouOpenPanels = () => PANEL_IDS.filter(id => { const el = $(id); return !!(el && el.classList && el.classList.contains && el.classList.contains('show')); }); // 测试钩子：当前处于显示状态的面板（回归：读档后不该残留开局面板）
 window.__musouDarkNow = () => { if (state === 'play') setSceneDark(); }; // 测试钩子：切换黑暗战场
-window.__musouSetDiff = (d) => {   // 测试钩子：直接切换本局难度（easy / hard / hell），并按新难度重抽本波奇遇
-  if (d !== 'easy' && d !== 'hard' && d !== 'hell') return false;
+window.__musouSetDiff = (d) => {   // 测试钩子：直接切换本局难度（easy / hard / hell / endless），并按新难度重抽本波奇遇
+  if (d !== 'easy' && d !== 'hard' && d !== 'hell' && d !== 'endless') return false;
   diffMode = d; selDiff = d;
   /* ⚠ 必须同步刷新本波奇遇：否则切回困难/简单后，上一波抽到的地狱事件（如「黑暗游戏」）会残留生效 */
   hellEv = hellEvPick(wave || 1);
   hellRest = { shinyLeft: 0, ringT: 0 };
   hellPits = [];
   if (hellEv && hellEv.id === 'shiny') hellRest.shinyLeft = HELL_SURGE_SHINY;
+  return true;
+};
+window.__musouSetDiffNow = (d) => {   // 测试钩子：只改主页选中的难度（下一局生效；本局用 __musouSetDiff）
+  if (d !== 'easy' && d !== 'hard' && d !== 'hell' && d !== 'endless') return false;
+  selDiff = d;
   return true;
 };
 window.__musouDarkSet = (v) => {   // 测试钩子：直接设定黑暗战场（false 会恢复草原地面）
@@ -25210,7 +25299,18 @@ window.__musouBossTanky = (hp) => {   // 测试钩子：把场上 Boss 的血抬
   }
   return n;
 };
-window.__musouHpMulAt = (w) => ({ wave: w, perWave: MOB_HP_PER_WAVE, dmgPerWave: MOB_DMG_PER_WAVE, boost: +hpBoostMul().toFixed(4), boostStep: hpBoostStep(), boostSteps: hpBoost, mob: +mobHpMul(w).toFixed(4), mobTotal: +enemyHpMul('grunt', w).toFixed(4), boss: +bossWaveHpMul(w).toFixed(4), hell: hellMode() ? HELL_HP_MUL : 1, dmgMob: +enemyDmgMul('grunt', w).toFixed(4), dmgBoss: +enemyDmgMul('general', w).toFixed(4) });   // 测试钩子：某波的血量/伤害倍率（mob = 纯每波曲线；mobTotal = 杂兵实际血量倍率；boss = Boss 血量倍率；dmgMob/dmgBoss = 伤害倍率，Boss 恒为 1）
+window.__musouHpMulAt = (w) => ({ wave: w, perWave: MOB_HP_PER_WAVE, dmgPer5Wave: MOB_DMG_PER_5WAVE, dmgStep: Math.floor((Math.max(1, w || 1) - 1) / 5), boost: +hpBoostMul().toFixed(4), boostStep: hpBoostStep(), boostSteps: hpBoost, mob: +mobHpMul(w).toFixed(4), mobTotal: +enemyHpMul('grunt', w).toFixed(4), boss: +bossWaveHpMul(w).toFixed(4), hell: hellBonusOn() ? HELL_HP_MUL : 1, dmgMob: +enemyDmgMul('grunt', w).toFixed(4), dmgBoss: +enemyDmgMul('general', w).toFixed(4) });   // 测试钩子：某波的血量/伤害倍率（mob = 纯每波曲线；mobTotal = 杂兵实际血量倍率；boss = Boss 血量倍率；dmgMob/dmgBoss = 伤害倍率，Boss 恒为 1）
+/* ♾ 无尽模式读数（测试用）：模式 / 关卡上限 / Boss 池 / 无尽 Boss 血量 / 每 5 层伤害增幅 / 随机抽一位 */
+window.__musouEndlessInfo = () => ({
+  on: endlessMode() ? 1 : 0, diff: diffMode, waveMax: waveMax(), wave: wave,
+  pool: ENDLESS_BOSSES.slice(), bossHp: ENDLESS_BOSS_HP, twinHp: ENDLESS_BOSS_HP_TWIN,
+  bases: ENDLESS_BOSSES.map(t => ({ type: t, base: endlessBossBaseHp(t) })),
+  dmgPer5: MOB_DMG_PER_5WAVE, boostSteps: hpBoost,
+  bosses: ENDLESS_BOSSES.map(t => ({ type: t, label: (ETYPES[t] || {}).label || t, boss: (ETYPES[t] && ETYPES[t].boss) ? 1 : 0 }))
+});
+window.__musouEndlessPick = () => endlessBossPick();   // 测试钩子：抽一次无尽的随机 Boss
+window.__musouWaveComp = (k) => waveComp(clampWave(k)).slice();   // 测试钩子：某一层的完整出怪构成（含地狱/无量的 ×1.5 补量）
+window.__musouWaveBosses = (k) => waveComp(clampWave(k)).filter(t => ETYPES[t] && ETYPES[t].boss);   // 测试钩子：某一层的 Boss 单位
 window.__musouHpBoost = (v) => { if (v !== undefined) hpBoost = Math.max(0, Math.min(2, v | 0)); return hpBoost; };   // 测试钩子：设定「Boss 后额外翻倍」档位
 window.__musouShopInfo = () => ({ on: shopOn ? 1 : 0, coins: coins, randBought: shopRandBought, randMax: SHOP_RAND_MAX, pickCost: SHOP_PICK_COST, rerollCost: SHOP_PICK_REROLL, randCost: SHOP_RAND_COST, picks: shopPicks.map(s => ({ id: s.id, sold: s.sold ? 1 : 0 })), pool: shopArtPool().length });   // 测试钩子：商店价格与本次开店状态
 window.__musouCardMusou = () => {   // 测试钩子：直接放一次牌皇无双（正前方 120° 扇甩 17 张特殊牌，不走按键）
