@@ -568,8 +568,6 @@
       <button class="up-btn" id="slot-b2"></button>
       <button class="up-btn" id="slot-b3"></button>
       <button class="up-btn" id="slot-b4"></button>
-      <button class="up-btn" id="slot-b5"></button>
-      <button class="up-btn" id="slot-b6"></button>
     </div>
     <div class="reroll-row" id="slot-pager" style="display:none;">
       <button class="reroll-btn" id="slot-prev">◀ 上一页</button>
@@ -580,7 +578,7 @@
       <button class="reroll-btn" id="slot-skip">✋ 放弃这次奇物</button>
       <span class="reroll-tip">不替换，直接跳过（槽位不变）</span>
     </div>
-    <div class="hint">点一件已持有的奇物把它丢掉，换成新的（数字键 1~7 快速选择 · Esc 放弃）· 每页 7 件，翻页看其余的</div>
+    <div class="hint">点一件已持有的奇物把它丢掉，换成新的（数字键 1~5 快速选择 · Esc 放弃）· 每页 5 件、最多 3 页，翻页看其余的</div>
    </div>
   </div>
 
@@ -8830,7 +8828,7 @@ function skyDmg() { return Math.max(1, Math.round(knightRamDmg() * (1 + SKY_DMG_
    数值表：WM_WEAPONS（基础）· WM_QUAL（品质颜色/权重）· WM_QUAL_BANDS（按角色等级的刷新概率）
           WM_STAR_DMG_PER（星级加成：**每星 +80%** 伤害）· WM_MERGE_NEED（几件同名同星合 1 件 = 3）
    ============================================================ */
-const WM_REFRESH_COST = 100;   // 刷新货架的基准价（每次刷新翻倍：100 / 200 / 400 …，每次开店重置）
+const WM_REFRESH_COST = 200;   // 🛒 刷新货架的**固定价 200 金币**（用户本轮：原来是 100 起、每刷一次翻倍）
 const WM_BUY_COST = 300;       // 旧常量（已被按品质的 wmBuyCost 取代，保留兼容）
 const WM_MUSOU_T = 6.0;
 const WM_MUSOU_MUL = 0.6;
@@ -9240,30 +9238,36 @@ function wmMergeTry(inst) {
 }
 /* 👝 能不能再收一件武器（**无副作用**，给商店/掉落先判一次）：
    ① 能凑齐合成（同 id 同星已有 WM_MERGE_NEED−1 件）→ 合成不占新格
-   ② 有空装备位 → 直接上身
+   ② 有空装备位 → 直接上身（**装备中的不算备用件**，不占背包格）
    ③ 有空背包格 → 进背包
-   都不行 = 「背包与装备位都满」→ 调用方该弹「背包已满！」，**绝不允许悄悄丢掉已有武器** */
+   都不行 = 「背包与装备位都满」→ 调用方该弹「背包已满！」，**绝不允许悄悄丢掉已有武器**。
+   ⚠️ 判据必须与 `wmGiveWeapon()` **逐条一致**（顺序也要一致）：两处不一致就会出现
+   「判成能收 → 实际收不下 → 商店把钱扣了、货也没了」（用户报过的严重 bug）。 */
 function wmCanTakeWeapon(id, q) {
   if (!WM_WEAPONS[id]) return false;
   const mates = (p.wmBag || []).filter(x => x && x.id === id && Math.max(1, x.star || 1) === 1);
   if (mates.length >= WM_MERGE_NEED - 1) return true;      // 能合成 → 净腾出格子
-  if (wmEquipped().length < wmMaxEquip()) return true;
+  if (wmEquipped().length < wmMaxEquip()) return wmStored().length <= wmBagMax();   // 会直接上身，不占备用格
   return wmStored().length < wmBagMax();
 }
-/* 入包：先合成，再考虑格子。⚠️ **满了两处一律返回 'full'（什么都不做）** ——
-   以前这里会把「星级/品质最差的那件备用武器」直接丢掉来腾位置（用户报的**严重 bug**：
-   商店里买武器时背包满了会**悄悄卖掉包里的一件**，玩家根本不知道自己丢了什么）。
-   现在改由调用方（`wmShopPick` 等）先 `wmCanTakeWeapon()` 判定并弹「背包已满！」。 */
+/* 入包：**先定「放哪」再判容量**，满了就返回 'full'（什么都不做）。
+   ⚠️ 以前这里有三个坑（用户接连报过）：
+   ① 会把「星级/品质最差的那件备用武器」丢掉来腾位置 → 玩家不知道丢了什么；
+   ② 先入包再判容量 → 「装备 1/2 + 背包 5/4」这种超格状态下会把新武器判成装不下；
+   ③ 与 `wmCanTakeWeapon()` 判据不一致 → 商店先扣钱下架、再发现收不下。
+   现在：满了两处一律返回 **'full'** 并把实例退回，**绝不碰玩家已有的武器**；
+   调用方（`wmShopPick`）必须先 `wmCanTakeWeapon()` 预判、再拿返回值兜底，**成功才结算金币**。 */
 function wmGiveWeapon(id, q) {
   if (!WM_WEAPONS[id]) return 'bad';
   const inst = wmNewInst(id, q || 'poor', 1);
+  if (wmEquipped().length < wmMaxEquip()) inst.eq = 1;      // 有空装备位就直接上身（省一步操作，也不占备用格）
+  const storedBefore = wmStored().length;
   p.wmBag.push(inst);
   if (wmMergeTry(inst) > 0) return 'merge';
-  if (wmStored().length > wmBagMax()) {
+  if (storedBefore + (inst.eq ? 0 : 1) > wmBagMax()) {
     p.wmBag.splice(p.wmBag.indexOf(inst), 1);   // 装不下 → 把这件退回去（**不动玩家已有的武器**）
     return 'full';
   }
-  if (wmEquipped().length < wmMaxEquip()) inst.eq = 1;   // 有空装备位就自动上身，省一步操作
   return 'new';
 }
 /* 装备 / 卸下（装备位满了就拒绝，提示一句） */
@@ -9272,6 +9276,9 @@ function wmToggleEquip(uid) {
   if (!inst) return false;
   if (inst.eq) {
     if (wmEquipped().length <= 1) { addText(p.x, p.y - 50, '至少要留一件武器在手', 15, '#ff9d7a', '#3a1400'); return false; }
+    /* 🎒 **背包满时不许卸下**：卸下来这件就只能塞进备用格 → 会出现「背包 5/4」这种超格状态
+       （用户报过：满了还能卸 → 5/4 + 装备 1/2，接着买武器就莫名丢钱丢货）。先卖掉/合成腾格子再卸。 */
+    if (wmStored().length >= wmBagMax()) { addText(p.x, p.y - 50, '背包已满！先卖掉一件再卸下', 16, '#ff9d7a', '#3a1400'); return false; }
     inst.eq = 0; return true;
   }
   if (wmEquipped().length >= wmMaxEquip()) { addText(p.x, p.y - 50, '装备位已满（' + wmMaxEquip() + ' 件）', 15, '#ff9d7a', '#3a1400'); return false; }
@@ -11012,9 +11019,10 @@ function artLose(id) {
 }
 let pendArtId = null;              // 槽满时「待入手的奇物」
 let slotList = [];                 // 替换面板里列出的已持有奇物（与 slot-b0..b6 + 分页一一对应）
-/* 🎒 槽满替换面板的**分页**（用户要求）：每页最多 7 件 —— 槽上限已经能到 13 件，
+/* 🎒 槽满替换面板的**分页**（用户要求）：**每页最多 5 件 · 最多 3 页** —— 槽上限 13 件正好 = 5 + 5 + 3 三页；
    一页塞 13 个按钮在手机上铺不下（面板会溢出、看不到后面的奇物）。 */
-const SLOT_PAGE_SIZE = 7;
+const SLOT_PAGE_SIZE = 5;
+const SLOT_PAGE_MAX = 3;         // 槽上限 13 → `ceil(13/5)` = 3 页（这行是口径说明 + 断言用；页数仍按列表长度算）
 let slotPage = 0;
 let shopPendingPick = null;        // 商店自选格因槽满挂起的交易 { i, id }（放弃时退款）
 function artTryGain(id) {
@@ -11782,7 +11790,7 @@ function openWMShop() {
   /* 每升 1 级 = 1 次免费三选一；☞ 奇物「买一送一」每次升级再多给一把 */
   if (p.pending > 0) { p.wmFree = (p.wmFree || 0) + p.pending * (artGot('buy1get1') ? 2 : 1); p.pending = 0; }
   p.wmStock = wmRollStock();   // 🛒 每次升级进来，货架**自动免费刷新一次**
-  p.wmRfN = 0;                 // 付费刷新次数归零（本次开店第一次刷新 100，之后翻倍）
+  p.wmRfN = 0;                 // 付费刷新次数归零（现在刷新价是**固定 200**，这个计数只留作诊断）
   curKind = 'wmshop';
   choosing = true;
   flashG = Math.max(flashG, 0.12);
@@ -11858,8 +11866,8 @@ function wmPaint() {
   const cl = $('wm-close');
   if (cl) cl.textContent = (p.wmFree || 0) > 0 ? '收 工（还有 ' + p.wmFree + ' 次免费没用）' : '收 工（关闭商店）';
 }
-/* 🛒 刷新价：本次开店第 1 次 100，之后每次翻倍（200 / 400 …） */
-function wmRefreshCost() { return WM_REFRESH_COST * Math.pow(2, p.wmRfN || 0); }
+/* 🛒 刷新价：**固定 200 金币**（用户本轮改的；以前是第 1 次 100、之后翻倍） */
+function wmRefreshCost() { return WM_REFRESH_COST; }   // 🛒 **固定 200**（不再按次数翻倍）
 /* 买 / 免费拿货架上第 i 件（选完不关窗）——价格按**品质**：劣等 100 / 凡品 300 / 优质 1000 / 史诗 3000 / 传奇 5000 / 神级 10000 */
 function wmShopPick(i) {
   if (!choosing || curKind !== 'wmshop') return;
@@ -11871,21 +11879,27 @@ function wmShopPick(i) {
     addText(p.x, p.y - 46, '金币不足（' + wmQualName(s.q) + '武器需 ' + cost + '）', 16, '#ff9d7a', '#3a1400');
     return;
   }
-  /* 🎒 **背包与装备位都满、又凑不出合成 → 直接提示「背包已满！」，不扣钱、不下架、不丢任何已有武器**
-     （用户报的严重 bug：以前会悄悄把背包里星级/品质最差的那件卖掉替换成新的） */
+  /* 🎒 预判「收得下吗」（收不下就只提示、**不扣钱不下架**） */
   if (!wmCanTakeWeapon(s.id, s.q)) {
     addText(p.x, p.y - 46, '背包已满！', 21, '#ff9d7a', '#3a1400');
     sfx.shield();                     // 「被挡下」的音效（本作没有专门的反馈音）
     wmPaint();                        // 面板里那行「⚠ 背包已满！」也会亮着
     return;
   }
+  /* ⚠️ **先真的入包、成功了再收钱**：`wmGiveWeapon` 返回 'full' 时（预判与实现万一不一致）
+     必须原样退出 —— 绝不允许出现「钱扣了、货从货架上消失、包里却没多东西」 */
+  const wmGet = wmGiveWeapon(s.id, s.q);
+  if (wmGet === 'full' || wmGet === 'bad') {
+    addText(p.x, p.y - 46, '背包已满！', 21, '#ff9d7a', '#3a1400');
+    sfx.shield();
+    wmPaint();
+    return;
+  }
   if (free) {
     p.wmFree--;
-    wmGiveWeapon(s.id, s.q);
     addText(p.x, p.y - 46, '🎁 免费获得 · ' + wmQualName(s.q) + d.name, 19, '#8ff0e8', '#14404d');
   } else {
     coins -= cost;
-    wmGiveWeapon(s.id, s.q);
     addText(p.x, p.y - 46, '💰 -' + cost + ' 买下 ' + wmQualName(s.q) + d.name, 19, '#ffe9a8', '#3a2a00');
   }
   p.wmStock[i | 0] = null;               // 买走 → 货架空格（刷新补货）
@@ -11907,7 +11921,7 @@ function wmSellWeapon(uid) {
   if (choosing && curKind === 'wmshop') wmPaint();
   return gain;
 }
-/* 刷新货架：第 n 次刷新价 = 100 × 2^(n-1) */
+/* 刷新货架：**固定 200 金币**（`wmRefreshCost()`），换一批新武器 */
 function wmShopRefresh() {
   if (!choosing || curKind !== 'wmshop') return;
   const cost = wmRefreshCost();
@@ -14959,12 +14973,12 @@ addEventListener('keydown', e => {
     else if (e.code === 'KeyC' && state === 'play' && isTrainer() && !choosing && !shopOn) openPetPanel();
     return;
   }
-  /* 🎒 奇物槽替换面板：数字键挑要丢掉的奇物（**按当前页**，每页 7 件）、Esc/数字 0 放弃 */
+  /* 🎒 奇物槽替换面板：数字键挑要丢掉的奇物（**按当前页**，每页 5 件）、Esc/数字 0 放弃 */
   if (state === 'play' && choosing && curKind === 'slot') {
     if (e.code === 'Escape' || e.code === 'Digit0') { slotSkip(); return; }
-    if (e.code === 'Digit9' || e.code === 'KeyA' || e.code === 'ArrowLeft') { slotPageMove(-1); return; }   // 翻页：9 / A / ←
-    if (e.code === 'Digit8' || e.code === 'KeyD' || e.code === 'ArrowRight') { slotPageMove(1); return; }    // 翻页：8 / D / →
-    if (e.code >= 'Digit1' && e.code <= 'Digit7') { slotPick(slotPage * SLOT_PAGE_SIZE + (Number(e.code.slice(5)) - 1)); return; }
+    if (e.code === 'Digit9' || e.code === 'Digit6' || e.code === 'KeyA' || e.code === 'ArrowLeft') { slotPageMove(-1); return; }   // 翻页：9/6 / A / ←
+    if (e.code === 'Digit8' || e.code === 'Digit7' || e.code === 'KeyD' || e.code === 'ArrowRight') { slotPageMove(1); return; }    // 翻页：8/7 / D / →
+    if (e.code >= 'Digit1' && e.code <= 'Digit5') { slotPick(slotPage * SLOT_PAGE_SIZE + (Number(e.code.slice(5)) - 1)); return; }
     if (e.code === 'KeyS') { slotSkip(); return; }
     return;   // 槽面板期间屏蔽其它按键
   }
@@ -25325,7 +25339,7 @@ window.__musouCharmTry = (n) => {   // 测试钩子：对场上前 n 只敌人�
   p.mut.possess = save;
   return got;
 };
-window.__musouArtSlots = () => ({ count: artCount(), cap: artCap(), list: artOwnedList(), pend: pendArtId, open: $('sc-slot').classList.contains('show') ? 1 : 0, choosing: choosing ? 1 : 0, metaSlot: metaLv('slot'), page: slotPage, pages: slotPageN(), pageSize: SLOT_PAGE_SIZE, pageShown: slotList.slice(slotPage * SLOT_PAGE_SIZE, slotPage * SLOT_PAGE_SIZE + SLOT_PAGE_SIZE), pagerVisible: ($('slot-pager') && $('slot-pager').style.display !== 'none') ? 1 : 0 });   // 测试钩子：奇物槽状态（数量 / 上限 / 待入手 / 替换面板是否打开 / **分页**）
+window.__musouArtSlots = () => ({ count: artCount(), cap: artCap(), list: artOwnedList(), pend: pendArtId, open: $('sc-slot').classList.contains('show') ? 1 : 0, choosing: choosing ? 1 : 0, metaSlot: metaLv('slot'), page: slotPage, pages: slotPageN(), pageSize: SLOT_PAGE_SIZE, pageMax: SLOT_PAGE_MAX, pageShown: slotList.slice(slotPage * SLOT_PAGE_SIZE, slotPage * SLOT_PAGE_SIZE + SLOT_PAGE_SIZE), pagerVisible: ($('slot-pager') && $('slot-pager').style.display !== 'none') ? 1 : 0 });   // 测试钩子：奇物槽状态（数量 / 上限 / 待入手 / 替换面板是否打开 / **分页**）
 window.__musouSlotList = () => slotList.slice();   // 测试钩子：替换面板里列出的已持有奇物（**分页前的全量**；界面上按 SLOT_PAGE_SIZE=7 一页）
 window.__musouSlotPick = (i) => { if (curKind !== 'slot' || !choosing) return false; slotPick(i | 0); return true; };   // 测试钩子：点第 i 个槽位丢掉（**绝对下标**，跨页有效）
 window.__musouSlotPage = (d) => { if (curKind !== 'slot' || !choosing) return -1; slotPageMove(d === undefined ? 1 : d | 0); return slotPage; };   // 测试钩子：翻页（返回翻页后的页码）
