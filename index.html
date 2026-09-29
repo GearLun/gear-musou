@@ -982,6 +982,10 @@ function endlessBossBaseHp(type) { return (type === 'final5') ? ENDLESS_BOSS_HP_
    ⚠️ 终焉齿轮（final2）也在池子里：它被杀时**不结算通关**（见 killEnemy 里的 endless 分支），场地火海自动收回。 */
 const ENDLESS_BOSSES = ['general', 'final3', 'commander', 'slimeKing', 'final5', 'final6', 'sprinter', 'final4', 'plunder', 'final2'];
 function endlessBossPick() { return ENDLESS_BOSSES[Math.floor(Math.random() * ENDLESS_BOSSES.length)]; }
+/* ♾ 无尽的 Boss 层抽谁：**第 5 层固定「总大将」**（用户要求：每局第一个 Boss 稳定是它，而且它第 5 波不放
+   双环螺旋弹幕，见 tickEnemy 里那条 —— 开局好过一点）；**第 10 / 15 / 20 … 全部随机**（从上面 10 位里抽，
+   总大将也仍在池子里，所以后面再遇到它时照旧会放双环螺旋弹幕）。 */
+function endlessBossAt(k) { return (k === 5) ? 'general' : endlessBossPick(); }
 const HELL_SPAWN_MUL = 1.5;     // 地狱：刷怪量 = 困难 ×1.5
 const HELL_HP_MUL = 1.5;        // 地狱：敌人基础血量 = 困难 ×1.5
 const HELL_SPD_MUL = 1.2;       // 地狱：敌人移速 = 困难 ×1.2
@@ -1414,11 +1418,12 @@ function waveCompBase(k) {
     q.push('final2');
     return q;
   }
-  /* ♾ 无尽模式：**每 5 层随机遭遇一位 Boss**（池子里含总大将；不含 10/20/30 那套二选一编排） */
+  /* ♾ 无尽模式：**每 5 层随机遭遇一位 Boss**（池子里含总大将；不含 10/20/30 那套二选一编排）
+     —— 例外：**第 5 层固定总大将**（`endlessBossAt`） */
   if (endless) {
     if (k % 5 === 0) {
       for (let i = q.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = q[i]; q[i] = q[j]; q[j] = t; }
-      q.push(endlessBossPick());
+      q.push(endlessBossAt(k));
       return q;
     }
     for (let i = q.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = q[i]; q[i] = q[j]; q[j] = t; }
@@ -3020,6 +3025,7 @@ let dbgVoidSlashFx = 0, dbgVoidSlamFx = 0;            // 斩击特效次数 / �
 let dbgTwinBreathHits = 0;                            // 🔥 双子火焰眼「持续喷火」**真的打掉玩家血**的次数（冒烟 S27 核对结算节拍）
 let dbgGearAteCat = 0;                                // 🎡 终焉齿轮吞掉哈根（觉醒猛虎）的次数（冒烟 S29 核对）
 let dbgGearShots = 0, dbgGearHexes = 0;               // 🎡 齿轮累计发出的弹幕 / 撒下的法阵（贴近时弹幕同帧被打掉，只能靠累计值核对）
+let dbgWarlordSpiral = 0;                             // ⭐ 总大将「双环螺旋弹幕」累计轮数（测试用：第 5 波应为 0）
 let dbgGearFires = 0, dbgGearFireHits = 0;            // 🎡 齿轮法阵炸完留下的地火数量 / 地火结算命中次数（冒烟 S31 核对）
 /* 🎲 按权重抽一套技能：VOID.skillW = [4, 3, 3] → ①40% / ②30% / ③30%
    ⚠️ 不要在这里再叠「避免与上一套重复」的重摇 —— 那会把用户要的 4:3:3 分布拉平
@@ -5631,7 +5637,14 @@ function shinyToggle(id) {
   metaSave();
   return meta.shinyOn[id];
 }
-/* 来访的宝可梦：停/飘在训练家身边 SHINY_VISIT_T 秒，送完金币就走（用独立 kind，不参与宠物 AI / 索敌 / 队伍） */
+/* ✨ 闪光来访的**巨大飘字**（用户要求：「巨大的飘字展示出闪啦！」）——
+   字号 SHINY_TEXT_SIZE、金色描边、活得比普通飘字久；`big:1` 供诊断/测试钩子辨认。 */
+function addBigShinyText(x, y, txt) {
+  if (texts.length > 36) texts.shift();
+  texts.push({ x, y, vy: -28, life: SHINY_TEXT_LIFE, max: SHINY_TEXT_LIFE, txt, size: SHINY_TEXT_SIZE, color: '#ffe873', stroke: '#6b3a00', big: 1 });
+}
+/* 来访的宝可梦：停/飘在训练家身边 SHINY_VISIT_T 秒（**闪光的停 SHINY_VISIT_T_SHINY 秒**），
+   送完金币就走（用独立 kind，不参与宠物 AI / 索敌 / 队伍） */
 function spawnShinyVisit(id, shiny) {
   const a2 = rnd(0, TAU);
   const rad = 58;
@@ -5640,7 +5653,7 @@ function spawnShinyVisit(id, shiny) {
     r: PS(id).r, scaleK: PS(id).scale, petScale: PS(id).scale,
     x: Math.max(44, Math.min(W - 44, p.x + Math.cos(a2) * rad)),
     y: Math.max(44, Math.min(H - 44, p.y + Math.sin(a2) * rad)),
-    hp: 1, maxhp: 1, flash: 0, invT: 999, dead: false, visitT: SHINY_VISIT_T, visitShiny: shiny ? 1 : 0,
+    hp: 1, maxhp: 1, flash: 0, invT: 999, dead: false, visitT: shiny ? SHINY_VISIT_T_SHINY : SHINY_VISIT_T, visitShiny: shiny ? 1 : 0,
     petSt: 'move', petA: 'idle', petF: 0, petAF: 0, petDir: petDir(Math.atan2(p.y - (p.y + Math.sin(a2) * rad), p.x - (p.x + Math.cos(a2) * rad))),
     orbit: 0, atkT: 999, fireCd: 0, faintT: 0, jetT: 0, restT: 0, jetTick: 0, jetPrev: null, jumpZ: 0
   });
@@ -5661,12 +5674,13 @@ function updateShinyVisit(u, dt) {
   }
   if (u.visitT <= 0) { u.dead = true; }
 }
-/* 每波清剿后调用（和得蛋/孵化同一条结算点）：来访 + 送金币 + 可能的闪光收录 */
-function shinyMutWaveEnd(wave) {
+/* 每波清剿后调用（和得蛋/孵化同一条结算点）：来访 + 送金币 + 可能的闪光收录
+   `forceShiny` 只给测试钩子用：true / false 直接钉死这一次是不是闪光（不传 = 走真实概率） */
+function shinyMutWaveEnd(wave, forceShiny) {
   const lv = shinyMutLv();
   if (lv <= 0) return 0;
   const id = SHINY_SPECIES[Math.floor(Math.random() * SHINY_SPECIES.length)];
-  const shiny = Math.random() < shinyMutChance();
+  const shiny = (forceShiny === undefined) ? (Math.random() < shinyMutChance()) : !!forceShiny;
   const gold = shinyVisitGold();
   addCoins(gold);
   spawnShinyVisit(id, shiny);
@@ -5676,6 +5690,7 @@ function shinyMutWaveEnd(wave) {
     const isNew = shinyRecord(id);
     dbgShinySeen++;
     if (isNew) dbgShinyNew++;
+    addBigShinyText(p.x, p.y - 72, '出闪啦！');   // ✨ 巨大飘字（用户要求）
     bigBanner('✨ 闪 光 ' + nm + ' 来 了 ✨', '它给你留下 ' + gold + ' 金币就离开了 · 已永久收录进「训练家闪光图鉴」' + (shinyOn(id) ? '（已启用闪光外观）' : ''));
     sfx.spark();
   } else {
@@ -8695,6 +8710,9 @@ const SHINY_GOLD_PER = 100;      // 每层金币（1 层 100 → 满层 500）
 const SHINY_CHANCE_BASE = 0.01;  // 1 层：1%
 const SHINY_CHANCE_PER = 0.005;  // 每多一层 +0.5%（5 层 = 3%）
 const SHINY_VISIT_T = 2.6;       // 来访的宝可梦在训练家身边停留多久（秒）后离开
+const SHINY_VISIT_T_SHINY = 5;   // ✨ 闪光版来访停留更久（用户要求：「若出现闪光宝可梦…停留时间增加至 5 秒」）
+const SHINY_TEXT_SIZE = 64;      // ✨ 闪光版来访的**巨大飘字**字号（用户要求：「巨大的飘字展示出闪啦！」）
+const SHINY_TEXT_LIFE = 1.8;     // 巨大飘字停留多久（秒）
 const SHINY_SPECIES = ['bulba', 'charm', 'squirt', 'eevee', 'charcadet', 'dreepy', 'dratini', 'jirachi', 'toge'];
 const SHINY_HP_MUL = 5;   // 🟢 闪光词条·绿身体：血量倍率（本轮由 2 倍提高到 5 倍）
 const CARD_ONLY_MUTS = ['deck', 'wild', 'possess', 'multishot'];   // 🃏 牌皇专属四件套（传统弓/士兵/其它职业都拿不到）
@@ -10848,7 +10866,7 @@ const MUTS = [
   { id:'starhelp', icon:'⭐', name:'星之助战', desc:'宝可梦队列里加入一只 **基拉祈（No.385）**：它的**等级只跟这条质变走**（1 层 = 10 级 → 满 5 层 = **50 级的面板数据**），**50 级解锁「破灭之愿」**', cap:STARHELP_CAP, apply(){ p.mut.starhelp = Math.min(STARHELP_CAP, (p.mut.starhelp || 0) + 1); starAidSync(); } },
   { id:'miracle', icon:'💖', name:'羁绊奇迹', desc:'宝可梦**该昏厥时保留 1 滴血并无敌 3 秒**；每层缩短这条保命的间隔：**一级 20 秒 → 满 4 层 5 秒一次**（20/15/10/5）', cap:MIRACLE_CAP, apply(){ p.mut.miracle = Math.min(MIRACLE_CAP, (p.mut.miracle || 0) + 1); } },
   /* ✨ 刷闪！（用户本轮点名）：每波清剿后一只**基础宝可梦**来访 —— 送金币、**不进队伍**；小概率是闪光 */
-  { id:'shinymut', icon:'✨', name:'刷闪！', desc:'**每波清剿后**会有一只基础宝可梦（妙蛙种子/小火龙/杰尼龟/伊布/炭小侍/多龙梅西亚/迷你龙/基拉祈/波克比）**来到训练家身边送出 ' + SHINY_GOLD_PER + ' 金币**（它不会进入队伍）；并有 **' + Math.round(SHINY_CHANCE_BASE * 100) + '% 概率遇到闪光版本** —— 遇到即**永久收录**进主页养成的「训练家闪光图鉴」，可随时启用它的闪光外观。每层：金币 **+' + SHINY_GOLD_PER + '**（满 ' + SHINY_MUT_CAP + ' 层 = ' + (SHINY_GOLD_PER * SHINY_MUT_CAP) + '）、闪光概率 **+' + (SHINY_CHANCE_PER * 100).toFixed(1) + '%**（满层 = ' + Math.round((SHINY_CHANCE_BASE + SHINY_CHANCE_PER * (SHINY_MUT_CAP - 1)) * 100) + '%）', cap:SHINY_MUT_CAP, apply(){ p.mut.shinymut = Math.min(SHINY_MUT_CAP, (p.mut.shinymut || 0) + 1); } }
+  { id:'shinymut', icon:'✨', name:'刷闪！', desc:'**每波清剿后**会有一只基础宝可梦（妙蛙种子/小火龙/杰尼龟/伊布/炭小侍/多龙梅西亚/迷你龙/基拉祈/波克比）**来到训练家身边送出 ' + SHINY_GOLD_PER + ' 金币**（它不会进入队伍）；并有 **' + Math.round(SHINY_CHANCE_BASE * 100) + '% 概率遇到闪光版本** —— 遇到即**永久收录**进主页养成的「训练家闪光图鉴」，可随时启用它的闪光外观（闪光版会多陪你一会儿，并飘出巨大的「出闪啦！」）。每层：金币 **+' + SHINY_GOLD_PER + '**（满 ' + SHINY_MUT_CAP + ' 层 = ' + (SHINY_GOLD_PER * SHINY_MUT_CAP) + '）、闪光概率 **+' + (SHINY_CHANCE_PER * 100).toFixed(1) + '%**（满层 = ' + Math.round((SHINY_CHANCE_BASE + SHINY_CHANCE_PER * (SHINY_MUT_CAP - 1)) * 100) + '%）', cap:SHINY_MUT_CAP, apply(){ p.mut.shinymut = Math.min(SHINY_MUT_CAP, (p.mut.shinymut || 0) + 1); } }
 ];
 /* 当前能抽到的质变全集（角色禁选 + 专属互斥 + 已满级剔除）
    —— 判据抽成 mutBanSet()，这样「一键满质变」用的是**完全同一套**「本职业拿不到什么」的清单 */
@@ -12150,6 +12168,7 @@ function fillCodex() {
   h += '<div class="cdx-sec">⚔ Boss 波次（三档难度共用一张表）</div>';
   h += '<div class="cdx-item"><span class="ic">⭐</span><b>第 5 / 15 / 25 波 · 总大将</b><small>'
     + '沿用灭世魔君的整套打法：**双环螺旋弹幕 + 瞄准扇形连弹 + 阶段召唤援军（66% / 33% 血量）+ 蓄力冲撞 / 蓄力瞬移**；'
+    + '⚠️ **第 5 波的总大将不放「双环螺旋弹幕」**（用户要求：第一个 Boss 时角色还没成型），其余招式照旧，第 15 / 25 波也不受影响；'
     + '基础血量 **1000 × 波次倍率**（2000 / 6000 / 9000），**不再使用跃击**。看到红色预警线（冲撞）或地面脉冲准星（瞬移）立刻横移</small></div>';
   h += '<div class="cdx-item"><span class="ic">🪱</span><b>第 10 波 · 世界吞噬者 <span style="color:#8d8a77;">/ 🎖️ 指挥官 / 🟢 超级史莱姆（三选一）</span></b><small>'
     + '基础血量 **2000 × 波次倍率**（10 波 = 8000）。多节蠕虫（头 + 10 节躯体）。**钻地时受伤只有 15%**，地面仅留翕动土丘 + 震动环；'
@@ -14796,6 +14815,7 @@ function resetRun() {
   dbgSkullSpawns = 0; dbgSkullBooms = 0;
   dbgPlunderSkills = 0; dbgPlunderLaserHits = 0; dbgPlunderClaws = 0; dbgPlunderDowns = 0; dbgBlindMax = 0;
   dbgGearShots = 0; dbgGearHexes = 0; dbgGearFires = 0; dbgGearFireHits = 0;   // 🎡 齿轮诊断随新局归零
+  dbgWarlordSpiral = 0;   // ⭐ 总大将双环螺旋弹幕轮数随新局归零
   cmdAura = 0; dbgCmdRounds = 0; dbgCmdCav = 0; dbgCmdAtkExtra = 0;   // 🎖️ 指挥官光环/诊断随新局归零
   p.noDashT = 0;
   p.bladeT = 0; p.bladeBuffT = 0;   // 🗡 祖传宝刀：天降倒计时 / 增伤计时随新局归零
@@ -15355,7 +15375,7 @@ const LAB_BOSSES = [
   { id: 'final3', icon: '🪱', name: '世界吞噬者', desc: '第 10 关 Boss —— 钻地（减伤）→ 破土 → 直线冲撞，带一列躯体节' },
   { id: 'final5', icon: '🌙', name: '双子魔眼', desc: '第 20 关 Boss —— 两只独立血条：激光眼远攻齐射 / 火焰眼贴身冲刺' },
   { id: 'final4', icon: '🌸', name: '世纪之花', desc: '第 30 关 Boss —— 三阶段（扎根 / 盛放 / 狂怒）+ 藤蔓落点 + 孢子弹幕' },
-  { id: 'general', icon: '⭐', name: '总大将', desc: '每 5 波的小 Boss —— 双环螺旋弹幕 + 瞄准扇弹 + 阶段召唤 + 冲撞/瞬移' },
+  { id: 'general', icon: '⭐', name: '总大将', desc: '每 5 波的小 Boss —— 双环螺旋弹幕 + 瞄准扇弹 + 阶段召唤 + 冲撞/瞬移（**第 5 波不放双环螺旋弹幕**）' },
   { id: 'final', icon: '☠', name: '灭世魔君（废案）', desc: '蓄力冲撞 / 蓄力瞬移 的老 Boss 状态机' },
   { id: 'final2', icon: '⚙️', name: '终焉齿轮', desc: '固定钉在地图正中间当炮台：双环螺旋弹幕 + 场地六处魔法阵（<b>冲刺/瞬移已删</b>）；出场时场地转为炽热擂台同款火海；<b>对玩家护盾伤害翻倍</b>；若中央站着哈根（猛虎）会把它吞掉换 −30% 血' },
   { id: 'commander', icon: '🎖️', name: '指挥官（新）', desc: '光环 Boss —— 它在场时<b>其他敌人移速 ×1.5 / 血量 ×2 / 攻击频率 ×1.5</b>；本体不追玩家、只在地图上乱跑，每 5 秒一轮攻击：随机方位召唤 <b>3 → 5 → 8</b> 个一次性骑兵（各波隔 1 秒，蓄力 0.5 秒后冲锋，撞完消散）' },
@@ -20971,13 +20991,17 @@ function updateGame(dt, rawDt) {
       tx = 0; ty = 0;   // Boss 是炮台：总大将/魔君机动靠冲撞与瞬移；**终焉齿轮本版不再机动**
       if (isF2) { e.x = W / 2; e.y = H / 2; e.vx = 0; e.vy = 0; }   // 🎡 固定钉在地图正中间（每帧校正，绝不漂移）
       const bSpd = isF2 ? 340 : 290;
-      /* —— 双环螺旋弹幕（速率约为原三倍）—— */
+      /* —— 双环螺旋弹幕（速率约为原三倍）——
+         ⚠️ **总大将只在第 5 波不放这一招**（用户本轮要求）：第 5 波是每局遇到的第一个 Boss，
+         这时角色还没成型，两圈高速环形弹幕太硬；**第 15 / 25 波的总大将照旧**（瞄准扇弹、阶段召唤、
+         冲撞/瞬移全都不受影响 —— 这里只跳过两圈环形弹幕本身）。终焉齿轮 / 灭世魔君也不受影响。 */
+      const noSpiral = (e.type === 'general' && wave === 5);
       e.fireCd -= dt;
       if (e.fireCd <= 0) {
         e.fireCd = isF2 ? 1.0 : 1.15;
         const n = isF2 ? 22 : 18;
         const base = time * (isF2 ? 1.7 : 1.1);
-        if (shots.length < 260) {
+        if (!noSpiral && shots.length < 260) {
           const bcol = isF2 ? '#7fd4ff' : '#ff8a70';
           for (let i = 0; i < n; i++) {
             const an = (i / n) * TAU + base;
@@ -20989,6 +21013,7 @@ function updateGame(dt, rawDt) {
             shots.push({ x: e.x, y: e.y, vx: Math.cos(an) * bSpd * 0.6, vy: Math.sin(an) * bSpd * 0.6, dmg: isF2 ? 14 : 10, dead: false, src: 'boss', big: 1, col: bcol, gear: isF2 ? 1 : 0 });
           }
           if (isF2) dbgGearShots += n * 2;   // 诊断：双环共 2n 发（玩家贴着齿轮时会在同一帧被打掉）
+          if (e.type === 'general') dbgWarlordSpiral++;   // 诊断：总大将放了几轮双环螺旋弹幕
         }
         /* 瞄准玩家扇形连弹（每两轮一轮） */
         e.burstN = (e.burstN || 0) + 1;
@@ -23059,11 +23084,16 @@ function drawGame() {
     ctx.globalAlpha = Math.max(0, t.life / t.max);
     ctx.font = 'bold ' + t.size + 'px "Microsoft YaHei",sans-serif';
     ctx.textAlign = 'center';
-    ctx.lineWidth = 4;
+    ctx.lineWidth = Math.max(4, Math.round(t.size * 0.14));   // 描边随字号走（巨大飘字要粗一圈）
+    /* ✨ 巨大飘字（闪光来访）：出场 0.18 秒内从 70% 弹到 100%，更「跳」出来 */
+    const big = t.big ? 1 : 0;
+    const sc = big ? Math.min(1, 0.7 + (t.max - t.life) * 1.6) : 1;
+    if (big && sc !== 1) { ctx.save(); ctx.translate(t.x, t.y); ctx.scale(sc, sc); ctx.translate(-t.x, -t.y); }
     ctx.strokeStyle = t.stroke || 'rgba(0,0,0,0.6)';
     ctx.strokeText(t.txt, t.x, t.y);
     ctx.fillStyle = t.color;
     ctx.fillText(t.txt, t.x, t.y);
+    if (big && sc !== 1) ctx.restore();
   }
   ctx.globalAlpha = 1;
 
@@ -23771,7 +23801,7 @@ window.__musouDebug = () => ({ kills, score, coins, wave, state, alive: p.alive,
     under: e.segUnderground ? 1 : 0, segs: e.type === 'final3' ? wormSegs(e).length : 0
   })),
   twins: enemies.filter(e => !e.dead && e.type === 'final5').map(e => ({ role: e.twinRole, hp: Math.round(e.hp), maxhp: e.maxhp })),
-  warlord: (() => { const g = enemies.find(x => !x.dead && x.type === 'general'); return g ? { hp: Math.round(g.hp), maxhp: g.maxhp, cmode: g.cMode || null, phase: g.phase || 0 } : null; })(),
+  warlord: (() => { const g = enemies.find(x => !x.dead && x.type === 'general'); return g ? { hp: Math.round(g.hp), maxhp: g.maxhp, cmode: g.cMode || null, phase: g.phase || 0, spiral: dbgWarlordSpiral } : null; })(),
   planteraVines: planteraVines.length, wormSegs: enemies.filter(e => !e.dead && e.segPhantom).length,
   gearN: dbgGear, auraN: dbgAura, gearAt: dbgGearAt, shinySet: p.shinySet || 0,
   dmgVal: +dmgNow().toFixed(2),
@@ -24127,6 +24157,10 @@ window.__musouShinyDex = () => ({
   dex: Object.assign({}, meta.shinyDex || {}), on: Object.assign({}, meta.shinyOn || {}),
   gotN: SHINY_SPECIES.filter(shinyGot).length, cap: SHINY_MUT_CAP,
   lv: shinyMutLv(), gold: shinyVisitGold(), chance: +shinyMutChance().toFixed(4),
+  stayT: SHINY_VISIT_T, stayShinyT: SHINY_VISIT_T_SHINY, textSize: SHINY_TEXT_SIZE, textLife: SHINY_TEXT_LIFE,
+  bigTexts: texts.filter(t => t.big).map(t => t.txt),        // ✨ 巨大飘字（闪光来访时会出现「出闪啦！」）
+  bigTextList: texts.filter(t => t.big).map(t => ({ txt: t.txt, size: t.size, life: +t.life.toFixed(2) })),
+  allTexts: texts.map(t => t.txt),
   visitN: dbgShinyVisit, seenN: dbgShinySeen, newN: dbgShinyNew,
   visitors: allyUnits.filter(u => u.kind === 'shinypet').map(u => ({ id: u.petId, shiny: u.visitShiny ? 1 : 0, t: +(u.visitT || 0).toFixed(2), petShiny: u.petShiny ? 1 : 0 })),
   panel: ($('sc-shiny') && $('sc-shiny').classList && $('sc-shiny').classList.contains('show')) ? 1 : 0,
@@ -24135,7 +24169,7 @@ window.__musouShinyDex = () => ({
 });
 window.__musouShinyToggle = (id) => shinyToggle(id);                 // 测试钩子：切某只的闪光外观
 window.__musouShinyRecord = (id) => shinyRecord(id);                 // 测试钩子：直接把某只记进图鉴（跳过随机）
-window.__musouShinyWave = () => { const r = shinyMutWaveEnd(wave); return r; };   // 测试钩子：手动触发一次「每波结束」的来访结算
+window.__musouShinyWave = (forceShiny) => { const r = shinyMutWaveEnd(wave, forceShiny); return r; };   // 测试钩子：手动触发一次「每波结束」的来访结算（传 true/false 可钉死这一次是不是闪光）
 window.__musouShinyOpen = () => { openShinyDex(); return window.__musouShinyDex(); };   // 测试钩子：打开图鉴面板
 window.__musouShinyClose = () => { $('sc-shiny').classList.remove('show'); };
 window.__musouPetSkillOf = (id) => skDump(petSkillOf(id));   // 测试钩子：某只宝可梦**当前实际生效**的那一招（含奇物·千年之愿把破灭之愿换成破灭之愿☆）
@@ -24809,7 +24843,7 @@ window.__musouTwins = () => enemies.filter(e => !e.dead && e.type === 'final5').
 }));
 window.__musouWarlord = () => { const e = enemies.find(x => !x.dead && x.type === 'general');   // 测试钩子：总大将（灭世魔君式）
   if (!e) return null;
-  return { hp: Math.round(e.hp), maxhp: e.maxhp, cmode: e.cMode || null, phase: e.phase || 0, leap: e.leap ? 1 : 0, fireCd: +(e.fireCd || 0).toFixed(2) };
+  return { hp: Math.round(e.hp), maxhp: e.maxhp, cmode: e.cMode || null, phase: e.phase || 0, leap: e.leap ? 1 : 0, fireCd: +(e.fireCd || 0).toFixed(2), spiral: dbgWarlordSpiral };
 };
 /* 🟢 超级史莱姆：本体状态 + 三只分裂小史莱姆 + 黏糊糊场地（玩家移速 ×0.5） */
 window.__musouSlimeInfo = () => {
@@ -25376,11 +25410,13 @@ window.__musouHpMulAt = (w) => ({ wave: w, perWave: MOB_HP_PER_WAVE, dmgPer5Wave
 window.__musouEndlessInfo = () => ({
   on: endlessMode() ? 1 : 0, diff: diffMode, waveMax: waveMax(), wave: wave,
   pool: ENDLESS_BOSSES.slice(), bossHp: ENDLESS_BOSS_HP, twinHp: ENDLESS_BOSS_HP_TWIN,
+  fixedBossWave: 5, fixedBoss: 'general',   // ♾ 第 5 层恒为总大将（其余 Boss 层随机）
   bases: ENDLESS_BOSSES.map(t => ({ type: t, base: endlessBossBaseHp(t) })),
   dmgPer5: MOB_DMG_PER_5WAVE, boostSteps: hpBoost,
   bosses: ENDLESS_BOSSES.map(t => ({ type: t, label: (ETYPES[t] || {}).label || t, boss: (ETYPES[t] && ETYPES[t].boss) ? 1 : 0 }))
 });
 window.__musouEndlessPick = () => endlessBossPick();   // 测试钩子：抽一次无尽的随机 Boss
+window.__musouEndlessBossAt = (k) => endlessBossAt(clampWave(k));   // 测试钩子：无尽第 k 层的 Boss 是谁（第 5 层恒为 general）
 window.__musouWaveComp = (k) => waveComp(clampWave(k)).slice();   // 测试钩子：某一层的完整出怪构成（含地狱/无量的 ×1.5 补量）
 window.__musouWaveBosses = (k) => waveComp(clampWave(k)).filter(t => ETYPES[t] && ETYPES[t].boss);   // 测试钩子：某一层的 Boss 单位
 window.__musouHpBoost = (v) => { if (v !== undefined) hpBoost = Math.max(0, Math.min(2, v | 0)); return hpBoost; };   // 测试钩子：设定「Boss 后额外翻倍」档位
