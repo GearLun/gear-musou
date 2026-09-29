@@ -1096,37 +1096,37 @@ const ETYPES = {
   archer:  { label:'弓兵',   r:11, hp:3,   spd:68,  dmg:12, score:150, col:'#3f6f4f', dark:'#1f3a2b', acc:'#7fb98c', resist:0.9, ranged:1 },
   mage:    { label:'妖法师', r:12, hp:9,   spd:50,  dmg:16, score:250, col:'#7b3f8f', dark:'#3c1a4a', acc:'#c77de0', resist:0.9, caster:1 },
   cavalry: { label:'铁骑',   r:15, hp:170, spd:0,   dmg:20, score:800, col:'#56626e', dark:'#232a33', acc:'#d8a441', resist:0.5, cav:1 },
-  general: { label:'总大将', r:25, hp:1000, spd:84,  dmg:22, score:3000,col:'#3a3f52', dark:'#191d2b', acc:'#e2b93f', resist:0.07, boss:1, warlord:1, bossUnit:1 },
+  general: { label:'总大将', r:25, hp:2000, spd:84,  dmg:22, score:3000,col:'#3a3f52', dark:'#191d2b', acc:'#e2b93f', resist:0.07, boss:1, warlord:1, bossUnit:1 },
   /* ⚠ 废案（保留代码，正式游戏不再遇到）：灭世魔君 / 终焉齿轮 —— 见 deprecated 标记 */
   final:   { label:'灭世魔君', r:34, hp:7200, spd:72, dmg:24, score:50000, col:'#3a2438', dark:'#170d1c', acc:'#ff9d5c', resist:0.05, boss:1, final:1, deprecated:1 },
-  final2:  { label:'终焉齿轮', r:40, hp:9000, spd:82, dmg:28, score:150000, col:'#16212e', dark:'#070c12', acc:'#7fd4ff', resist:0.04, boss:1, final:1, deprecated:1 },
+  final2:  { label:'终焉齿轮', r:40, hp:13000, spd:82, dmg:28, score:150000, col:'#16212e', dark:'#070c12', acc:'#7fd4ff', resist:0.04, boss:1, final:1, deprecated:1 },
   /* —— 泰拉瑞亚向 Boss（本版本关卡表）——
        🪱 世界吞噬者 = **第 10 关 Boss**（击败 → 征程继续）
        🌙 双子魔眼   = **第 20 关 Boss**（两只独立血条；击败 → 战场堕入黑暗）
        🌸 世纪之花   = **第 30 关 Boss**（击败 → 通关） —— */
-  final3:  { label:'世界吞噬者', r:30, hp:2000, spd:150, dmg:26, score:60000, col:'#5c3a86', dark:'#2a1740', acc:'#c79bff', resist:0.05, boss:1, worm:1, waveBoss:1 },
+  final3:  { label:'世界吞噬者', r:30, hp:4000, spd:150, dmg:26, score:60000, col:'#5c3a86', dark:'#2a1740', acc:'#c79bff', resist:0.05, boss:1, worm:1, waveBoss:1 },
   final4:  { label:'世纪之花',   r:42, hp:10000, spd:62, dmg:24, score:70000, col:'#a03a6a', dark:'#3d1230', acc:'#ff9ed2', resist:0.05, boss:1, plant:1, waveBoss:1 },
-  final5:  { label:'双子魔眼', r:26, hp:2800, spd:120, dmg:22, score:80000, col:'#7a2f3a', dark:'#2b0f16', acc:'#ff6a4a', resist:0.06, boss:1, twin:1, waveBoss:1 },
+  final5:  { label:'双子魔眼', r:26, hp:3000, spd:120, dmg:22, score:80000, col:'#7a2f3a', dark:'#2b0f16', acc:'#ff6a4a', resist:0.06, boss:1, twin:1, waveBoss:1 },
   /* 🗡️ 第 25 关 Boss：本体大多隐于虚空，只有一柄悬浮圣剑；**显形时才吃伤害**（见 tickVoidAI） */
-  final6:  { label:'虚空执剑者', r:30, hp:2400, spd:110, dmg:24, score:85000, col:'#2b3350', dark:'#0c1020', acc:'#9ad8ff', resist:0.05, boss:1, void:1, waveBoss:1 },
+  final6:  { label:'虚空执剑者', r:30, hp:6000, spd:110, dmg:24, score:85000, col:'#2b3350', dark:'#0c1020', acc:'#9ad8ff', resist:0.05, boss:1, void:1, waveBoss:1 },
   /* 🐙 世纪之花「狂怒」形态长出的触手：**不是独立波次单位**，血量由 spawnPlanteraTentacles 按本体最大生命折算，
      位置由本体每帧驱动（见 tickPlanteraTentacles），活着就给它 +20px/s。score 给 0（不算讨伐贡献） */
   tentacle: { label:'触手', r:22, hp:1, spd:0, dmg:0, score:0, col:'#4f9e57', dark:'#1c3a22', acc:'#c8ffd0', resist:0, tentacle:1 },
   /* 🎖️ 指挥官（本版新 Boss）：不追玩家、只在地图上乱跑，每 5 秒来一轮「三波一次性骑兵」；
      自己在场时给**其他所有敌人**加移速/血量/攻速（见 CMD_* 与 cmdSetAura） */
-  commander: { label:'指挥官', r:30, hp:12000, spd:150, dmg:0, score:60000, col:'#41527a', dark:'#151d30', acc:'#ffd166', resist:0.05, boss:1, commander:1, waveBoss:0 },
+  commander: { label:'指挥官', r:30, hp:4000, spd:150, dmg:0, score:60000, col:'#41527a', dark:'#151d30', acc:'#ffd166', resist:0.05, boss:1, commander:1, waveBoss:0 },
   /* 🟢 超级史莱姆（第 10 关 Boss 三选一）：在场时**整张图变黏糊糊场地**（玩家移速 −50%）；
      蓄力 0.5 秒后高高跳起砸向玩家；**半血炸开 → 分裂成三只各 1/4 最大生命的小史莱姆**（本体退场） */
-  slimeKing: { label:'超级史莱姆', r:46, hp:6000, spd:74, dmg:26, score:65000, col:'#3fa85a', dark:'#1a4a26', acc:'#b6ffcf', resist:0.05, boss:1, slime:1, waveBoss:1 },
+  slimeKing: { label:'超级史莱姆', r:46, hp:4000, spd:74, dmg:26, score:65000, col:'#3fa85a', dark:'#1a4a26', acc:'#b6ffcf', resist:0.05, boss:1, slime:1, waveBoss:1 },
   slimeMini: { label:'小史莱姆', r:20, hp:1500, spd:100, dmg:14, score:4000, col:'#57c46e', dark:'#1f5a2c', acc:'#d6ffe2', resist:0.35, slimeMini:1 },
   /* 💡 光明掠夺者（第 30 关 Boss 二选一）：在场时**玩家致盲**（视野渐渐变黑）；不攻击时**完全不可见 + 不受伤害**；
      每被打掉 1/5 最大生命 → 原地瘫痪 8 秒（取消致盲 + 受伤 +30%） */
-  plunder: { label:'光明掠夺者', r:32, hp:7000, spd:120, dmg:26, score:90000, col:'#efeaff', dark:'#4a3d7a', acc:'#c9a6ff', resist:0.05, boss:1, plunder:1, waveBoss:1 },
+  plunder: { label:'光明掠夺者', r:32, hp:10000, spd:120, dmg:26, score:90000, col:'#efeaff', dark:'#4a3d7a', acc:'#c9a6ff', resist:0.05, boss:1, plunder:1, waveBoss:1 },
   /* 💀 骷髅头（光明掠夺者技能 3 的召唤物）：轻骑贼最快的速度直线冲，接触即自爆 */
   skull: { label:'骷髅头', r:13, hp:2, spd:473, dmg:22, score:200, col:'#e8e4d8', dark:'#5a5347', acc:'#c9a6ff', resist:1, skull:1 },
   /* 🏃 超级跑者（第 20 关 Boss 三选一）：贴着地图外圈绕跑道，每 2~5 秒冲出赛道撞玩家（无预警线）；
      基础血量略高于其他 Boss；撑满 120 秒它会自己体力耗尽自杀；60 秒喝雪碧回 50%、90 秒吃巧乐兹回 30% 且跑速 +20% */
-  sprinter: { label:'超级跑者', r:22, hp:3400, spd:1200, dmg:26, score:95000, col:'#ff7a52', dark:'#5a2010', acc:'#ffd166', resist:0.05, boss:1, sprinter:1, waveBoss:1 }
+  sprinter: { label:'超级跑者', r:22, hp:8000, spd:1200, dmg:26, score:95000, col:'#ff7a52', dark:'#5a2010', acc:'#ffd166', resist:0.05, boss:1, sprinter:1, waveBoss:1 }
   /* 🐸🔥💧 妙蛙种子 / 小火龙 / 杰尼龟**不是敌人**：它们是开发者版本新职业「训练家」的召唤物，
      走 allyUnits（见 PET_SUMMON / petSummonSync），贴图与属性特效同样是内嵌素材（PET_* 数据块） */
 };
@@ -1467,7 +1467,9 @@ function spawnEnemy(type, forceShiny, noShiny, probe) {
   const e = {
     type, x, y, vx: 0, vy: 0, kx: 0, ky: 0,
     hp: Math.round(t.hp * hpMul), maxhp: Math.round(t.hp * hpMul),
-    r: t.r, spd: t.spd * (1 + wave * 0.004) * (hellMode() ? HELL_SPD_MUL : 1), dmg: t.dmg, score: t.score,
+    r: t.r, spd: t.spd * (1 + wave * 0.004) * (hellMode() ? HELL_SPD_MUL : 1),
+    /* 伤害 = 基础值 × 每波 +10% 成长（**Boss 单位不吃**，见 enemyDmgMul）；闪光「双倍攻击」在下面再乘 */
+    dmg: t.dmg * enemyDmgMul(type, wave), score: t.score,
     col: t.col, dark: t.dark, acc: t.acc, resist: t.resist,
     ranged: t.ranged || 0, boss: t.boss || 0,
     atkCd: rnd(0.3, 1.2), fireCd: rnd(1.0, 2.4),
@@ -1498,7 +1500,10 @@ function spawnEnemy(type, forceShiny, noShiny, probe) {
     const ateCat = !probe && gearEatsTiger();
     if (ateCat) gearEatTiger(e);
     e.ateCat = ateCat ? 1 : 0;
-    const gh = Math.round(90000 * (ateCat ? 1 - GEAR_CAT_HP_CUT : 1));
+    /* ⚠️ 用户本轮：终焉齿轮**改为和其他 Boss 一样吃加成**（不再写死 90000）→
+       基础血量 **13000** × bossWaveHpMul(波数)（× 地狱 × Boss 后加成）；
+       吞掉地图中央的哈根（猛虎）依旧「开场少 30% 血」（GEAR_CAT_HP_CUT） */
+    const gh = Math.round(13000 * bossWaveHpMul(wave) * (ateCat ? 1 - GEAR_CAT_HP_CUT : 1));
     e.hp = gh; e.maxhp = gh;
     e.phase = 0; e.barCd = 2.0; e.fireCd = 1.0;
     e.hexT = GEAR_HEX_CD * 0.5;   // 场地魔法阵：开场半个周期就来第一轮
@@ -1508,7 +1513,7 @@ function spawnEnemy(type, forceShiny, noShiny, probe) {
   }
   if (type === 'commander') {
     /* 🎖️ 指挥官：**不朝玩家移动**（自己随机乱跑），威胁来自「全军强化光环 + 三波一次性骑兵车轮冲锋」 */
-    const ch = Math.round(12000 * bossWaveHpMul(wave));
+    const ch = Math.round(4000 * bossWaveHpMul(wave));   // 🎖️ 基础 4000（用户本轮：12000 → 4000）
     e.hp = ch; e.maxhp = ch;
     e.bossUnit = 1;            // Boss 单位：免疫秒杀类效果（改按最大生命百分比结算）
     e.commander = 1;           // ⚠️ 实体标记要显式写：spawnEnemy 只拷贝固定字段，ETYPES 上的自定义 flag 不会自动带过来
@@ -1525,8 +1530,8 @@ function spawnEnemy(type, forceShiny, noShiny, probe) {
   }
   if (type === 'general') {
     /* ⭐ 总大将：沿用灭世魔君的攻击方式与行为（双环螺旋弹幕 + 瞄准扇弹 + 阶段召唤 + 冲撞/瞬移）。
-       血量：初始 1000，随波数走血量里程碑成长（波次越高越硬） */
-    const gh = Math.round(1000 * bossWaveHpMul(wave));
+       血量：基础 **2000**（用户本轮：1000 → 2000），随波数走血量里程碑成长 */
+    const gh = Math.round(2000 * bossWaveHpMul(wave));
     e.hp = gh; e.maxhp = gh;
     e.phase = 0; e.barCd = 2.4; e.fireCd = 1.15;
     e.warlord = 1;
@@ -1542,7 +1547,7 @@ function spawnEnemy(type, forceShiny, noShiny, probe) {
      血量：final3/final4 现在是**正式关卡 Boss**（20/30 波），血量 = 基础 × bossWaveHpMul(波数)；
      躯体各节由 makeWormSegs() 单独构造，这里只管头部 */
   if (type === 'final3') {
-    const wh = Math.round(2000 * bossWaveHpMul(wave));   // 🪱 世界吞噬者头部血量（第 10 关 Boss，基础 2000）
+    const wh = Math.round(4000 * bossWaveHpMul(wave));   // 🪱 世界吞噬者头部血量（基础 4000，用户本轮：2000 → 4000）
     e.hp = wh; e.maxhp = wh;
     e.wPhase = 'burrow'; e.burrowT = BOSS_TEST.burrowT;
     e.aimT = 0; e.dashT = 0; e.restT = 0; e.cAng = Math.PI;
@@ -1559,14 +1564,14 @@ function spawnEnemy(type, forceShiny, noShiny, probe) {
   }
   if (type === 'final5') {
     /* 🌙 双子魔眼：单只血量（两只同时生成，各有独立血条；见 makeTwins） */
-    const th = Math.round(2800 * bossWaveHpMul(wave));
+    const th = Math.round(3000 * bossWaveHpMul(wave));   // 双子魔眼每只基础 3000（用户本轮：2800 → 3000/只）
     e.hp = th; e.maxhp = th;
     e.twinRole = 'laser'; e.twinCd = rnd(1.4, 2.2); e.twinDashT = 0; e.twinAng = 0;
   }
   if (type === 'final6') {
     /* 🗡️ 虚空执剑者：**大部分时间隐身**（只有一柄悬浮圣剑可见），显形时才吃伤害 ——
        状态：vPhase（hide / s1a..e / s2a..b / s3a..g）+ vT（本阶段剩余秒数）+ vShow（1 = 显形可打） */
-    const vh = Math.round(2400 * bossWaveHpMul(wave));
+    const vh = Math.round(6000 * bossWaveHpMul(wave));   // 虚空执剑者基础 6000（用户本轮：2400 → 6000）
     e.hp = vh; e.maxhp = vh;
     e.voidBoss = 1;
     e.vPhase = 'hide'; e.vT = VOID.hideGap; e.vShow = 0; e.vSkill = 0; e.vStep = 0;
@@ -1575,14 +1580,14 @@ function spawnEnemy(type, forceShiny, noShiny, probe) {
   }
   if (type === 'slimeKing' || type === 'slimeMini') {
     /* 🟢 超级史莱姆 / 小史莱姆：蓄力 0.5 秒 → 高高跳起砸向玩家（落点预警圈）→ 僵直 */
-    const sh = Math.round(6000 * bossWaveHpMul(wave));
+    const sh = Math.round(4000 * bossWaveHpMul(wave));   // 超级史莱姆基础 4000（用户本轮：6000 → 4000；分裂出的小史莱姆仍是它最大生命的 1/4）
     if (type === 'slimeKing') { e.hp = sh; e.maxhp = sh; }
     e.slPhase = 'idle'; e.slT = 0; e.slCd = rnd(0.8, 1.6); e.airH = 0; e.slSquash = 0;
     e.slTx = e.x; e.slTy = e.y; e.slSplit = 0;
   }
   if (type === 'plunder') {
     /* 💡 光明掠夺者：隐身（不可见 + 不可打）→ 瞬移到玩家旁边 → 三套技能之一 → 2 秒后再次隐身 */
-    const ph2 = Math.round(7000 * bossWaveHpMul(wave));
+    const ph2 = Math.round(10000 * bossWaveHpMul(wave));   // 光明掠夺者基础 10000（用户本轮：7000 → 10000）
     e.hp = ph2; e.maxhp = ph2;
     e.plunderBoss = 1;
     plunderInit(e);
@@ -2222,17 +2227,28 @@ function tickHexes(dt) {
    ============================================================ */
 /* Boss 血量随波数的成长：沿用敌人的里程碑曲线（5/10/15/20 波 ×2/×4/×6/×9），
    20 波封顶 ×9（30 波 Boss 因此拿到满档血量）。地狱难度同样 ×1.5 */
-/* 杂兵血量随波数的成长：**每波 +20%**（本版本从 +30% 回调）
+/* 杂兵血量随波数的成长：**每波 +30%**（用户本轮从 +20% 改回 +30%）
    —— 里程碑倍率单独看 bossWaveHpMul（5/10/15/20 波 ×2/×4/×6/×9）
    ★ 额外成长：**击败第 10 / 20 层 Boss 后，全场敌人血量再各乘一档**：
      🔥 地狱 = **×2 / 档**（累计 ×4）；😈 困难 / 🙂 简单 = **×1.5 / 档**（累计 ×2.25） */
-const MOB_HP_PER_WAVE = 0.20;
+const MOB_HP_PER_WAVE = 0.30;
+/* 敌人**伤害**随波数的成长（用户本轮新增）：**每波 +10%**（同样是「以基础值为基准的线性叠加」，
+   与血量同款口径：`1 + 0.10 × (波−1)`）。⚠️ **Boss 单位不吃这条**（用户明确要求）——
+   「Boss 单位」判据用 `ETYPES[type].boss`（总大将/指挥官/世界吞噬者/超级史莱姆/双子魔眼/虚空执剑者/
+   超级跑者/世纪之花/光明掠夺者/终焉齿轮 都带这个标记），召唤物（小史莱姆/骷髅头）与铁骑等都算普通敌人、照吃 */
+const MOB_DMG_PER_WAVE = 0.10;
 const HP_BOOST_HELL = 2;      // 地狱模式：每次 Boss 后翻倍
 const HP_BOOST_NORMAL = 1.5;  // 简单 / 困难：每次 Boss 后 ×1.5
 let hpBoost = 0;                                   // 本局已触发的「Boss 后加成」次数（最多 2）
 function hpBoostStep() { return hellMode() ? HP_BOOST_HELL : HP_BOOST_NORMAL; }
 function hpBoostMul() { return Math.pow(hpBoostStep(), Math.max(0, hpBoost | 0)); }
 function mobHpMul(k) { return 1 + (Math.max(1, k || 1) - 1) * MOB_HP_PER_WAVE; }
+function mobDmgMul(k) { return 1 + (Math.max(1, k || 1) - 1) * MOB_DMG_PER_WAVE; }
+/* 敌人实际伤害倍率：Boss 单位恒为 1（不吃每波成长），其余按每波 +10% */
+function enemyDmgMul(type, k) {
+  const t = ETYPES[type];
+  return (t && t.boss) ? 1 : mobDmgMul(k);
+}
 /* ⚠ 敌人的**真实**血量倍率（生产与测试钩子共用这一个函数，避免两处公式漂移）：
    杂兵 = 每波曲线 ×2（杂兵加成）× 地狱 × Boss 后翻倍；Boss 不吃那个 ×2（走 bossWaveHpMul 的里程碑曲线） */
 function enemyHpMul(type, k) {
@@ -3262,7 +3278,7 @@ const SKULL = { spd: 473, hp: 2, dmg: 22, boomR: 96, life: 15 };
    第 60 秒喝雪碧回 50% 血，第 90 秒吃巧乐兹回 30% 血且跑速 +20%。
    ============================================================ */
 const SPRINT = {
-  hp: 3400,              // 基础血量（第 20 关其他 Boss：双子魔眼 2800 / 虚空执剑者 2400 → 略高）
+  hp: 8000,              // 基础血量（用户本轮要求：3400 → **8000**；同关其他 Boss：双子魔眼每只 3000 / 虚空执剑者 6000）
   margin: 130,           // 跑道内缩距离（跑道 = 贴着地图最外圈的那个矩形）
   tol: 46,               // 「还在跑道上」的判定宽度（离跑道线 46px 内都算）
   spdMul: 1.5,           // 奔跑速度 = 铁骑冲锋速度 × 1.5（CAV_DASH_SPD 800 → 1200px/s）
@@ -20711,6 +20727,7 @@ function updateGame(dt, rawDt) {
     if (cmdAura === 1 && !e.commander) spdNow *= CMD_SPD_MUL;   // 🎖️ 指挥官光环：其他敌人移速 ×1.5
     /* 🐉 减速（龙息 / 冰冻光束这类）：剩余时间在上面倒计时，这里把倍率乘进移速 */
     if ((e.slowT || 0) > 0) spdNow *= (e.slowK === undefined ? 1 : e.slowK);
+    e.spdNow = spdNow;   // 只读读数：本帧「实际生效的移速」（光环/减速/轻骑贼加速都算进来了）——测试钩子 __musouAbilityInfo 读它
     if (e.type === 'runner') {
       e.runT = Math.min(6, (e.runT || 0) + dt);
       spdNow *= runnerSpeedMul(e);
@@ -23629,6 +23646,7 @@ window.__musouAbilityInfo = (i) => { // 测试钩子：探针战技状态（阶�
     warn: (e.leap && e.leap.warn) ? { x: Math.round(e.leap.warn.x), y: Math.round(e.leap.warn.y), t: +(e.leap.warn.t || 0).toFixed(2) } : null,
     lane: e.lunge ? { ang: +e.lunge.ang.toFixed(4), len: GRUNT_REACH, half: GRUNT_LANE_HALF, hit: e.lunge.hit ? 1 : 0 } : null,
     spd: +e.spd.toFixed(1), vx: +e.vx.toFixed(1), vy: +e.vy.toFixed(1),
+    spdNow: +(e.spdNow === undefined ? e.spd : e.spdNow).toFixed(2),   // 本帧实际生效移速（含指挥官光环/减速/轻骑贼加速）——瞬时 |v| 会随阶段波动，判据用这个
     cd: +((e.lunge ? e.lunge.cd : (e.leap ? e.leap.cd : 0)) || 0).toFixed(1),
     dmg: Math.round(e.dmg), maxhp: e.maxhp
   };
@@ -23721,7 +23739,7 @@ window.__musouAffSample = (n, type) => { // 测试钩子：连续强制出闪 N 
     const cnt = (e.aff.atk ? 1 : 0) + (e.aff.hp ? 1 : 0) + (e.aff.spd ? 1 : 0);
     dist[cnt]++;
     const expHp = Math.round(Math.round(base.hp * hpMulAll) * (e.aff.hp ? SHINY_HP_MUL : 1));
-    const expDmg = Math.round(base.dmg * (e.aff.atk ? 2 : 1));
+    const expDmg = Math.round(base.dmg * enemyDmgMul(t, wave) * (e.aff.atk ? 2 : 1));
     const expSpd = base.spd * (1 + wave * 0.004) * (hellMode() ? HELL_SPD_MUL : 1) * (e.aff.spd ? 1.5 : 1);
     if (e.maxhp !== expHp || Math.round(e.dmg) !== expDmg || Math.abs(e.spd - expSpd) > 1e-6) bad++;
     e.dead = true;   // 采样后立刻移除，避免污染场景
@@ -23739,7 +23757,7 @@ window.__musouAffProbe = (type, aff, dx, hp) => { // 测试钩子：指定闪光
   const hpMul = enemyHpMul(type || 'grunt', wave);
   e.maxhp = e.hp = Math.round(base.hp * hpMul * (e.aff.hp ? SHINY_HP_MUL : 1));      // 以基础值重建，便于断言倍率
   if (hp) { e.maxhp = e.hp = hp; }                                        // 可选：抬血防被打死
-  e.dmg = Math.round(base.dmg * (e.aff.atk ? 2 : 1));
+  e.dmg = Math.round(base.dmg * enemyDmgMul(type || 'grunt', wave) * (e.aff.atk ? 2 : 1));
   e.spd = base.spd * (1 + wave * 0.004) * (e.aff.spd ? 1.5 : 1);
   e.x = Math.max(60, Math.min(W - 60, p.x + (dx === undefined ? 300 : dx)));
   e.y = p.y;
@@ -24983,7 +25001,7 @@ window.__musouBossTanky = (hp) => {   // 测试钩子：把场上 Boss 的血抬
   }
   return n;
 };
-window.__musouHpMulAt = (w) => ({ wave: w, perWave: MOB_HP_PER_WAVE, boost: +hpBoostMul().toFixed(4), boostStep: hpBoostStep(), boostSteps: hpBoost, mob: +mobHpMul(w).toFixed(4), mobTotal: +enemyHpMul('grunt', w).toFixed(4), boss: +bossWaveHpMul(w).toFixed(4), hell: hellMode() ? HELL_HP_MUL : 1 });   // 测试钩子：某波的血量倍率（mob = 纯每波曲线；mobTotal = 杂兵实际生效倍率；boss = Boss 倍率）
+window.__musouHpMulAt = (w) => ({ wave: w, perWave: MOB_HP_PER_WAVE, dmgPerWave: MOB_DMG_PER_WAVE, boost: +hpBoostMul().toFixed(4), boostStep: hpBoostStep(), boostSteps: hpBoost, mob: +mobHpMul(w).toFixed(4), mobTotal: +enemyHpMul('grunt', w).toFixed(4), boss: +bossWaveHpMul(w).toFixed(4), hell: hellMode() ? HELL_HP_MUL : 1, dmgMob: +enemyDmgMul('grunt', w).toFixed(4), dmgBoss: +enemyDmgMul('general', w).toFixed(4) });   // 测试钩子：某波的血量/伤害倍率（mob = 纯每波曲线；mobTotal = 杂兵实际血量倍率；boss = Boss 血量倍率；dmgMob/dmgBoss = 伤害倍率，Boss 恒为 1）
 window.__musouHpBoost = (v) => { if (v !== undefined) hpBoost = Math.max(0, Math.min(2, v | 0)); return hpBoost; };   // 测试钩子：设定「Boss 后额外翻倍」档位
 window.__musouShopInfo = () => ({ on: shopOn ? 1 : 0, coins: coins, randBought: shopRandBought, randMax: SHOP_RAND_MAX, pickCost: SHOP_PICK_COST, rerollCost: SHOP_PICK_REROLL, randCost: SHOP_RAND_COST, picks: shopPicks.map(s => ({ id: s.id, sold: s.sold ? 1 : 0 })), pool: shopArtPool().length });   // 测试钩子：商店价格与本次开店状态
 window.__musouCardMusou = () => {   // 测试钩子：直接放一次牌皇无双（正前方 120° 扇甩 17 张特殊牌，不走按键）
