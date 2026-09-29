@@ -569,18 +569,17 @@
       <button class="up-btn" id="slot-b4"></button>
       <button class="up-btn" id="slot-b5"></button>
       <button class="up-btn" id="slot-b6"></button>
-      <button class="up-btn" id="slot-b7"></button>
-      <button class="up-btn" id="slot-b8"></button>
-      <button class="up-btn" id="slot-b9"></button>
-      <button class="up-btn" id="slot-b10"></button>
-      <button class="up-btn" id="slot-b11"></button>
-      <button class="up-btn" id="slot-b12"></button>
+    </div>
+    <div class="reroll-row" id="slot-pager" style="display:none;">
+      <button class="reroll-btn" id="slot-prev">◀ 上一页</button>
+      <span id="slot-page" style="font-size:15px;color:#ffe9a8;align-self:center;min-width:104px;text-align:center;"></span>
+      <button class="reroll-btn" id="slot-next">下一页 ▶</button>
     </div>
     <div class="reroll-row">
       <button class="reroll-btn" id="slot-skip">✋ 放弃这次奇物</button>
       <span class="reroll-tip">不替换，直接跳过（槽位不变）</span>
     </div>
-    <div class="hint">点一件已持有的奇物把它丢掉，换成新的（数字键 1~9 快速选择 · Esc 放弃）</div>
+    <div class="hint">点一件已持有的奇物把它丢掉，换成新的（数字键 1~7 快速选择 · Esc 放弃）· 每页 7 件，翻页看其余的</div>
    </div>
   </div>
 
@@ -9238,23 +9237,30 @@ function wmMergeTry(inst) {
   }
   return n;
 }
-/* 入包：先合成，再考虑格子（满则顶掉星级/品质最差的那件备用武器） */
+/* 👝 能不能再收一件武器（**无副作用**，给商店/掉落先判一次）：
+   ① 能凑齐合成（同 id 同星已有 WM_MERGE_NEED−1 件）→ 合成不占新格
+   ② 有空装备位 → 直接上身
+   ③ 有空背包格 → 进背包
+   都不行 = 「背包与装备位都满」→ 调用方该弹「背包已满！」，**绝不允许悄悄丢掉已有武器** */
+function wmCanTakeWeapon(id, q) {
+  if (!WM_WEAPONS[id]) return false;
+  const mates = (p.wmBag || []).filter(x => x && x.id === id && Math.max(1, x.star || 1) === 1);
+  if (mates.length >= WM_MERGE_NEED - 1) return true;      // 能合成 → 净腾出格子
+  if (wmEquipped().length < wmMaxEquip()) return true;
+  return wmStored().length < wmBagMax();
+}
+/* 入包：先合成，再考虑格子。⚠️ **满了两处一律返回 'full'（什么都不做）** ——
+   以前这里会把「星级/品质最差的那件备用武器」直接丢掉来腾位置（用户报的**严重 bug**：
+   商店里买武器时背包满了会**悄悄卖掉包里的一件**，玩家根本不知道自己丢了什么）。
+   现在改由调用方（`wmShopPick` 等）先 `wmCanTakeWeapon()` 判定并弹「背包已满！」。 */
 function wmGiveWeapon(id, q) {
   if (!WM_WEAPONS[id]) return 'bad';
   const inst = wmNewInst(id, q || 'poor', 1);
   p.wmBag.push(inst);
   if (wmMergeTry(inst) > 0) return 'merge';
   if (wmStored().length > wmBagMax()) {
-    let weak = null;
-    for (const x of wmStored()) {
-      if (x === inst) continue;
-      if (!weak || x.star < weak.star || (x.star === weak.star && wmQualRank(x.q) < wmQualRank(weak.q))) weak = x;
-    }
-    if (weak && weak !== inst) {
-      p.wmBag.splice(p.wmBag.indexOf(weak), 1);
-      addText(p.x, p.y - 52, '背包已满 → 丢掉 ' + wmBase(weak.id).name + ' ★' + weak.star, 16, '#ffd166', '#3a2a00');
-      return 'swap';
-    }
+    p.wmBag.splice(p.wmBag.indexOf(inst), 1);   // 装不下 → 把这件退回去（**不动玩家已有的武器**）
+    return 'full';
   }
   if (wmEquipped().length < wmMaxEquip()) inst.eq = 1;   // 有空装备位就自动上身，省一步操作
   return 'new';
@@ -11004,7 +11010,11 @@ function artLose(id) {
   return true;
 }
 let pendArtId = null;              // 槽满时「待入手的奇物」
-let slotList = [];                 // 替换面板里列出的已持有奇物（与 slot-b0..b12 一一对应）
+let slotList = [];                 // 替换面板里列出的已持有奇物（与 slot-b0..b6 + 分页一一对应）
+/* 🎒 槽满替换面板的**分页**（用户要求）：每页最多 7 件 —— 槽上限已经能到 13 件，
+   一页塞 13 个按钮在手机上铺不下（面板会溢出、看不到后面的奇物）。 */
+const SLOT_PAGE_SIZE = 7;
+let slotPage = 0;
 let shopPendingPick = null;        // 商店自选格因槽满挂起的交易 { i, id }（放弃时退款）
 function artTryGain(id) {
   if (!ART_DEFS[id]) return false;
@@ -11014,10 +11024,11 @@ function artTryGain(id) {
   openSlotUp();
   return false;
 }
-/* 🎒 槽满替换面板：列出全部已持有奇物（槽上限 13 → 固定 13 个按钮），点一件丢掉换新，或直接放弃 */
+/* 🎒 槽满替换面板：**分页**列出已持有奇物（每页 SLOT_PAGE_SIZE = 7 件），点一件丢掉换新，或直接放弃 */
 function openSlotUp() {
   if (!pendArtId) return;
   slotList = artOwnedList();
+  slotPage = 0;
   curKind = 'slot';
   choosing = true;
   flashG = Math.max(flashG, 0.1);
@@ -11026,21 +11037,43 @@ function openSlotUp() {
   slotPaint();
   $('sc-slot').classList.add('show');
 }
+function slotPageN() { return Math.max(1, Math.ceil(slotList.length / SLOT_PAGE_SIZE)); }
+function slotPageClamp() { slotPage = Math.max(0, Math.min(slotPageN() - 1, slotPage | 0)); }
+/* 翻页（±1）——只有一页时是空操作 */
+function slotPageMove(d) {
+  const n = slotPageN();
+  if (n <= 1) return;
+  slotPage = (slotPage + (d | 0) + n) % n;
+  sfx.pick();
+  slotPaint();
+}
 function slotPaint() {
   const inc = ART_DEFS[pendArtId];
   if (!inc) return;
+  slotPageClamp();
+  const pages = slotPageN();
   $('slot-info').innerHTML = '待入手：<b style="color:#ffd166">' + inc.icon + ' ' + inc.name + '</b>' +
-    '　·　奇物槽 <b style="color:#8ff0e8">' + artCount() + ' / ' + artCap() + '</b>';
+    '　·　奇物槽 <b style="color:#8ff0e8">' + artCount() + ' / ' + artCap() + '</b>' +
+    (pages > 1 ? '　·　第 <b style="color:#8ff0e8">' + (slotPage + 1) + ' / ' + pages + '</b> 页' : '');
   $('slot-sub').innerHTML = shopPlainDesc(pendArtId);
-  for (let i = 0; i < ART_CAP_BASE + ART_SLOT_META_MAX; i++) {
+  const from = slotPage * SLOT_PAGE_SIZE;
+  for (let i = 0; i < SLOT_PAGE_SIZE; i++) {
     const b = $('slot-b' + i);
     if (!b) continue;
-    const id = slotList[i];
+    const id = slotList[from + i];
     if (!id) { b.style.display = 'none'; b.innerHTML = ''; b.disabled = true; continue; }
     b.style.display = '';
     b.innerHTML = '<span class="up-ic">' + ART_DEFS[id].icon + '</span><span class="up-tx"><b>丢弃 ' + ART_DEFS[id].name + '</b><small>' + shopPlainDesc(id) + '</small></span>';
     b.disabled = false;
   }
+  /* 分页控件：只有一页时整行隐藏 */
+  const pager = $('slot-pager');
+  if (pager) pager.style.display = pages > 1 ? '' : 'none';
+  const pg = $('slot-page');
+  if (pg) pg.textContent = '第 ' + (slotPage + 1) + ' / ' + pages + ' 页';
+  const pv = $('slot-prev'), nx = $('slot-next');
+  if (pv) pv.disabled = slotPage <= 0;
+  if (nx) nx.disabled = slotPage >= pages - 1;
 }
 function closeSlotUp() {
   choosing = false;
@@ -11777,7 +11810,10 @@ function wmEffectText(id) {
 function wmPaint() {
   const eq = wmEquipped(), st = wmStored(), w = wmWeapon();   // w = 主手武器的实时数值
   const info = $('wm-info'), sub = $('wm-sub');
-  if (info) info.innerHTML = '🪙 金币 <b>' + coinLabel() + '</b> · 🎁 免费次数 <b>' + (p.wmFree || 0) + '</b> · ⚔ 装备 <b>' + eq.length + '/' + wmMaxEquip() + '</b> · 🎒 背包 <b>' + st.length + '/' + wmBagMax() + '</b>';
+  /* ⚠ 背包与装备位都满 → 面板里常驻一行红字（不只是买的时候才提示） */
+  const bagFull = st.length >= wmBagMax() && eq.length >= wmMaxEquip();
+  if (info) info.innerHTML = '🪙 金币 <b>' + coinLabel() + '</b> · 🎁 免费次数 <b>' + (p.wmFree || 0) + '</b> · ⚔ 装备 <b>' + eq.length + '/' + wmMaxEquip() + '</b> · 🎒 背包 <b>' + st.length + '/' + wmBagMax() + '</b>'
+    + (bagFull ? '　<b style="color:#ff9d7a;">⚠ 背包已满！</b><span style="color:#c98a72;font-size:13px;">（先卖掉/卸下，或凑 3 件同名同星合成腾格子）</span>' : '');
   if (sub) sub.innerHTML = '手上：' + (w ? w.icon + ' <b style="color:' + wmQualCol(w.q) + '">' + w.name + ' ★' + w.star + '</b>（' + wmQualName(w.q) + ' · ' + (w.kind === 'passive' ? wmEffectText(w.id) : '伤害 <b>' + w.dmg + '</b> · 间隔 <b>' + w.cd.toFixed(2) + 's</b> · 距离 <b>' + Math.round(w.reach) + '</b>') + '）' : '（没装备武器）');
   /* 🛒 货架 3 格 */
   for (let i = 0; i < WM_STOCK_N; i++) {
@@ -11829,17 +11865,27 @@ function wmShopPick(i) {
   const s = (p.wmStock || [])[i | 0];
   if (!s) return;
   const d = WM_WEAPONS[s.id], cost = wmBuyCostNow(s.q);   // 🏷️ 打折促销：这里用打完折的价
-  if ((p.wmFree || 0) > 0) {
+  const free = (p.wmFree || 0) > 0;
+  if (!free && coins < cost) {
+    addText(p.x, p.y - 46, '金币不足（' + wmQualName(s.q) + '武器需 ' + cost + '）', 16, '#ff9d7a', '#3a1400');
+    return;
+  }
+  /* 🎒 **背包与装备位都满、又凑不出合成 → 直接提示「背包已满！」，不扣钱、不下架、不丢任何已有武器**
+     （用户报的严重 bug：以前会悄悄把背包里星级/品质最差的那件卖掉替换成新的） */
+  if (!wmCanTakeWeapon(s.id, s.q)) {
+    addText(p.x, p.y - 46, '背包已满！', 21, '#ff9d7a', '#3a1400');
+    sfx.shield();                     // 「被挡下」的音效（本作没有专门的反馈音）
+    wmPaint();                        // 面板里那行「⚠ 背包已满！」也会亮着
+    return;
+  }
+  if (free) {
     p.wmFree--;
     wmGiveWeapon(s.id, s.q);
     addText(p.x, p.y - 46, '🎁 免费获得 · ' + wmQualName(s.q) + d.name, 19, '#8ff0e8', '#14404d');
-  } else if (coins >= cost) {
+  } else {
     coins -= cost;
     wmGiveWeapon(s.id, s.q);
     addText(p.x, p.y - 46, '💰 -' + cost + ' 买下 ' + wmQualName(s.q) + d.name, 19, '#ffe9a8', '#3a2a00');
-  } else {
-    addText(p.x, p.y - 46, '金币不足（' + wmQualName(s.q) + '武器需 ' + cost + '）', 16, '#ff9d7a', '#3a1400');
-    return;
   }
   p.wmStock[i | 0] = null;               // 买走 → 货架空格（刷新补货）
   sfx.pick();
@@ -11974,11 +12020,13 @@ for (let i = 0; i < 3; i++) {
   if (ib) ib.addEventListener('click', () => shopBuyPetItem(i));
 }
 $('shop-close').addEventListener('click', closeShop);
-/* 🎒 奇物槽替换面板：13 个槽位按钮 + 放弃按钮 */
-for (let i = 0; i < ART_CAP_BASE + ART_SLOT_META_MAX; i++) {
+/* 🎒 奇物槽替换面板：7 个槽位按钮（**一页 7 件**）+ 分页 + 放弃按钮 */
+for (let i = 0; i < SLOT_PAGE_SIZE; i++) {
   const b = $('slot-b' + i);
-  if (b) b.addEventListener('click', () => slotPick(i));
+  if (b) b.addEventListener('click', () => slotPick(slotPage * SLOT_PAGE_SIZE + i));   // 下标 = 当前页第 i 件
 }
+{ const pv = $('slot-prev'); if (pv) pv.addEventListener('click', () => slotPageMove(-1));
+  const nx = $('slot-next'); if (nx) nx.addEventListener('click', () => slotPageMove(1)); }
 $('slot-skip').addEventListener('click', slotSkip);
 
 /* ============ 暂停面板：本局进度总览（升级 / 奇物 / 质变）+ 保存回主页 ============ */
@@ -14910,10 +14958,12 @@ addEventListener('keydown', e => {
     else if (e.code === 'KeyC' && state === 'play' && isTrainer() && !choosing && !shopOn) openPetPanel();
     return;
   }
-  /* 🎒 奇物槽替换面板：数字键挑要丢掉的奇物、Esc/数字 0 放弃（最多 13 件 → 支持 1~9 与前 3 件用 0 之外的键） */
+  /* 🎒 奇物槽替换面板：数字键挑要丢掉的奇物（**按当前页**，每页 7 件）、Esc/数字 0 放弃 */
   if (state === 'play' && choosing && curKind === 'slot') {
     if (e.code === 'Escape' || e.code === 'Digit0') { slotSkip(); return; }
-    if (e.code >= 'Digit1' && e.code <= 'Digit9') { slotPick(Number(e.code.slice(5)) - 1); return; }
+    if (e.code === 'Digit9' || e.code === 'KeyA' || e.code === 'ArrowLeft') { slotPageMove(-1); return; }   // 翻页：9 / A / ←
+    if (e.code === 'Digit8' || e.code === 'KeyD' || e.code === 'ArrowRight') { slotPageMove(1); return; }    // 翻页：8 / D / →
+    if (e.code >= 'Digit1' && e.code <= 'Digit7') { slotPick(slotPage * SLOT_PAGE_SIZE + (Number(e.code.slice(5)) - 1)); return; }
     if (e.code === 'KeyS') { slotSkip(); return; }
     return;   // 槽面板期间屏蔽其它按键
   }
@@ -25274,9 +25324,10 @@ window.__musouCharmTry = (n) => {   // 测试钩子：对场上前 n 只敌人�
   p.mut.possess = save;
   return got;
 };
-window.__musouArtSlots = () => ({ count: artCount(), cap: artCap(), list: artOwnedList(), pend: pendArtId, open: $('sc-slot').classList.contains('show') ? 1 : 0, choosing: choosing ? 1 : 0, metaSlot: metaLv('slot') });   // 测试钩子：奇物槽状态（数量 / 上限 / 待入手 / 替换面板是否打开）
-window.__musouSlotList = () => slotList.slice();   // 测试钩子：替换面板里列出的已持有奇物（与 slot-b0..b12 对齐）
-window.__musouSlotPick = (i) => { if (curKind !== 'slot' || !choosing) return false; slotPick(i | 0); return true; };   // 测试钩子：点第 i 个槽位丢掉
+window.__musouArtSlots = () => ({ count: artCount(), cap: artCap(), list: artOwnedList(), pend: pendArtId, open: $('sc-slot').classList.contains('show') ? 1 : 0, choosing: choosing ? 1 : 0, metaSlot: metaLv('slot'), page: slotPage, pages: slotPageN(), pageSize: SLOT_PAGE_SIZE, pageShown: slotList.slice(slotPage * SLOT_PAGE_SIZE, slotPage * SLOT_PAGE_SIZE + SLOT_PAGE_SIZE), pagerVisible: ($('slot-pager') && $('slot-pager').style.display !== 'none') ? 1 : 0 });   // 测试钩子：奇物槽状态（数量 / 上限 / 待入手 / 替换面板是否打开 / **分页**）
+window.__musouSlotList = () => slotList.slice();   // 测试钩子：替换面板里列出的已持有奇物（**分页前的全量**；界面上按 SLOT_PAGE_SIZE=7 一页）
+window.__musouSlotPick = (i) => { if (curKind !== 'slot' || !choosing) return false; slotPick(i | 0); return true; };   // 测试钩子：点第 i 个槽位丢掉（**绝对下标**，跨页有效）
+window.__musouSlotPage = (d) => { if (curKind !== 'slot' || !choosing) return -1; slotPageMove(d === undefined ? 1 : d | 0); return slotPage; };   // 测试钩子：翻页（返回翻页后的页码）
 window.__musouSlotSkip = () => { if (curKind !== 'slot' || !choosing) return false; slotSkip(); return true; };          // 测试钩子：放弃这次奇物
 window.__musouArtTry = (id) => artTryGain(id);   // 测试钩子：走真实的「获得奇物」流程（槽满会弹替换面板）
 window.__musouArtLose = (id) => artLose(id);     // 测试钩子：丢弃一件奇物
