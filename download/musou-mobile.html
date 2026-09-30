@@ -2326,11 +2326,11 @@ function tickHexes(dt) {
    ============================================================ */
 /* Boss 血量随波数的成长：沿用敌人的里程碑曲线（5/10/15/20 波 ×2/×4/×6/×9），
    20 波封顶 ×9（30 波 Boss 因此拿到满档血量）。地狱难度同样 ×1.5 */
-/* 杂兵血量随波数的成长：**每波 +30%**（用户本轮从 +20% 改回 +30%）
+/* 杂兵血量随波数的成长：**每波 +25%**（用户本轮由 +30% 下调到 +25%）
    —— 里程碑倍率单独看 bossWaveHpMul（5/10/15/20 波 ×2/×4/×6/×9）
    ★ 额外成长：**击败第 10 / 20 层 Boss 后，全场敌人血量再各乘一档**：
      🔥 地狱 = **×2 / 档**（累计 ×4）；😈 困难 / 🙂 简单 = **×1.5 / 档**（累计 ×2.25） */
-const MOB_HP_PER_WAVE = 0.30;
+const MOB_HP_PER_WAVE = 0.25;
 /* 敌人**伤害**随波数的成长（用户本轮改口径）：**每 5 层 +20%**（阶梯式，不是每层线性）
    → `1 + 0.20 × floor((波−1)/5)`：1~5 层 ×1.00 · 6~10 ×1.20 · 11~15 ×1.40 · 16~20 ×1.60 ·
      21~25 ×1.80 · 26~30 ×2.00 · 31~35 ×2.20 …（无尽模式继续往上走）
@@ -10909,7 +10909,7 @@ const MUTS = [
   /* —— 浪客专属质变（只有战士选了「浪客」才会出现）—— */
   { id:'blade',   icon:'🗡', name:'祖传宝刀', desc:'每 **5 秒**天降一把宝刀，落点范围伤害 **30 + 等级×2**（每多一层 +20）；宝刀**留在地上 10 秒**，浪客**捡起后武器变金**、伤害 **×2**（每多一层 +0.75，满 5 层 = **×5**）持续 **8 秒**', cap:5, apply(){ p.mut.blade = Math.min(5, (p.mut.blade || 0) + 1); if (!(p.bladeT > 0)) p.bladeT = BLADE_CD; } },
   { id:'firestep',icon:'🔥', name:'烈焰步', desc:'闪避路径留下一道火墙，贴上的敌人持续**灼伤**；+1 秒/层（满 5 层 = **火墙存在 5 秒**）', cap:5, apply(){ p.mut.firestep = Math.min(5, (p.mut.firestep || 0) + 1); } },
-  { id:'cold',    icon:'❄️', name:'寒气蓄力', desc:'**2 秒不闪避**即蓄满寒气：下一次圆弧斩伤害再提高，+0.8 倍/层（满 5 层 = **5 倍**），**并且只有蓄满寒气时圆弧斩半径才 +0.24 倍/层**（满 5 层 = 额外 1.2 倍范围，不蓄满就没有范围加成）', cap:5, apply(){ p.mut.cold = Math.min(5, (p.mut.cold || 0) + 1); } },
+  { id:'cold',    icon:'❄️', name:'寒气蓄力', desc:'**2 秒不闪避**即蓄满寒气：下一次圆弧斩伤害再提高，+0.8 倍/层（满 5 层 = **5 倍**），**并且只有蓄满寒气时圆弧斩半径才 +0.24 倍/层**（满 5 层 = 额外 1.2 倍范围，不蓄满就没有范围加成）；**蓄满的那一刀还会把圆弧斩范围内的敌方射弹一并斩灭**', cap:5, apply(){ p.mut.cold = Math.min(5, (p.mut.cold || 0) + 1); } },
   /* —— 弓箭手专属质变（战士候选池自动剔除）—— */
   { id:'bounce',  icon:'🏹', name:'弹射',   desc:'箭矢命中后弹向另一名敌人，+1 次/层（至多 2 次）', cap:2, apply(){ p.mut.bounce = Math.min(2, (p.mut.bounce || 0) + 1); } },
   { id:'split',   icon:'🎯', name:'分裂',   desc:'普攻箭矢 +1/层（至多 5 支齐射）', cap:4, apply(){ p.mut.split = Math.min(4, (p.mut.split || 0) + 1); } },
@@ -13544,6 +13544,26 @@ function fireBall(ang, dmg) {
    普通攻击（含战士挥砍）已经削不掉箭了，所以这是唯一能清弹幕的手段。
    返回清掉的数量（测试与提示文字用）。 */
 let dbgShotClears = 0, dbgShotClearN = 0;
+/* ❄️ 浪客·寒气蓄力的圆弧斩：只清除**指定圆内**的敌方射弹（用户要求「圆弧斩范围内可以将敌人的射弹消除」）。
+   和 `clearEnemyShots()`（无双那种全屏清）同一个 `shots` 容器，只是加了范围判定。
+   返回值 = 清掉的弹数；`dbgFrostClearN` 单独计数（诊断 / 冒烟用）。 */
+let dbgFrostClearN = 0;
+function clearShotsInRange(x, y, R) {
+  if (!shots.length) return 0;
+  let n = 0;
+  for (let i = shots.length - 1; i >= 0; i--) {
+    const s = shots[i];
+    if (s.dead) continue;
+    const rr = R + (s.r || 8);   // 敌方弹体没有统一半径字段 → 给 8px 的宽容量（贴着圆的边也算斩到）
+    const dx = s.x - x, dy = s.y - y;
+    if (dx * dx + dy * dy > rr * rr) continue;
+    burst(s.x, s.y, 3, '#bfeaff', 200);
+    shots.splice(i, 1);
+    n++;
+  }
+  if (n) { dbgShotClears++; dbgShotClearN += n; dbgFrostClearN += n; }
+  return n;
+}
 function clearEnemyShots() {
   if (!shots.length) return 0;
   const n = shots.length;
@@ -13838,6 +13858,10 @@ function roninSlashAt(x, y, mul, main) {
       addPart(x + Math.cos(aa) * rr, y + Math.sin(aa) * rr, rnd(-30, 30), -rnd(30, 90), rnd(0.4, 0.7), rnd(2, 4.5), Math.random() < 0.5 ? '#dff6ff' : '#9fe6ff', 0);
     }
     sfx.big();
+    /* ❄️ 寒气蓄力的圆弧斩**顺带斩灭圆内敌方射弹**（用户要求）——
+       只有寒气球满的那一刀有，普通圆弧斩不做这件事（否则浪客等于常驻全屏清弹）。 */
+    const cleared = clearShotsInRange(x, y, R);
+    if (cleared > 0 && main) addText(x, y - 64, '❄ 霜 斩 弹 幕 ×' + cleared, 16, '#bfeaff', '#0d3a4d');
   }
   let n = 0;
   for (const e of enemies) {
@@ -24378,6 +24402,12 @@ window.__musouCodexClick = (id) => codexEggClick(id);   // 测试钩子：走图
 window.__musouWipe = () => { wipeAllSaves(); };         // 测试钩子：直接清空存档（局内 + 局外 + 彩蛋标记）
 window.__musouWipeState = () => ({ armed: Date.now() < wipeArmUntil, btn: ($('btn-wipe') || {}).textContent || '', tip: ($('wipe-tip') || {}).textContent || '' });
 window.__musouRonin = (v) => { if (state !== 'play') return false; const on = (v === 0) ? 0 : 1; p.ronin = on; if (on) { p.knight = 0; p.mut.dash = Math.max(p.mut.dash || 0, RONIN_BLINK_LV); if (!p.art.scroll) artGain('scroll'); } return true; }; // 测试钩子：切换浪客身份（v=0 变回普通战士）
+window.__musouFrostInfo = () => ({   // 测试钩子：寒气蓄力 / 圆弧斩半径 / 霜斩清弹计数
+  coldLv: p.mut.cold || 0, ready: coldChargeReady() ? 1 : 0, noDashT: +(p.noDashT || 0).toFixed(2),
+  chargeT: COLD_CHARGE_T, rPer: COLD_RNG_PER, mulPer: COLD_CHARGE_PER,
+  slashR: Math.round(roninSlashR()), slashMul: +roninSlashMul().toFixed(4),
+  frostSlashN: dbgFrostSlash, frostClearN: dbgFrostClearN, shots: shots.length
+});
 window.__musouKnight = (v) => {   // 测试钩子：切换骑士身份（v=0 变回普通战士）
   if (state !== 'play') return false;
   const on = (v === 0) ? 0 : 1;
