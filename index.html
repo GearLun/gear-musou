@@ -423,7 +423,7 @@
   <!-- 开始界面 -->
   <div class="screen show" id="sc-start">
    <div class="home-inner">
-    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.2</small></div>
+    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.2.1</small></div>
     <div class="keys" id="keys-desk">
       <span><b>WASD</b> / <b>方向键</b></span><span>移动</span>
       <span><b>自动攻击</b></span><span id="kbd-atk-d">自动挥砍，无需按键</span>
@@ -607,6 +607,11 @@
         <button class="btn btn2 shop-rr" id="shop-r2">刷 新 500</button>
       </div>
     </div>
+    <!-- 🎁 质变宝箱（1000 / 2000 / 3000 · **一家店最多 3 次** · 买下立刻开「质变三选一」）-->
+    <div class="shop-sec">🎁 质变宝箱 · 1000 / 2000 / 3000 金币（一家店最多 3 次）</div>
+    <div class="up-list">
+      <button class="up-btn" id="shop-b-mut"></button>
+    </div>
     <!-- 🔮 进化道具（训练家专属：第 15 波捕捉到伊布/炭小侍之后才出现 · 每件 5000 · **整局只能买一件**）-->
     <div class="shop-sec" id="shop-item-sec" style="display:none;">🔮 进化道具 · 每件 5000 金币（**整局只能买一件**）</div>
     <div class="up-list" id="shop-item-list" style="display:none;">
@@ -616,7 +621,7 @@
     </div>
     <div class="reroll-row">
       <button class="btn" id="shop-close">离 开 商 店</button>
-      <span class="reroll-tip">第 9 / 19 / 29 层专属补给（🔥地狱：第 34 关清剿后再开一次 · ♾无尽：每 10 层一次） · 价格逐次翻倍</span>
+      <span class="reroll-tip">**每 5 层一次**：第 4 / 9 / 14 / 19 / 24 / 29 / 34 层清剿后开启（正好都在 Boss 波前面 · ♾无尽继续每 5 层） · 价格逐次翻倍</span>
     </div>
    </div>
   </div>
@@ -828,7 +833,7 @@
 <script>
 'use strict';
 /* ============================================================
-   草·割无双  MUSOU MOW  —  无双割草 正式版 v1.2
+   草·割无双  MUSOU MOW  —  无双割草 正式版 v1.2.1
    纯 Canvas 2D + WebAudio 程序化音效，无任何外部资源
    ============================================================ */
 (() => {
@@ -1336,15 +1341,18 @@ const SPAWN_MUL = 2;
 const WAVE_MAX_NORMAL = 30;
 const WAVE_MAX_HELL = 35;
 const GEAR_WAVE = 35;              // 地狱终章：终焉齿轮
-const HELL_SHOP_WAVE = 34;         // 第 34 关清剿后额外开一次商店（备战终焉齿轮）
+/* （旧的 `HELL_SHOP_WAVE = 34` 已删：商店改成「每 5 层一次」后第 34 层本来就会被 `shopWaveOn(34)` 覆盖，
+   那条「地狱专属额外商店」分支成了死代码 —— 备战终焉齿轮的补给点仍然存在，只是走通式。） */
 function waveMax() { return endlessMode() ? WAVE_MAX_ENDLESS : (hellMode() ? WAVE_MAX_HELL : WAVE_MAX_NORMAL); }
 function clampWave(k) { return Math.max(1, Math.min(waveMax(), k | 0)); }
 /* 奇物奖励波：普通/地狱 = **第 5 / 10 / 15 / 20 / 25 层**清剿后各一件；
    ♾ 无尽 = **每 5 层一件**（正好是「打完一位随机 Boss 给一件」的节奏） */
 function artWaveOn(k) { return endlessMode() ? (k % 5 === 0) : (k === 5 || k === 10 || k === 15 || k === 20 || k === 25); }
-/* 商店波：普通/地狱 = 第 9 / 19 / 29 层清剿后（🔥 地狱第 34 层再开一次）；
-   ♾ 无尽 = **每 10 层一次**（9 / 19 / 29 / 39 …），否则越打越没有补刀的机会 */
-function shopWaveOn(k) { return endlessMode() ? (k % 10 === 9) : (k === 9 || k === 19 || k === 29); }
+/* 商店波：**每 5 层一次**（用户本轮要求：由「10 层一次」改密）——
+   具体是**第 4 / 9 / 14 / 19 / 24 / 29 / 34 层清剿后**进商店，正好卡在每个 Boss 波（5/10/15/20/25/30/35）**前面**：
+   先补给再打 Boss。无尽模式继续每 5 层（39 / 44 / 49 …）。
+   ⚠️ 第 34 层原本是「🔥地狱专属的额外商店」（旧 `HELL_SHOP_WAVE`），现在被这条通式覆盖 → 那条分支已删。 */
+function shopWaveOn(k) { return (k % 5) === 4; }
 /* 第 10 关 Boss 三选一：🪱 世界吞噬者 / 🎖️ 指挥官 / 🟢 超级史莱姆 */
 function wave10Boss() {
   const r = Math.random();
@@ -10654,6 +10662,18 @@ function shopPaint() {
     b.innerHTML = '<span class="up-ic">' + ic + '</span><span class="up-tx"><b>' + t1 + '</b><small>' + t2 + '</small></span>';
     b.disabled = !!dis;
   };
+  /* 🎁 质变宝箱（用户本轮新增）：1000 / 2000 / 3000 三档，**一家店最多买 3 次**（每次开店重置） */
+  const bM = $('shop-b-mut');
+  if (bM) {
+    const left = SHOP_MUT_COSTS.length - shopMutBought;
+    if (left <= 0) mk(bM, '🎁', '质变宝箱（本店已买满 3 次）', '下一家店才会重新上架 · 一家店最多 3 个', true);
+    else {
+      const cost = shopMutCost();
+      mk(bM, '🎁', '质变宝箱 · ' + cost + ' 金币（本店第 ' + (shopMutBought + 1) + ' / ' + SHOP_MUT_COSTS.length + ' 个）',
+        '立刻开一次**质变三选一**' + (left > 1 ? '（下一个 ' + SHOP_MUT_COSTS[shopMutBought + 1] + ' 金币）' : '（本店最后一个）') + (coins < cost ? ' · 金币不足' : ''),
+        coins < cost);
+    }
+  }
   const bS = $('shop-b-spd'), bR = $('shop-b-rng'), bA = $('shop-b-art');
   /* ⚡ 攻速：哈姆 / 士兵 / 骑士 都没有攻速可提（各自写明原因，别再卖「买了没用的货」）·
      🧢 **训练家也不卖攻速/范围**（用户要求：「训练家职业在商店中不可购买攻速以及范围的属性，
@@ -10735,11 +10755,34 @@ function openShop(nextWave) {
   shopWaveNext = clampWave(nextWave);
   rollShopPicks();          // 三个自选奇物格：每次开店重新抽
   shopRandBought = 0;       // 随机奇物：每次开店重置「只能买一次」
+  shopMutBought = 0;        // 🎁 质变宝箱：每次开店重置（一家店最多 3 个：1000 / 2000 / 3000）
   $('sc-shop').classList.add('show');
   shopPaint();
   sfx.wave();
 }
-/* 开店（抢不到面板就排队）：第 9/19/29/34 波清剿当帧，🔥地狱奇遇「这个没人要吗？」会**同时**弹出一次
+/* 🎁 商店·质变宝箱（用户本轮新增）：**1000 / 2000 / 3000 金币**三档，**一家店最多买 3 次**。
+   买下 = 立刻开一次「质变三选一」：`sc-mut` 在 DOM 里排在 `sc-shop` **之后**、z-index 又同为 90
+   → 面板天然盖在商店上面；选完后 `sc-mut` 收起、商店还在（`shopOn` 始终为真，世界照旧冻结）。 */
+const SHOP_MUT_COSTS = [1000, 2000, 3000];
+let shopMutBought = 0;                 // 本家店已买的质变宝箱个数（每次开店归零，见 openShop）
+function shopMutCost() { return shopMutBought < SHOP_MUT_COSTS.length ? SHOP_MUT_COSTS[shopMutBought] : 0; }
+function shopBuyMut() {
+  if (!shopOn || state !== 'play') return false;
+  if (shopMutBought >= SHOP_MUT_COSTS.length) { addText(p.x, p.y - 60, '这家店的质变宝箱已经买满了（最多 3 个）', 16, '#ff9d7a', '#3a1400'); return false; }
+  const cost = shopMutCost();
+  if (coins < cost) { addText(p.x, p.y - 60, '金币不足（质变宝箱需 ' + cost + '）', 16, '#ff9d7a', '#3a1400'); return false; }
+  coins -= cost;
+  shopMutBought++;
+  mutPending++;                // 与「闪光敌人掉落的质变宝箱」走同一条链路
+  sfx.mut();
+  burst(p.x, p.y, 18, '#d9a8ff', 340);
+  addRing(p.x, p.y, '#d9a8ff', 10);
+  shopPaint();
+  saveGame(shopWaveNext, 0);   // 每笔成交即时存档，防刷新丢单
+  tryOpen();                   // 立刻弹质变三选一（若还有升级面板待选，会先弹那个、选完再轮到它）
+  return true;
+}
+/* 开店（抢不到面板就排队）：第 4/9/14/19/24/29/34 波清剿当帧，🔥地狱奇遇「这个没人要吗？」会**同时**弹出一次
    奇物三选一 —— 旧版这里 openShop() 撞上 choosing 会**静默失败**，结果这一波永远进不去商店、
    还会每 3.2 秒重跑一次清剿结算（白送奇物）。现在改成排队：面板关掉后由 tryOpen() 把商店开出来。 */
 function openShopOrQueue(nextWave) {
@@ -12154,6 +12197,7 @@ $('art-reroll').addEventListener('click', rerollChoices);
 $('shop-b-spd').addEventListener('click', () => shopBuy('spd'));
 $('shop-b-rng').addEventListener('click', () => shopBuy('rng'));
 $('shop-b-art').addEventListener('click', () => shopBuy('art'));
+$('shop-b-mut').addEventListener('click', shopBuyMut);   // 🎁 质变宝箱（1000/2000/3000 · 一家店最多 3 个）
 /* 商店·自选奇物三格：整格购买 + 单格刷新 */
 for (let i = 0; i < SHOP_PICK_N; i++) {
   const pb = $('shop-p' + i), rb = $('shop-r' + i);
@@ -15018,6 +15062,7 @@ function resetRun() {
   p.artPend = 0; p.fangN = 0; p.fangT = 0; p.craneT = 0; p.hotT = 0; p.mouseDash = false; p.sharpenT = 0;
   hellGiftArt();   // 地狱模式：本轮起**不再**白送「闪耀护符」（留空函数，便于以后再加开局赠礼）
   shopN = { spd: 0, rng: 0 }; shopOn = false; shopPend = 0; shopWaveNext = 1; shopPicks = []; shopShown = new Set();
+  shopMutBought = 0;   // 🎁 质变宝箱的「本店已买几档」随新局归零
   shopRandBought = 0; shopPendingPick = null; pendArtId = null; slotList = [];   // 商店随机奇物次数 / 奇物槽挂起状态
   hpBoost = 0;   // 敌人血量「Boss 后额外翻倍」计数随本局清零
   dbgChestN = 0; dbgChestWin = 0;
@@ -21614,9 +21659,7 @@ function updateGame(dt, rawDt) {
         tryOpen();   // 面板马上就弹出来了，不再叠加飘字
       }
       if (shopWaveOn(wave)) {
-        openShopOrQueue(wave + 1);   // 第 9/19/29 层清剿后开启商店（关闭后进入下一层）；♾ 无尽每 10 层一次
-      } else if (hellMode() && wave === HELL_SHOP_WAVE) {
-        openShopOrQueue(wave + 1);   // 🔥 地狱第 34 关清剿后**额外**再开一次商店（备战第 35 关的终焉齿轮）
+        openShopOrQueue(wave + 1);   // 第 4/9/14/19/24/29/34 层清剿后开启商店（关闭后进入下一层）——每个 Boss 波前的补给点
       } else {
         startWave(wave + 1);
       }
@@ -25687,7 +25730,9 @@ window.__musouEndlessBossAt = (k) => endlessBossAt(clampWave(k));   // 测试钩
 window.__musouWaveComp = (k) => waveComp(clampWave(k)).slice();   // 测试钩子：某一层的完整出怪构成（含地狱/无量的 ×1.5 补量）
 window.__musouWaveBosses = (k) => waveComp(clampWave(k)).filter(t => ETYPES[t] && ETYPES[t].boss);   // 测试钩子：某一层的 Boss 单位
 window.__musouHpBoost = (v) => { if (v !== undefined) hpBoost = Math.max(0, Math.min(2, v | 0)); return hpBoost; };   // 测试钩子：设定「Boss 后额外翻倍」档位
-window.__musouShopInfo = () => ({ on: shopOn ? 1 : 0, coins: coins, randBought: shopRandBought, randMax: SHOP_RAND_MAX, pickCost: SHOP_PICK_COST, rerollCost: SHOP_PICK_REROLL, randCost: SHOP_RAND_COST, picks: shopPicks.map(s => ({ id: s.id, sold: s.sold ? 1 : 0 })), pool: shopArtPool().length });   // 测试钩子：商店价格与本次开店状态
+window.__musouShopInfo = () => ({ on: shopOn ? 1 : 0, coins: coins, randBought: shopRandBought, randMax: SHOP_RAND_MAX, pickCost: SHOP_PICK_COST, rerollCost: SHOP_PICK_REROLL, randCost: SHOP_RAND_COST, picks: shopPicks.map(s => ({ id: s.id, sold: s.sold ? 1 : 0 })), pool: shopArtPool().length, mutBought: shopMutBought, mutCost: shopMutCost(), mutCosts: SHOP_MUT_COSTS.slice(), mutMax: SHOP_MUT_COSTS.length });   // 测试钩子：商店价格与本次开店状态（含 🎁 质变宝箱档位）
+window.__musouShopBuyMut = () => shopBuyMut();   // 测试钩子：买一个质变宝箱（走真实流程：扣钱 → 弹质变三选一）
+window.__musouShopWaveAt = (k) => shopWaveOn(k | 0) ? 1 : 0;   // 测试钩子：第 k 层清剿后是否进商店（每 5 层一次 = 4/9/14/19/…）
 window.__musouCardMusou = () => {   // 测试钩子：直接放一次牌皇无双（正前方 120° 扇甩 17 张特殊牌，不走按键）
   if (state !== 'play' || !p.alive || !isCard()) return 0;
   return cardMusouVolley(p.face);
