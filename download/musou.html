@@ -5042,6 +5042,14 @@ const PET_RIDE_HP_MUL = 0.2;       // 🧢 骑乘惩罚（用户要求）：被�
    想再调快/调慢只改这一个数（与无双号令的 ×1.5 叠乘）。 */
 const PET_ATK_RATE = 2;
 function petRateMul() { return PET_ATK_RATE * petMusouSpdMul(); }
+/* 🏹 **闪焰冲锋的出手间隔倍率**（用户：「闪焰冲锋的攻击间隔降低至现在的 70%」）：
+   喷火龙的闪焰冲锋是**手动技**（骑乘时按闪避键才放），它自己**没有 cd** → 实际出手间隔就是
+   **闪避键的冷却**（`p.dashCd`，弓手基准 0.9 秒）。所以这一份的 70% 只能落在「放完闪焰冲锋之后
+   那一次冷却」上：`gameLoop` 的闪焰冲锋分支里 `p.dashCd *= PET_BLITZ_CD_MUL`。
+   ⚠️ 副作用（已知、可接受）：紧接着的那一次**普通闪避**也会跟着变成 0.63 秒（同一个计时器，
+      闪避与闪焰冲锋共用同一个键、无法区分「下一按」想干什么）。
+   火伊布那份**自动出手**的闪焰冲锋走的是常规 `cd` 字段（`3.0 * 0.7`，见 `PET_SKILL_FBLITZ`）。 */
+const PET_BLITZ_CD_MUL = 0.7;
 /* ============================================================
    🌟 **神兽级宝可梦**（盖欧卡 382 / 固拉多 383 / 烈空坐 384 —— 用户本轮新增素材）
    · **基础数值 = 一只「进化过三次」的宝可梦**（用户口径）：每次进化 ×`PET_EVO_STAT_MUL`（1.5，见下面那行常量），
@@ -5189,8 +5197,8 @@ const PET_SKILLS_BULBA_1 = [
     desc: '飞叶快刀强化：一次 **8 片**追踪叶片 · 伤害 +50% · 出手间隔加快 50% · ' + petCdText(1.7 / 1.5),
     shot: { n: 8, spread: 0.26, spd: 480, mul: 0.75, homing: 1, fxK: 1.7 } },
   { id: 'energyball', name: '能量球', icon: '🟢', kind: 'shot', cd: 1.7 / 1.5, range: 520, evo: 'energyballstar', orb: 1,
-    desc: '一颗**穿透**的**绿色光球**（不走叶片贴图 · 同牌皇的蓝色穿透牌）· 同一只敌人只吃一次 · **伤害是魔法叶的 2 倍**（本轮翻倍）· ' + petCdText(1.7 / 1.5),
-    shot: { n: 1, spread: 0, spd: 620, mul: 0.75 * 2, homing: 0, pierce: 1, orb: 1, orbR: 39, hitR: 24, fxK: 2.4 } }
+    desc: '一颗**穿透**的**绿色光球**（不走叶片贴图 · 同牌皇的蓝色穿透牌）· 同一只敌人只吃一次 · **伤害是魔法叶的 `2 × 1.5` 倍**（本轮再 ×1.5）· ' + petCdText(1.7 / 1.5),
+    shot: { n: 1, spread: 0, spd: 620, mul: 0.75 * 2 * 1.5, homing: 0, pierce: 1, orb: 1, orbR: 39, hitR: 24, fxK: 2.4 } }
 ];
 /* 🐸 2 段（妙蛙花）：强力鞭打→疯狂植物（再 +50% 伤害/范围 · 间隔再快 50%）· 魔法叶→花瓣舞（**扇形 12 片**追踪叶片）·
    能量球→能量球⭐（**扇形同时 3 颗** · 伤害 +50%）· 新学 **日光束**（宽 200px 的贯穿光束，同光法师满级「术有专攻」） */
@@ -5202,16 +5210,16 @@ const PET_SKILLS_BULBA_2 = [
     desc: '魔法叶强化：**扇形一次 12 片**追踪花瓣 · 伤害 +50% · 出手间隔加快 50% · ' + petCdText(1.7 / 1.5 / 1.5),
     shot: { n: 12, spread: 0.13, spd: 500, mul: 1.125, homing: 1, fxK: 2 } },
   { id: 'energyballstar', name: '能量球⭐', icon: '💚', kind: 'shot', cd: 1.7 / 1.5 / 1.5, range: 520, orb: 1,
-    desc: '能量球强化：**扇形同时发射 3 颗**穿透光球 · 伤害 +50%（**能量球本轮翻倍 → 这一招也跟着翻倍**）· ' + petCdText(1.7 / 1.5 / 1.5),
-    shot: { n: 3, spread: 0.22, spd: 620, mul: 0.75 * 2 * 1.5, homing: 0, pierce: 1, orb: 1, orbR: 39, hitR: 24, fxK: 2.8 } },
+    desc: '能量球强化：**扇形同时发射 3 颗**穿透光球 · 伤害 +50%（**能量球本轮再 ×1.5 → 这一招也跟着增强**）· ' + petCdText(1.7 / 1.5 / 1.5),
+    shot: { n: 3, spread: 0.22, spd: 620, mul: 0.75 * 2 * 1.5 * 1.5, homing: 0, pierce: 1, orb: 1, orbR: 39, hitR: 24, fxK: 2.8 } },
   /* ☀️ 日光束：**和光法师的「术有专攻」光炮一模一样的实现** —— 从自己射出一条 200px 宽的贯穿光柱，
      瞬间对线上的敌人各结算**一次高额伤害**（不是持续喷），撞墙反射一次；只是颜色是绿的、由宝可梦来放。
      ⚠️ 长度别写成光法师那种「横跨整屏」（hypot(W,H)×1.35）：那样光柱永远顶到最远的墙，而 3200×1800 的场地
      远大于 1280×720 的视野 → 反弹点在屏幕外，加上垂直撞墙时折返段与去程**完全共线**，玩家会以为「根本没反弹」。
      760px = 略大于半个屏幕宽：撞墙一定发生在眼前（看得见折角 + 撞墙闪光），没墙时就是一根利落的短光柱。 */
   { id: 'solbeam', name: '日光束', icon: '☀️', kind: 'beam', cd: 1.2, range: 900, fxEl: 'GRASS',
-    desc: '**一发光炮**（与光法师满级「术有专攻」同款：200px 宽的贯穿光束 · 瞬间一次高额伤害 · **撞墙折返一次**）· ' + petCdText(1.2),
-    beam: { w: 200, len: 760, mul: 3.0 } }
+    desc: '**一发光炮**（与光法师满级「术有专攻」同款：200px 宽的贯穿光束 · 瞬间一次高额伤害 · **撞墙折返一次** · **本轮伤害 +50%**）· ' + petCdText(1.2),
+    beam: { w: 200, len: 760, mul: 3.0 * 1.5 } }
 ];
 /* 💧 杰尼龟线 · 0 段（杰尼龟）：最开始的两招 */
 const PET_SKILLS_SQUIRT = [
@@ -5334,27 +5342,29 @@ const PET_SKILLS_DREEPY = [PET_SKILL_QUICKATTACK];
    ============================================================ */
 /* 🌊 根源波动（盖欧卡）：**像日光束那样的蓝色光柱**，长度只有日光束的 **1/2**（380），
    光柱**终点**再留下一个「加农水炮同款」的水坑（坑内每秒受伤 + 减速 50%）。
-   —— 光柱伤害直接引用日光束（`mul: 3.0`）· 水坑直接引用加农水炮（`mul: 1.0 * 1.5`）。
+   —— 光柱伤害直接引用日光束（本轮日光束 +50% → `mul: 3.0 * 1.5`）· 水坑直接引用加农水炮
+   （本轮用户要求「水坑大小缩小至现在的 70%」→ `r: 300 * 0.7`，**只有它这一份动、加农水炮的不动**）。
    ⚠️ 实现：`beam.pool` 是**新加的字段**，在 `petFireBeam()` 末尾生成（见那里的注释） */
 const PET_SKILL_ORIGINPULSE = {
   id: 'originpulse', name: '根源波动', icon: '🌊', kind: 'beam', cd: 1.2, range: 900, def: 1, fxEl: 'WATER',
   desc: '喷出一道**蓝色光柱**（与日光束同款：200px 宽贯穿光柱 · 瞬间一次高额伤害 · 撞墙折返一次，**长度只有日光束的一半**）· '
-    + '**光柱终点留下水坑**（与加农水炮同款：坑内每秒受伤并**减速 50%**）× N · ' + petCdText(1.2),
-  beam: { w: 200, len: 760 / 2, mul: 3.0, pal: 'WATER',
-          pool: { r: 300, life: 8, tick: 1, mul: 1.0 * 1.5, slowK: 0.5, slowT: 0.6 } }
+    + '**光柱终点留下水坑**（与加农水炮同款：坑内每秒受伤并**减速 50%**）· ' + petCdText(1.2),
+  beam: { w: 200, len: 760 / 2, mul: 3.0 * 1.5, pal: 'WATER',
+          pool: { r: 300 * 0.7, life: 8, tick: 1, mul: 1.0 * 1.5, slowK: 0.5, slowT: 0.6 } }
 };
-/* ⚡ 打雷⭐（盖欧卡）：**和雷伊布的打雷相同**，伤害再 +30%（`3.0 * 3 * 1.3`：雷伊布本轮已翻到 3 倍） */
+/* ⚡ 打雷⭐（盖欧卡）：**和雷伊布的打雷相同**（本轮它的出手间隔也一起缩短一半 → `cd: 5.0 / 2`），
+   伤害始终 = **雷伊布那一招 ×1.3**（雷伊布：`3.0 * 3` 翻 3 倍后再 `×1.5` → 这里写 `3.0 * 3 * 1.5 * 1.3`） */
 const PET_SKILL_THUNDER_STAR = {
-  id: 'thunderstar', name: '打雷⭐', icon: '🌩️', kind: 'thunder', cd: 5.0, range: 900,
-  desc: '**原地蓄力 0.5 秒**后随机选战场上 **5 名**敌人各劈一道单体雷击（和雷伊布的打雷同款 · **伤害比它再高 30%**）· ' + petCdText(5.0),
-  thunder: { charge: 0.5, n: 5, mul: 3.0 * 3 * 1.3, moveSpd: 420 }
+  id: 'thunderstar', name: '打雷⭐', icon: '🌩️', kind: 'thunder', cd: 5.0 / 2, range: 900,
+  desc: '**原地蓄力 0.5 秒**后随机选战场上 **5 名**敌人各劈一道单体雷击（和雷伊布的打雷同款 · **伤害比它再高 30%**）· ' + petCdText(5.0 / 2),
+  thunder: { charge: 0.5, n: 5, mul: 3.0 * 3 * 1.5 * 1.3, moveSpd: 420 }
 };
 /* 🗡 断崖之剑（固拉多）：**和流星群差不多**（蓄力 0.5 秒 → 朝至多 5 个敌人的位置各来一发范围伤害），
    但画面是**地刺从地面长出来**（`meteor.spike: 1`，见 petMeteorCast / updatePetMeteors / drawPetMeteors）。
    伤害与范围直接引用流星群（`4.0 * 2.5` · 半径 `150 * 1.5`） */
 const PET_SKILL_PRECIPICE = {
-  id: 'precipice', name: '断崖之剑', icon: '🗡️', kind: 'meteor', cd: 4.0, range: 900, def: 1, fxEl: 'GROUND',
-  desc: '**蓄力 0.5 秒**后，朝至多五个敌人的位置各**从地面刺出一丛地刺**（范围与伤害同流星群 · 落点半径 ' + Math.round(150 * 1.5) + '）· ' + petCdText(4.0),
+  id: 'precipice', name: '断崖之剑', icon: '🗡️', kind: 'meteor', cd: 4.0 * 0.7, range: 900, def: 1, fxEl: 'GROUND',
+  desc: '**蓄力 0.5 秒**后，朝至多五个敌人的位置各**从地面刺出一丛地刺**（范围与伤害同流星群 · 落点半径 ' + Math.round(150 * 1.5) + '）· ' + petCdText(4.0 * 0.7),
   meteor: { charge: 0.5, n: 5, r: 150 * 1.5, mul: 4.0 * 2.5, fall: 0.5, moveSpd: 420, spike: 1 }
 };
 /* 🌋 地震⭐（固拉多）：**像喷火龙的热风那样**一圈持续伤害，但 **不会烧伤**（`aura.noBurn`）·
@@ -5366,13 +5376,13 @@ const PET_SKILL_EARTHQUAKE_STAR = {
   aura: { r: 305 * 1.5 * 1.5, tick: 0.5, dmg: 234 * 1.2, fxK: 5, noBurn: 1 }
 };
 /* 🐉 画龙点睛（烈空坐）：**和喷火龙的闪焰冲锋同一套**（朝指针猛冲 472px → 落点 315 半径范围伤害），
-   伤害直接引用**本轮翻倍后**的闪焰冲锋（`6.0 * 2` = 12.0）。
+   伤害直接引用**本轮翻倍后**的闪焰冲锋（`6.0 * 2` = 12.0），出手间隔也按用户要求**降到 70%**（`cd: 3.0 * 0.7`）。
    ⚠️ 闪焰冲锋是**手动技**（`manual: 1`：只有训练家**骑乘时**按闪避键才放），
       而**神兽是单形态、永远不会被骑**（`petMountE()` 要求 `PET_FORM[id].length >= 2`）→
       照抄会变成「永远不放的技能」。所以这一份**不带 `manual`**：自己冷却好了就冲（和火伊布的闪焰冲锋一样）。 */
 const PET_SKILL_DRAGONASCENT = {
-  id: 'dragonascent', name: '画龙点睛', icon: '🐉', kind: 'dash', cd: 3.0, range: 520, def: 1, fxLife: 0.5,
-  desc: '和喷火龙的「闪焰冲锋」同一套（朝指针方向猛冲 **472px** · 落点 **315 半径**范围伤害 · 伤害同为翻倍后的 ' + (6.0 * 2) + ' 倍）· **会自动出手** · ' + petCdText(3.0),
+  id: 'dragonascent', name: '画龙点睛', icon: '🐉', kind: 'dash', cd: 3.0 * 0.7, range: 520, def: 1, fxLife: 0.5,
+  desc: '和喷火龙的「闪焰冲锋」同一套（朝指针方向猛冲 **472px** · 落点 **315 半径**范围伤害 · 伤害同为翻倍后的 ' + (6.0 * 2) + ' 倍）· **会自动出手** · ' + petCdText(3.0 * 0.7),
   dash: { dist: 472, spd: 3375, r: 315, mul: 6.0 * 2, fxK: 6 }
 };
 /* 三只神兽的技能表见下面（`PET_SKILLS_KYOGRE / _GROUDON / _RAYQUAZA`）——
@@ -5388,30 +5398,33 @@ const PET_SKILL_UTURN = {
 /* 🌑 暗影球（多龙奇）：**直接照搬妙蛙草的能量球**（穿透光球 · 同一只敌人只吃一次），
    只把颜色换成幽灵系的紫黑（弹体绘制的 `petGhost` 分支）。
    ⚖️ 基础伤害 = 能量球的 **2 倍**（用户要求「暗影球基础伤害翻倍」→ `0.75 * 2`；
-   本轮用户又要求「暗影球伤害翻倍」+ 能量球也翻倍 → 两边的相对关系不变，再乘一个 2：`0.75 * 2 * 2`） */
+   本轮用户又要求「暗影球伤害翻倍」+ 能量球也翻倍 → 两边的相对关系不变，再乘一个 2：`0.75 * 2 * 2`；
+   第三轮用户又要求「能量球和暗影球的伤害再提升至现在的 1.5 倍」→ 再乘 1.5：`0.75 * 2 * 2 * 1.5`） */
 const PET_SKILL_SHADOWBALL = {
   id: 'shadowball', name: '暗影球', icon: '🌑', kind: 'shot', cd: 1.7 / 1.5, range: 520, evo: 'shadowballstar', orb: 1,
-  desc: '一颗**穿透**的**幽灵系光球**（和妙蛙草的能量球同款：同一只敌人只吃一次 · **伤害是它的 2 倍**）· ' + petCdText(1.7 / 1.5),
-  shot: { n: 1, spread: 0, spd: 620, mul: 0.75 * 2 * 2, homing: 0, pierce: 1, orb: 1, orbR: 39, hitR: 24, fxK: 2.4, ghost: 1 }
+  desc: '一颗**穿透**的**幽灵系光球**（和妙蛙草的能量球同款：同一只敌人只吃一次 · **伤害是能量球的 2 倍**，本轮又 ×1.5）· ' + petCdText(1.7 / 1.5),
+  shot: { n: 1, spread: 0, spd: 620, mul: 0.75 * 2 * 2 * 1.5, homing: 0, pierce: 1, orb: 1, orbR: 39, hitR: 24, fxK: 2.4, ghost: 1 }
 };
-/* 🌚 暗影球⭐（多龙巴鲁托）：**和妙蛙花对能量球的加成相同** —— 扇形同时 3 颗 · 伤害 +50%（= 暗影球 ×1.5，别只翻暗影球那一档） */
+/* 🌚 暗影球⭐（多龙巴鲁托）：**和妙蛙花对能量球的加成相同** —— 扇形同时 3 颗 · 伤害 +50%（= 暗影球 ×1.5，别只翻暗影球那一档；
+   能量球本轮 ×1.5 时它也跟着 ×1.5） */
 const PET_SKILL_SHADOWBALL_STAR = {
   id: 'shadowballstar', name: '暗影球⭐', icon: '🌚', kind: 'shot', cd: 1.7 / 1.5 / 1.5, range: 520, orb: 1,
-  desc: '暗影球强化（加成与妙蛙花的能量球⭐相同）：**扇形同时发射 3 颗**穿透光球 · 伤害 +50%（**同样跟着翻倍**）· ' + petCdText(1.7 / 1.5 / 1.5),
-  shot: { n: 3, spread: 0.22, spd: 620, mul: 0.75 * 2 * 2 * 1.5, homing: 0, pierce: 1, orb: 1, orbR: 39, hitR: 24, fxK: 2.8, ghost: 1 }
+  desc: '暗影球强化（加成与妙蛙花的能量球⭐相同）：**扇形同时发射 3 颗**穿透光球 · 伤害 +50%（**同样跟着增强**）· ' + petCdText(1.7 / 1.5 / 1.5),
+  shot: { n: 3, spread: 0.22, spd: 620, mul: 0.75 * 2 * 2 * 1.5 * 1.5, homing: 0, pierce: 1, orb: 1, orbR: 39, hitR: 24, fxK: 2.8, ghost: 1 }
 };
 /* 🏹 龙箭（多龙巴鲁托）：每 2 秒发射**两只多龙梅西亚** —— 它们从**两个位置**（瞄准方向的左右两侧各偏 `off`）
    并排射出、自动追踪敌人并冲撞（**无限穿透**），**存在 6 秒**（`shot.life` → 弹体的 `lifeT` 倒计时，射程不再限制它）。
    ⚠️ `miniForm` 写死 `'dreepy'`（画的就是**多龙梅西亚**那只弹体），别让它跟发射者的形态走 —— 否则二段会画成多龙巴鲁托；
       `miniK` = 弹体贴图缩放（0.46 的两倍 → 更显眼）。
    ⚖️ 基础伤害 = 普通弹体技的 **2 倍**（用户要求「龙箭基础伤害翻倍」→ `mul: 1.0 * 2`）。
+   本轮用户又要求「龙箭的伤害提升至现在的两倍」→ 再乘一个 2：**`1.0 * 2 * 2`**。
    ⚠️⚠️ **速度与转向速率必须一起改**：最小转弯半径 = 速度 ÷ 转向速率（`cardHome` 里 `turn = homeTurn * dt`）。
       480px/s ÷ 12 = 40px（能撞上）；现在速度翻倍到 960，转向速率也要跟着翻倍到 24，否则半径变 80px >
       命中半径 → 两只多龙梅西亚会**绕着敌人打转永远撞不到**（这个坑踩过一次）。 */
 const PET_SKILL_DRAGONARROW = {
   id: 'dragonarrow', name: '龙箭', icon: '🏹', kind: 'shot', cd: 2.0, range: 900,
   desc: '**每 2 秒发射两只多龙梅西亚**（从左右**两个位置**并排射出）：自动追踪敌人并冲撞（**无限穿透**）· 发射出去的会**存在 6 秒** · ' + petCdText(2.0),
-  shot: { n: 2, spread: 0.5, off: 36, spd: 480 * 2, mul: 1.0 * 2, homing: 1, homingTurn: 12 * 2, pierce: 1, life: 6,
+  shot: { n: 2, spread: 0.5, off: 36, spd: 480 * 2, mul: 1.0 * 2 * 2, homing: 1, homingTurn: 12 * 2, pierce: 1, life: 6,
           mini: 1, miniForm: 'dreepy', miniK: 0.46 * 2, fxK: 1.6 }
 };
 const PET_SKILLS_DREEPY_1 = [PET_SKILL_UTURN, PET_SKILL_SHADOWBALL];
@@ -5552,9 +5565,9 @@ const PET_SKILLS_VAPOREON = [
 /* ⚡ 雷伊布（135）：打雷（**原地蓄力 0.5 秒** → 随机 5 名敌人单体雷击；本轮伤害翻到 3 倍）·
    伏特替换（和**多龙奇的急速折返**同一套：撞完折返待机 0.5 秒，**顺带溅射附近的敌人**） */
 const PET_SKILLS_JOLTEON = [
-  { id: 'thunder', name: '打雷', icon: '⚡', kind: 'thunder', cd: 5.0, range: 900, def: 1,
-    desc: '**原地蓄力 0.5 秒**后随机选战场上 **5 名**敌人各劈一道单体雷击（**本轮伤害翻到 3 倍**）· ' + petCdText(5.0),
-    thunder: { charge: 0.5, n: 5, mul: 3.0 * 3, moveSpd: 420 } },
+  { id: 'thunder', name: '打雷', icon: '⚡', kind: 'thunder', cd: 5.0 / 2, range: 900, def: 1,
+    desc: '**原地蓄力 0.5 秒**后随机选战场上 **5 名**敌人各劈一道单体雷击（**伤害先翻到 3 倍、再 ×1.5 → `3.0 * 3 * 1.5`** · **出手间隔缩短一半**）· ' + petCdText(5.0 / 2),
+    thunder: { charge: 0.5, n: 5, mul: 3.0 * 3 * 1.5, moveSpd: 420 } },
   { id: 'voltswitch', name: '伏特替换', icon: '🔌', kind: 'strike', cd: 1.1, range: 900, fxEl: 'ELECTRIC',
     desc: '和「急速折返」同一套：撞到就**立刻折返训练家身边待 0.5 秒**再冲 · 命中时**周围的敌人也一起吃伤害** · ' + petCdText(1.1),
     strike: { spd: 950, mul: 6.0, r: 28, returnHome: 1, dwell: 0.5, splashR: 130, splashMul: 0.5 } }
@@ -5563,31 +5576,34 @@ const PET_SKILLS_JOLTEON = [
    ⚠️ 数值口径注意：本轮用户只点名「喷火龙的闪焰冲锋伤害翻倍」（6.0 → 12.0），**火伊布这一份没跟着改**
    （要跟着翻倍就说一声，改 `fblitz.dash.mul` 一处即可）—— 所以这里别写「伤害完全相同」了 */
 const PET_SKILLS_FLAREON = [
-  { id: 'fblitz', name: '闪焰冲锋', icon: '🏹', kind: 'dash', cd: 3.0, range: 520, fxLife: 0.5, def: 1,
-    desc: '和喷火龙的闪焰冲锋同一套（朝指针方向猛冲 **472px** · 落点 **315 半径**范围伤害），但**会自动出手**（不用按闪避键）',
+  { id: 'fblitz', name: '闪焰冲锋', icon: '🏹', kind: 'dash', cd: 3.0 * 0.7, range: 520, fxLife: 0.5, def: 1,
+    desc: '和喷火龙的闪焰冲锋同一套（朝指针方向猛冲 **472px** · 落点 **315 半径**范围伤害），但**会自动出手**（不用按闪避键）· ' + petCdText(3.0 * 0.7),
     dash: { dist: 472, spd: 3375, r: 315, mul: 6.0, fxK: 6 } },
   { id: 'fcharge', name: '蓄能焰袭⭐', icon: '🌠', kind: 'dash', cd: 2.6, range: 520,
     desc: '和「龙之俯冲⭐」相同：**连续冲刺三次** · 沿途撞到的敌人各吃一次 · ' + petCdText(2.6),
     dash: { dist: 320, spd: 2400, r: 70, mul: 6.0, fxK: 4, path: 1, times: 3 } }
 ];
-/* 👻 苍炎刃鬼（937）：悔念剑（**大斩刀**那套：蓄力 0.5 秒甩半圆 · 范围 ×0.8 · **伤害翻倍 → 8.0** ·
-   **打中回自己 30% 最大生命** · 斩击特效是**火属性（FIRE）**，不是幽灵 —— 用户点名「我需要火属性的斩击」，
-   后来又要「在攻击范围内增加更多特效」（见 `PET_SLASH_FX_LAYERS`））
+/* 👻 苍炎刃鬼（937）：悔念剑（**大斩刀**那套：蓄力 0.5 秒甩半圆 · 范围 ×0.8 ·
+   **伤害 = 大斩刀 ×2 再 ×1.5 → `4.0 * 2 * 1.5` = 12.0**（用户先要翻倍、后来又要「提高至现在的 1.5 倍」）·
+   **打中回自己 30% 最大生命** · 斩击特效是**火属性（FIRE）**，不是幽灵 —— 用户点名「我需要火属性的斩击」；
+   斩光最终定稿是**一整片巨大的**（不是好几片，见 `PET_SLASH_FX_*`））
    · 影子偷袭（电光一闪的打法，**伤害/攻速各翻倍** · 每次命中后**无敌 0.5 秒**） */
 const PET_SKILLS_CERULEDGE = [
   { id: 'bitterblade', name: '悔念剑', icon: '🗡️', kind: 'slash', cd: 1.8, range: 440, fxEl: 'FIRE', def: 1,
-    desc: '像武器大师的**大斩刀**那样**蓄力 0.5 秒**再甩出半圆斩（**火属性斩击** · 范围 = 大斩刀的 **80%** · **伤害翻倍**）· **只要砍中敌人就回复自身 30% 最大生命** · ' + petCdText(1.8),
-    slash: { charge: 0.5, reach: 122 * 4.5 * 0.8, arc: Math.PI, mul: 4.0 * 2, healPct: 0.3, fxK: 7 } },
+    desc: '像武器大师的**大斩刀**那样**蓄力 0.5 秒**再甩出半圆斩（**火属性斩击** · 范围 = 大斩刀的 **80%** · **伤害是大斩刀的 2 倍再 ×1.5**）· **只要砍中敌人就回复自身 30% 最大生命** · ' + petCdText(1.8),
+    slash: { charge: 0.5, reach: 122 * 4.5 * 0.8, arc: Math.PI, mul: 4.0 * 2 * 1.5, healPct: 0.3, fxK: 7 } },
   { id: 'shadowsneak', name: '影子偷袭', icon: '👣', kind: 'strike', cd: 1.1 / 2, range: 900, fxEl: 'GHOST',
     desc: '和「电光一闪」同一套打法，但**伤害翻倍 · 出手间隔减半**，而且**每次命中后自身无敌 0.5 秒**（无敌也不打断继续出手）· ' + petCdText(1.1 / 2),
     strike: { spd: 950, mul: 2.0 * 2, r: 28, invulnT: 0.5 } }
 ];
-/* 🔮 红莲铠骑（936）：铠农炮（和妙蛙花的**日光束**相同，颜色换成火焰橙红 · **伤害翻倍 → 6.0**）·
+/* 🔮 红莲铠骑（936）：铠农炮（和妙蛙花的**日光束**相同，颜色换成火焰橙红 ·
+   **伤害 = 日光束 ×2 再 ×1.5** → `3.0 * 2 * 1.5` = 9.0（用户原话：「忘记铠农炮了。他的伤害也提升 1.5 倍」——
+   它本来就是日光束翻倍那一档，日光束本轮 +50% 之后它跟着涨，6.0 → 9.0）·
    广域战力（像喷火龙的**热风**那样放一圈持续伤害，但**伤害只有热风的一半** · 特效是超能力的**粉紫色**） */
 const PET_SKILLS_ARMAROUGE = [
   { id: 'armorcannon', name: '铠农炮', icon: '🔴', kind: 'beam', cd: 1.2, range: 900, def: 1, fxEl: 'FIRE',
-    desc: '和「日光束」一模一样的**一发光炮**（200px 宽贯穿光束 · 瞬间一次高额伤害 · **撞墙折返一次** · **伤害翻倍**），颜色是**火焰橙红** · ' + petCdText(1.2),
-    beam: { w: 200, len: 760, mul: 3.0 * 2, pal: 'FIRE' } },
+    desc: '和「日光束」一模一样的**一发光炮**（200px 宽贯穿光束 · 瞬间一次高额伤害 · **撞墙折返一次** · **伤害是日光束的 2 倍，本轮再 ×1.5**），颜色是**火焰橙红** · ' + petCdText(1.2),
+    beam: { w: 200, len: 760, mul: 3.0 * 2 * 1.5, pal: 'FIRE' } },
   { id: 'expandforce', name: '广域战力', icon: '🔮', kind: 'aura', range: 305 * 1.5, fxEl: 'PSYCHIC', fxLife: 0.5,
     desc: '展开**超能力场**（同热风的实现）：身周每 0.5 秒结算一次 · 范围 ×1.5（半径 ' + Math.round(305 * 1.5) + '）· **伤害只有热风的一半** · 特效是**粉紫色**',
     aura: { r: 305 * 1.5, tick: 0.5, dmg: 234 / 2, fxK: 5 } }
@@ -6987,11 +7003,17 @@ function updatePetThunder(u, dt, sk, foe, moving) {
    （`reach` = 大斩刀范围 ×0.8 · `arc` = π），范围内的敌人各吃一次；**只要砍中一个就回复自身 `healPct` 最大生命**。
    ⚠️ 特效必须走 `sk.fxEl`（= **FIRE**）—— 悔念剑是**火属性**技能，用户点名「我需要火属性的斩击」
    （它的另一招「影子偷袭」才是 GHOST）。别把这里改回写死的属性。 */
-/* 🗡️✨ **悔念剑的斩击特效铺法**：`[半径比例, 片数, 尺寸系数]` —— 近 / 中 / 远三层，
-   合计 **10 片**斩光铺满整个半圆扇形（用户要求：「增加悔念剑的斩击特效数量，
-   在悔念剑的攻击范围内增加更多的特效数量」—— 以前整个扇形只放 1 片，范围里空荡荡的）。
-   ⚠️ 想加/减片数只改这张表（半径比例 × `S.reach` 必须 ≤ 1，冒烟钉的是「一次斩击 ≥ 8 片」）。 */
-const PET_SLASH_FX_LAYERS = [[0.30, 3, 0.70], [0.58, 4, 1.00], [0.88, 3, 1.25]];
+/* 🗡️✨ **悔念剑的斩击特效 = 一整片「巨大」的斩光**（用户口径改过一次：
+   先要「增加悔念剑的斩击特效数量，在攻击范围内增加更多的特效数量」→ 现在是
+   「悔念剑的特效为一个非常大的特效，而不是好几个斩击特效」）。
+   所以**只放 1 片**，但尺寸放大到铺满整个半圆扇形：
+   GRASS 的 `melee` 单帧 64×64 → `k = 技能 fxK × PET_SLASH_FX_BIG` = 6 × 2 = 12 → **768×768**，
+   落点放在扇形半径的 `PET_SLASH_FX_OD`(55%) 处、朝着指针方向（锚点是画布正中，见 `PET_FX_ANCHOR.GRASS`）。
+   ⚠️ 别再改回「十几片小斩光」那一版（那张「近/中/远三层」的分层表已经删掉了 ——
+      冒烟有一条静态断言禁止那个表名复活，所以这里连名字都不写）。 */
+const PET_SLASH_FX_N = 1;          // 一次斩击 = **就一片**
+const PET_SLASH_FX_BIG = 2;        // 尺寸系数（旧口径「每片」是 fxK ×0.5 → 现在单独一片就是它的 4 倍大）
+const PET_SLASH_FX_OD = 0.55;      // 落点：扇形半径的 55%（视觉正中）
 /* 🗡️🔥 **悔念剑的攻击动画 = 妙蛙花的「疯狂植物」那一套**（用户本轮要求：「可以使用妙蛙花的疯狂植物的
    攻击动画，但是把原本绿色的攻击特效改成橙红色的火焰特效」）：
    所以斩光取的是 **GRASS 的 `melee` 条带**（疯狂植物/强力鞭打用的就是它），再在运行时**染成橙红**
@@ -7012,21 +7034,12 @@ function petSlashSwing(u, sk) {
     fxPush(el, 'hit', e.x, e.y, 2.2);
     n++;
   }
-  /* 🗡️✨ **斩击特效铺满整个攻击范围**（见上面 `PET_SLASH_FX_LAYERS` 的说明）：
-     三层同心圆弧，每层沿扇形均匀撒几片 —— 每片**朝自己的径向角度**旋转（和原先那一片同款），
-     半径加一点抖动、起播帧错开（不然十片斩光整齐划一地闪，很像复制粘贴）。
-     片数/大小都只跟「范围」有关，**不参与伤害判定**（伤害还是上面的 `S.reach + S.arc` 那一遍）。 */
-  const fk = (S.fxK || 6) * 0.5, fxSpread = S.arc * 0.94;
-  let fxN = 0;
-  for (let li = 0; li < PET_SLASH_FX_LAYERS.length; li++) {
-    const L = PET_SLASH_FX_LAYERS[li], rr = S.reach * L[0], cnt = L[1], kk = fk * L[2];
-    for (let i = 0; i < cnt; i++) {
-      const off = cnt > 1 ? (i / (cnt - 1) - 0.5) * fxSpread : 0;
-      const oa = a + off + rnd(-0.05, 0.05), od = rr * rnd(0.92, 1.08);
-      const o = fxPush('GRASS', 'melee', u.x + Math.cos(oa) * od, u.y + Math.sin(oa) * od, kk * rnd(0.92, 1.08), oa, null, 0, 0, PET_SLASH_TINT);
-      if (o) { o.f = rnd(0, 3) | 0; fxN++; }        // 错开起播帧
-    }
-  }
+  /* 🗡️✨ **一整片巨大的斩光**（见上面 `PET_SLASH_FX_*` 的说明）：就一片，尺寸 = `S.fxK × PET_SLASH_FX_BIG`，
+     落在扇形半径的 55% 处、朝指针方向；**不参与伤害判定**（伤害还是上面 `S.reach + S.arc` 那一遍）。 */
+  const kk = (S.fxK || 6) * PET_SLASH_FX_BIG;
+  const od = S.reach * PET_SLASH_FX_OD;
+  const o = fxPush('GRASS', 'melee', u.x + Math.cos(a) * od, u.y + Math.sin(a) * od, kk, a, null, 0, 0, PET_SLASH_TINT);
+  const fxN = o ? PET_SLASH_FX_N : 0;
   dbgPetSlashFx += fxN; dbgPetSlashFxLast = fxN;
   rings.push({ x: u.x, y: u.y, r: 18, vr: 720, life: 0.3, max: 0.3, color: PET_FX_TINT[el], width: 6 });
   burst(u.x + Math.cos(a) * 40, u.y + Math.sin(a) * 40, 16, PET_FX_TINT[el], 380);
@@ -20564,6 +20577,10 @@ function updateGame(dt, rawDt) {
       rings.push({ x: ox, y: oy, r: 6, vr: 520, life: 0.26, max: 0.26, color: PET_FX_TINT[PS(trB.u).element], width: 4 });
       burst(ox, oy, 12, PET_FX_TINT[PS(trB.u).element], 260);
       tone(1180, 320, 'sine', 0.09, 0.06);
+      /* 🏹 闪焰冲锋自己的出手间隔 = 闪避冷却 ×`PET_BLITZ_CD_MUL`（0.7，用户要求「降低至现在的 70%」）。
+         手动技没有 `cd` 字段，只能把这一次设好的 `p.dashCd`（上面统一算的 0.9 × 瞬步折扣）再打个 7 折；
+         ⚠️ 因此紧随其后的那一次普通闪避也会一起变快（同一个计时器），这是已知副作用。 */
+      p.dashCd *= PET_BLITZ_CD_MUL;
     } else if (isRonin()) {
       /* 浪客：闪避 = 选定落点的一闪（电脑 = 指针位置；手机 = 沿摇杆/朝向 675px），
          但是**不是传送**：按距离用 0.05~0.2 秒冲过去（675px 基准 = 0.2 秒，贴脸短闪更快），
@@ -25701,7 +25718,7 @@ window.__musouTrainerInfo = () => {
     meteors: dbgPetMeteors, meteorList: petMeteors.map(q => ({ x: Math.round(q.x), y: Math.round(q.y), r: q.r, t: +q.t.toFixed(2), dmg: q.dmg, spike: q.spike ? 1 : 0 })),
     dashChain: dbgPetDashChain,   // 🌠 龙之俯冲⭐ 连续冲刺的续冲次数
     thunderHits: dbgPetThunder, heals: dbgPetHeal,   // ⚡ 打雷命中数 · 🗡️ 悔念剑回血总量
-    slashFxN: dbgPetSlashFx, slashFxLast: dbgPetSlashFxLast, fxLayers: PET_SLASH_FX_LAYERS.map(L => L.slice()),   // 🗡️✨ 悔念剑斩击特效片数（累计 / 最近一次 / 铺法表）
+    slashFxN: dbgPetSlashFx, slashFxLast: dbgPetSlashFxLast, slashFxN1: PET_SLASH_FX_N, slashFxBig: PET_SLASH_FX_BIG, slashFxOd: PET_SLASH_FX_OD,   // 🗡️✨ 悔念剑斩击特效（累计 / 最近一次 / 一次几片 = 1 / 尺寸系数 / 落点比例）
     shots: petShotList(),       // 🏹 场上宝可梦弹体（龙箭要验「存在 6 秒」）
     strikes: dbgPetStrikes,   // ⚡ 伊布「电光一闪」的冲刺命中次数
     blitzReady: petBlitzReady() ? 1 : 0,
