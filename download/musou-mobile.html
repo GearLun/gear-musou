@@ -738,12 +738,12 @@
       <div class="wm-col">
         <div class="shop-sec">🎒 背包（旁边小按钮 = 出售）</div>
         <div class="up-list">
-          <div class="shop-slot"><button class="up-btn" id="wm-s0"></button><button class="btn btn2 shop-rr" id="wm-x0"></button></div>
-          <div class="shop-slot"><button class="up-btn" id="wm-s1"></button><button class="btn btn2 shop-rr" id="wm-x1"></button></div>
-          <div class="shop-slot"><button class="up-btn" id="wm-s2"></button><button class="btn btn2 shop-rr" id="wm-x2"></button></div>
-          <div class="shop-slot"><button class="up-btn" id="wm-s3"></button><button class="btn btn2 shop-rr" id="wm-x3"></button></div>
-          <div class="shop-slot"><button class="up-btn" id="wm-s4"></button><button class="btn btn2 shop-rr" id="wm-x4"></button></div>
-          <div class="shop-slot"><button class="up-btn" id="wm-s5"></button><button class="btn btn2 shop-rr" id="wm-x5"></button></div>
+          <div class="shop-slot" id="wm-sw0"><button class="up-btn" id="wm-s0"></button><button class="btn btn2 shop-rr" id="wm-x0"></button></div>
+          <div class="shop-slot" id="wm-sw1"><button class="up-btn" id="wm-s1"></button><button class="btn btn2 shop-rr" id="wm-x1"></button></div>
+          <div class="shop-slot" id="wm-sw2"><button class="up-btn" id="wm-s2"></button><button class="btn btn2 shop-rr" id="wm-x2"></button></div>
+          <div class="shop-slot" id="wm-sw3"><button class="up-btn" id="wm-s3"></button><button class="btn btn2 shop-rr" id="wm-x3"></button></div>
+          <div class="shop-slot" id="wm-sw4"><button class="up-btn" id="wm-s4"></button><button class="btn btn2 shop-rr" id="wm-x4"></button></div>
+          <div class="shop-slot" id="wm-sw5"><button class="up-btn" id="wm-s5"></button><button class="btn btn2 shop-rr" id="wm-x5"></button></div>
         </div>
       </div>
     </div>
@@ -6134,6 +6134,20 @@ function petAutoFight(id) {
   if (petSkillOf(id).follow) return false;
   return !!PET_SUMMON[id] && PET_STARTERS.indexOf(id) < 0 && id !== 'toge';
 }
+/* 🚧 **宝可梦不许越过场地边界**（用户报的 bug：自主作战时会一路走出地图，然后它站在墙外，
+   弹道全打在墙上 → 看起来就是「出界 + 放不出技能」）。
+   ⚠️ 边界口径与训练家一致（`updateGame` 末尾把 p 夹在 [30, W-30]）。
+   以前**只有冲浪那一支**自己夹了边界，绕圈跟随 / 自主作战 / 各种冲刺技都没有 → 被「太近了往后撤」
+   一推就穿墙（后撤方向正对边界时，它会一直退到墙外）。 */
+const PET_EDGE = 30;
+function petClampX(x) { return x < PET_EDGE ? PET_EDGE : (x > W - PET_EDGE ? W - PET_EDGE : x); }
+function petClampY(y) { return y < PET_EDGE ? PET_EDGE : (y > H - PET_EDGE ? H - PET_EDGE : y); }
+let dbgPetEdgeN = 0;   // 诊断计数：边界夹回次数（勾子 __musouTrainerInfo().edgeN）
+function petFieldClamp(u) {
+  const nx = petClampX(u.x), ny = petClampY(u.y);
+  if (nx !== u.x || ny !== u.y) { dbgPetEdgeN++; u.x = nx; u.y = ny; }
+  return u;
+}
 function petAimAng(u) {
   /* 自主作战的那几只：瞄准**自己锁定的那只敌人**（它们本来就不看你的指针，自己冲上去打） */
   if (u && petAutoFight(u.petId) && u.huntE && !u.huntE.dead) {
@@ -6173,6 +6187,7 @@ function petReviveAll() {
 function updatePetAlly(u, dt) {
   const S2 = PET_SUMMON[u.petId];
   if (!S2) { u.dead = true; return; }
+  petFieldClamp(u);                               // 🚧 上一帧的冲刺技可能把它留在墙外 → 先把位置收回场内再算距离
   u.maxhp = petSummonHp(u.petId);                 // 升级加成实时生效（当前血不超上限）
   if (u.hp > u.maxhp) u.hp = u.maxhp;
   if (u.flash > 0) u.flash = Math.max(0, u.flash - dt);
@@ -6240,8 +6255,8 @@ function updatePetAlly(u, dt) {
         nx = p.x + tdx / tdd * PET_SURF_LEASH;
         ny = p.y + tdy / tdd * PET_SURF_LEASH;
       }
-      u.x = Math.max(30, Math.min(W - 30, nx));
-      u.y = Math.max(30, Math.min(H - 30, ny));
+      u.x = petClampX(nx);           // 🚧 边界口径统一走 petClampX/Y（PET_EDGE = 30，与训练家一致）
+      u.y = petClampY(ny);
       u.petDir = petDir(sAng);
       moving = true;
       if (Math.random() < 0.75) addPart(u.x, u.y + 8, rnd(-40, 40), rnd(-50, 10), 0.3, rnd(2, 4), PET_FX_TINT[petFormElement(u)], 0);
@@ -6263,8 +6278,12 @@ function updatePetAlly(u, dt) {
     if (moving) {
       const st = S2.spd * petSpdMul(u, SK);
       const dir = gap > 0 ? 1 : -1;                   // 太远 → 靠近；太近 → 后撤
-      u.x += (hx / hd) * st * dt * dir;
-      u.y += (hy / hd) * st * dt * dir;
+      /* 🚧 **后撤方向可能正对着场地边界**（界外没有空间）：算好落点就夹回场内，
+         顶住墙时 `moving=false`（站着打），否则它会贴着墙「原地跑」一路退到墙外去 */
+      const nx = petClampX(u.x + (hx / hd) * st * dt * dir);
+      const ny = petClampY(u.y + (hy / hd) * st * dt * dir);
+      moving = (Math.abs(nx - u.x) + Math.abs(ny - u.y)) > 0.6;
+      u.x = nx; u.y = ny;
     }
     u.petDir = petDir(Math.atan2(hy, hx));
     /* 离得近的那只（射程内）就是出手目标 —— 交给下面的通用攻击代码 */
@@ -6282,6 +6301,7 @@ function updatePetAlly(u, dt) {
       u.petDir = petDir(petAimAng(u));                            // 有敌人时朝向**鼠标指针方向**（和你的瞄准一致）
     }
   }
+  petFieldClamp(u);   // 🚧 走位（绕圈跟随 / 自主作战 / 冲浪）都不许把它推出场地 —— 出界之后弹道全打在墙上
   /* —— 🐣 支援技（波克比：帮助 / 生命水滴）：**冷却好了就放，不需要敌人** ——
      结算完全作用在「训练家的宝可梦队伍」上（见 petCastSupport），自己不出手、也不掉血 */
   if (SK.kind === 'help' || SK.kind === 'heal') {
@@ -12038,10 +12058,16 @@ function wmPaint() {
     b.disabled = false;
     b.innerHTML = wmWeaponHtml({ id: s.id, star: 1, q: s.q }, key, wmEffectText(s.id));
   }
-  /* ⚔ 装备栏（最多 4）· 🎒 背包（最多 6） */
+  /* ⚔ 装备栏 · 🎒 背包：**只显示当前真正拥有的格子**（用户要求：没拿到 🦾 母怪力？！ 就别显示多出来的
+     装备格、没拿到 🎒 扩容背包 就别显示多出来的背包格 —— 以前 4 / 6 个格子一直摆着，多出来的空位看着像丢了东西）。
+     基础 = 装备 **2** 格 / 背包 **4** 格；母怪力 +1/层（最多 4）、扩容背包 +1/层（最多 6）。
+     ⚠️ 隐藏的格子照样照写内容（不 `continue`），这样加层 / 读档之后下一次 wmPaint 就能立刻显示正确的格子。
+     ⚠️ 背包格的「卖」小按钮在 `.shop-slot` 里（`#wm-sw{i}`）→ 整个格子行一起藏，别只藏按钮。 */
+  const eqShow = wmMaxEquip(), bagShow = wmBagMax();
   for (let i = 0; i < WM_EQUIP_CAP; i++) {
     const b = $('wm-e' + i);
     if (!b) continue;
+    if (b.style) b.style.display = i < eqShow ? '' : 'none';
     const x = eq[i];
     if (!x) { b.innerHTML = '<span class="up-tx"><small>（空装备位）</small></span>'; b.disabled = true; continue; }
     const sx = wmStatOf(x);
@@ -12051,6 +12077,10 @@ function wmPaint() {
   for (let i = 0; i < WM_BAG_CAP; i++) {
     const b = $('wm-s' + i), sb = $('wm-x' + i);
     if (!b) continue;
+    const box = $('wm-sw' + i) || b.parentNode;      // 整格（按钮 + 出售小按钮）；老外壳没有 id 时退回 parentNode
+    const show = i < bagShow;
+    if (box && box.style) box.style.display = show ? '' : 'none';
+    if (b.style) b.style.display = show ? '' : 'none';
     const x = st[i];
     if (!x) {
       b.innerHTML = '<span class="up-tx"><small>（空背包格）</small></span>'; b.disabled = true;
@@ -13430,8 +13460,8 @@ function updateAllies(dt) {
   for (const a of allyUnits) {    if (a.dead) continue;
     a.flash = Math.max(0, (a.flash || 0) - dt);
     if (a.invT > 0) a.invT = Math.max(0, a.invT - dt);
-    if (a.kind === 'pet') { updatePetAlly(a, dt); continue; }   // 🐸🔥💧 宝可梦
-    if (a.kind === 'shinypet') { updateShinyVisit(a, dt); continue; }   // ✨ 刷闪！：来访的宝可梦（不参战、到点就走）
+    if (a.kind === 'pet') { updatePetAlly(a, dt); petFieldClamp(a); continue; }   // 🐸🔥💧 宝可梦（🚧 冲刺/突袭类技能会把位置交给自己接管 → 这里再兜一次边界）
+    if (a.kind === 'shinypet') { updateShinyVisit(a, dt); petFieldClamp(a); continue; }   // ✨ 刷闪！：来访的宝可梦（不参战、到点就走）
     if (a.kind === 'sidekick') { updateSidekick(a, dt); continue; }
     if (a.kind === 'decoy') continue;                       // 假人不动、不攻击
     if (a.kind === 'mg') {
@@ -24571,6 +24601,7 @@ window.__musouWMRefresh = () => { wmShopRefresh(); return (p.wmStock || []).slic
 window.__musouWMEquip = (i) => { wmEquipBag(i); const m = wmMain(); return m ? m.uid : 0; };   // 测试钩子：走真实「点背包第 i 格 → 装备」
 window.__musouWMUnequip = (i) => { wmUnequipSlot(i); return (wmEquipped()[i | 0] || {}).uid || 0; };   // 测试钩子：走真实「点装备栏第 i 格 → 卸下」
 window.__musouWMClose = () => { wmShopClose(); return choosing ? 1 : 0; };                   // 测试钩子：走真实「收工」
+window.__musouWMPaint = () => { wmPaint(); return { eqMax: wmMaxEquip(), bagMax: wmBagMax() }; };   // 测试钩子：重画武器商店面板（验「装备格 / 背包格按当前上限显示」）
 window.__musouWMInfo = () => ({   // 测试钩子：武器大师全量读数
   wm: p.wm || 0, bag: (p.wmBag || []).map(x => ({ uid: x.uid, id: x.id, star: x.star, q: x.q, eq: x.eq ? 1 : 0, dmg: wmStatOf(x).dmg })),
   bagMax: wmBagMax(), bagN: wmStored().length, eqN: wmEquipped().length, eqMax: wmMaxEquip(),
@@ -25287,6 +25318,7 @@ window.__musouTrainerInfo = () => {
     on: trainerOn() ? 1 : 0, devBuild: DEV_BUILD ? 1 : 0, dev: devOnNow() ? 1 : 0,
     isTrainer: isTrainer() ? 1 : 0, weapon: p.weapon || '', starter: p.petKind || '',
     owned: (p.petOwned || []).slice(), max: PET_MAX, trainLv: p.trainLv || 0,
+    edge: PET_EDGE, edgeN: dbgPetEdgeN,   // 🚧 场地边界 + 「被墙夹回来」的次数（宝可梦越界 bug 的回归读数）
     pets, petN: pets.length,
     /* 🧬 进化读数：当前段位 / 各段形态 key 与名字 / 进化等级 / 本局进化次数 */
     evoStage: petStage(), evoLv: PET_EVO_LV.slice(), evos: dbgPetEvos,
