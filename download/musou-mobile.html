@@ -423,7 +423,7 @@
   <!-- 开始界面 -->
   <div class="screen show" id="sc-start">
    <div class="home-inner">
-    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.2.1</small></div>
+    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.2.2</small></div>
     <div class="keys" id="keys-desk">
       <span><b>WASD</b> / <b>方向键</b></span><span>移动</span>
       <span><b>自动攻击</b></span><span id="kbd-atk-d">自动挥砍，无需按键</span>
@@ -832,7 +832,7 @@
 <script>
 'use strict';
 /* ============================================================
-   草·割无双  MUSOU MOW  —  无双割草 正式版 v1.2.1
+   草·割无双  MUSOU MOW  —  无双割草 正式版 v1.2.2
    纯 Canvas 2D + WebAudio 程序化音效，无任何外部资源
    ============================================================ */
 (() => {
@@ -1206,8 +1206,8 @@ const ETYPES = {
      基础血量略高于其他 Boss；撑满 120 秒它会自己体力耗尽自杀；60 秒喝雪碧回 50%、90 秒吃巧乐兹回 30% 且跑速 +20% */
   sprinter: { label:'超级跑者', r:22, hp:8000, spd:1200, dmg:26, score:95000, col:'#ff7a52', dark:'#5a2010', acc:'#ffd166', resist:0.05, boss:1, sprinter:1, waveBoss:1 },
   /* 🌟 **丰缘之战**（训练家第 20 波固定 Boss / ♾ 无尽随机 Boss 池）——
-     一阶段：**固拉多 + 盖欧卡同时出现**（各 5 秒一次断崖之剑 / 根源波动，基础血量各 2000）；
-     两只都被击败 → **烈空坐登场**（每 3 秒一次画龙点睛，基础血量 3000）。
+     一阶段：**固拉多 + 盖欧卡同时出现**（🗡️ 固拉多 **4 秒**一次断崖之剑 · 🌊 盖欧卡 **3 秒**一次根源波动；基础血量各 2000）；
+     两只都被击败 → **烈空坐登场**（**2 秒**一次画龙点睛，基础血量 3000）。
      只有「**第 20 波的这一场**」被讨伐时，训练家才能**任选一只神兽入队**（一局仅一只）。
      —— 详细口径见 `HOENN` 常量块；画的是宝可梦贴图（`drawEnemy` 里走 `drawPet`）。
      ⚠️ `hoenn` 这个标记很重要：无尽模式「Boss 基础血量统一 5000」那条**要跳过它们**
@@ -4820,6 +4820,10 @@ function petFormElement(e) { return PET_FORM_ELEMENT[petForm(e)] || PS(e).elemen
    两份同名同值很容易改错一份还以为生效了 —— 已删。） */
 let petImg = {}, petOK = {}, petBad = false, petTintCv = null, petTintBad = false;
 let dbgPetShots = 0, dbgPetMelee = 0, dbgPetHops = 0, dbgPetHurt = 0, dbgPetTicks = 0, dbgPetSlam = 0, dbgJetTicks = 0, dbgPetAura = 0, dbgPetDash = 0;
+/* 🎨 宝可梦图集被要求解码的次数（诊断用，**故意不随 resetRun 归零**）：
+   丰缘之战的三只 Boss 复用宝可梦贴图，所以 `hoennInit()` 也必须点一次 `petLoad()` ——
+   否则试验场（普通战士、一只宝可梦都没入队）里它们会退化成占位剪影（真机上看就是**两个圆球**）。 */
+let dbgPetLoad = 0;
 /* 🧢 训练家：宝可梦召唤物的诊断计数 */
 let dbgPetBooms = 0, dbgPetWaterHits = 0, dbgPetLevels = 0, dbgPetFaints = 0, dbgPetRevives = 0, dbgPetSkillSets = 0, dbgPetEvos = 0;
 let dbgPetShells = 0, dbgPetSpins = 0, dbgPetPools = 0, dbgPetRest = 0;   // 💧 杰尼龟线：破壳次数 / 高速旋转次数 / 水坑数 / 缩壳回血跳数
@@ -4967,6 +4971,7 @@ function petShotHit(el, x, y, k) {
 }
 /* 角色图集：data URI，第一次进试验场才开始解码（解码完成前画占位剪影，绝不卡帧） */
 function petLoad() {
+  dbgPetLoad++;
   if (typeof Image === 'undefined') { petBad = true; return; }
   for (const id in PET_PNG) {
     if (petImg[id]) continue;
@@ -4982,6 +4987,10 @@ function petLoad() {
 }
 /* 朝向序号：0=下 1=右下 2=右 3=右上 4=上 5=左上 6=左 7=左下（三只素材同款约定） */
 function petDir(ang) { return ((2 - Math.round(ang * 4 / Math.PI)) % 8 + 8) % 8; }
+/* ⚠️ **「闪光」与「形态」是两个正交的维度**（用户明确说过：闪光和原始回归是两回事）：
+   `PET_FR[当前形态][0]` = 普通 · `[1]` = 闪光（每条形态都有自己的两套条带）。
+   所以**绝不能把闪不闪光塞进形态 key**：原始回归换的是形态（kyogre → kyogre1），
+   闪光换的是同一条带里的第 0/1 套 —— 神兽既可以闪光，也可以**闪光 + 原始回归**（kyogre1 的闪光条带同样齐全）。 */
 function petFrames(e, anim) { return PET_FR[petForm(e)][e.petShiny ? 1 : 0][anim]; }
 /* 🏹 **宝可梦弹体的取帧**（目前只有「龙箭」把弹体画成一只多龙梅西亚要用）—— 
    形态 + 飞行方向 + 相位 → 该画的那条帧矩形 `[sx, sy, sw, sh]`（取不到就返回 null，调用方退回默认箭矢画法）。
@@ -5262,9 +5271,10 @@ function tickPrimalAbilities(dt) {
     return;
   }
   if (ab.id === 'desolateland') {
-    /* 大太阳：**所有敌人保持烧伤状态**（直接刷新 burnT，让它一直在烧） */
+    /* 大太阳：**所有敌人保持烧伤状态**（直接刷新 burnT，让它一直在烧）
+       （假人也照刷 —— 灼伤结算在它身上走记账通道，见 updateEnemies 的灼伤段） */
     for (const e of enemies) {
-      if (e.dead || e.devDummy) continue;
+      if (e.dead) continue;
       if (e.burnT === undefined) { e.burnT = 0; e.burnI = 0; }
       e.burnT = Math.max(e.burnT, PRIMAL.sunBurnT);
     }
@@ -5288,15 +5298,19 @@ function tickPrimalAbilities(dt) {
     e.vx += ux * step * 4; e.vy += uy * step * 4;   // 顺手带一点惯性，看起来像被风推着走
   }
 }
-/* 按最大生命的百分比直接扣血（**不吃任何加成** —— 用户明确要求）：杂兵全额、Boss ÷div */
+/* 按最大生命的百分比直接扣血（**不吃任何加成** —— 用户明确要求）：杂兵全额、Boss ÷div
+   🧱 试验场的 10 亿血假人**也算在内**（用户报过「德尔塔气流的伤害对靶子无效，是不是对所有敌人都没伤害」）：
+   它血量每帧回满、扣不动，所以直接走「记账」通道（`devDummyAdd`）让秒伤看得见 ——
+   和其它百分比类伤害（雷法师的雷罚 / 骑士的撞击）在假人身上的口径一致。 */
 function primalPctBurst(pct, div) {
   for (const e of enemies) {
-    if (e.dead || e.devDummy) continue;
+    if (e.dead) continue;
     if (enemyInvuln(e)) continue;
     const d = Math.max(1, Math.round(e.maxhp * pct / (e.boss ? div : 1)));
-    e.hp -= d;
-    e.flash = Math.max(e.flash || 0, 0.07);
     dbgPrimalHit++;
+    e.flash = Math.max(e.flash || 0, 0.07);
+    if (e.devDummy) { devDummyAdd(d); continue; }
+    e.hp -= d;
     if (e.hp <= 0) killEnemy(e);
   }
 }
@@ -5307,9 +5321,9 @@ function primalPctBurst(pct, div) {
      · **♾ 无尽模式** —— 它进了**随机 Boss 池**（每 5 层都可能抽到）；
        而且训练家在无尽的**第 20 层**同样**固定**是它
    战斗流程（两阶段）：
-     ① **固拉多 + 盖欧卡同时出现**（各 2000 基础血量）：固拉多每 **5 秒**一次「🗡️ 断崖之剑」，
-        盖欧卡每 **5 秒**一次「🌊 根源波动」——**有预警线，方向锁定后 0.5 秒才发射**
-     ② 两只**都被击败** → **烈空坐登场**（3000 基础血量），每 **3 秒**一次「🐉 画龙点睛」，
+     ① **固拉多 + 盖欧卡同时出现**（各 2000 基础血量）：固拉多每 **4 秒**一次「🗡️ 断崖之剑」，
+        盖欧卡每 **3 秒**一次「🌊 根源波动」——**有预警线，方向锁定后 0.5 秒才发射**
+     ② 两只**都被击败** → **烈空坐登场**（3000 基础血量），每 **2 秒**一次「🐉 画龙点睛」，
         **落点位置也有预警线**
    奖励：只有**第 20 波的那一场**被讨伐时，训练家才能**从三只里任选一只入队**；
         而且**一局游戏只能有一只神兽入队**（`p.legendGot` 记账，无尽里再遇到也不给第二只）。
@@ -5327,22 +5341,30 @@ const HOENN = {
   spikeR: 150, spikeGap: 170, spikeLife: 0.9, spikeDmg: 26,   // 单根地刺：判定半径 / 与玩家的错开距离 / 刺存在时长 / 伤害
   beamLen: 760 / 2, beamW: 200, beamDmg: 24,   // 根源波动：长度 = 日光束的一半（同宠物那招）· 200px 宽光柱
   ascentR: 200, ascentSpd: 2200, ascentDmg: 30, ascentDist: 472,   // 画龙点睛：落点半径 / 冲刺速度 / 伤害 / 冲刺距离（同宠物版 472）
-  groudonSpd: 72, kyogreSpd: 64, kyogreKeep: 300, groudonKeep: 150, rayKeep: 240, touchDmg: 22, touchCd: 1.35
+  groudonSpd: 72, kyogreSpd: 64, kyogreKeep: 300, groudonKeep: 150, rayKeep: 240, touchDmg: 22, touchCd: 1.35,
+  bossScaleMul: 2   // 🌟 立绘比例 = 「它当召唤物时」那个比例的**两倍**（用户点名）
 };
 let hoennSpikes = [];   // 🗡️ 断崖之剑的落点：{x,y,r,t,ph:'warn'|'up',life,hit}
 let hoennBeams = [];    // 🌊 根源波动的光柱：{ref,ang,t,max,len,w,fired,life}
 let dbgHoennSpike = 0, dbgHoennBeamCast = 0, dbgHoennBeamFire = 0, dbgHoennAscent = 0, dbgHoennHit = 0, dbgHoennRay = 0, dbgHoennReward = 0;
-/* 🌟 丰缘之战三只的立绘比例 = **正常大小**（用户最新点名：「大小改为正常大小」）——
-   就是「这只宝可梦入队当召唤物时」那个比例（`PET_SUMMON[].scale`，御三家 / 神兽都是 1.67）。
-   ⚠️ 模型换成**原始回归那套素材**（用户点名）：`hoennInit` 里把 `e.petForm` 指向 `PET_PRIMAL[type]`
+/* 🌟 丰缘之战三只的立绘比例 = **「它作为宝可梦时」的两倍**（用户最新点名）——
+   基准就是「这只宝可梦入队当召唤物时」那个比例（`PET_SUMMON[].scale`，御三家 / 神兽都是 **1.67**），
+   × `HOENN.bossScaleMul`（**2**）→ **3.34**。
+   ⚠️ 模型换成了**原始回归那套素材**（用户点名）：`hoennInit` 里把 `e.petForm` 指向 `PET_PRIMAL[type]`
    （`kyogre1 / groudon1 / rayquaza1`），`e.pet` 仍留物种 id（`PS(e)` 取物种数值、`PET_FORM_ELEMENT` 取属性）。 */
-function hoennScale(id) { return (PET_SUMMON[id] || {}).scale || 1.67; }
+function hoennScale(id) { return ((PET_SUMMON[id] || {}).scale || 1.67) * HOENN.bossScaleMul; }
 /* 出手间隔（用户最新点名：固拉多 4 秒 · 盖欧卡 3 秒 · 烈空坐 2 秒） */
 function hoennCastCd(type) {
   return type === 'groudon' ? HOENN.groudonCd : (type === 'kyogre' ? HOENN.kyogreCd : HOENN.rayCd);
 }
 /* 出场初始化（在 spawnEnemy 里调）：血量 / 宝可梦贴图字段 / 第一次出手的倒计时 */
 function hoennInit(e, type) {
+  /* 🎨 丰缘之战的三只**直接复用宝可梦的逐帧贴图**，所以这里必须自己把图集解码点起来：
+     `petLoad()` 原本只在 `spawnPetAlly()`（宝可梦入队）里调过 —— 试验场用「普通战士」打丰缘之战时
+     一只宝可梦都没入队 → 图集从未开始解码 → `drawPet` 走「素材没到位」的占位分支，
+     真机上就是**两个圆球**（固拉多 + 盖欧卡），切成训练家职业才恢复正常（用户报过这个 bug）。
+     `petLoad()` 内部按 `petImg[id]` 去重，重复调用是安全的。 */
+  petLoad();
   const base = type === 'rayquaza' ? HOENN.rayHp : HOENN.groHp;
   const h = Math.round(base * bossWaveHpMul(wave));
   e.hp = h; e.maxhp = h;
@@ -5561,7 +5583,9 @@ function drawPrimalWeather() {
     }
     ctx.stroke();
   } else if (primalWeather === 'desolateland') {
-    /* ☀️ 终结之地：橙红环境色 + 天上一个烈日 + 热浪横纹 */
+    /* ☀️ 终结之地：橙红环境色 + 天上一个烈日。
+       ⚠️ **不许再画那 8 条横着的黄线（热浪横纹）** —— 它们横穿整个屏幕、压在敌人和弹幕上，
+       玩家反馈「很影响视线」（用户点名删掉）。要表现烈日就只保留环境色 + 太阳这两层。 */
     ctx.fillStyle = 'rgba(255,138,40,0.18)';
     ctx.fillRect(X, Y, VW, VH);
     const sx = X + VW * 0.82, sy = Y + VH * 0.17;
@@ -5571,15 +5595,6 @@ function drawPrimalWeather() {
     ctx.globalAlpha = 0.65 + 0.15 * Math.sin(t * 2);
     ctx.fillStyle = '#ffe08a';
     ctx.beginPath(); ctx.arc(sx, sy, 52, 0, TAU); ctx.fill();
-    ctx.globalAlpha = 0.35;
-    ctx.strokeStyle = '#ffcf8a';
-    ctx.lineWidth = 3;
-    ctx.beginPath();
-    for (let i = 0; i < 8; i++) {
-      const y = Y + ((i * 96 + t * 46) % VH);
-      ctx.moveTo(X, y); ctx.lineTo(X + VW, y + 22);
-    }
-    ctx.stroke();
     ctx.globalAlpha = 1;
   } else {
     /* 🌀 德尔塔气流：青绿环境色 + 横扫的风痕（两条速度带拉开层次） */
@@ -7931,9 +7946,14 @@ function updatePetTornadoSkill(u, dt, sk, foe, moving) {
   petAnim(u, moving ? 'walk' : 'idle');
   petTickFrame(u, dt, true);
 }
+/* 落地特效的**基准半径** = 闪焰冲锋的 315（对应 fxK 6 / 冲击环 14+700t / 线宽 7）。
+   ⚠️ 判定半径变了，**特效尺寸必须跟着变**：画龙点睛☆ 的落点半径是闪焰冲锋的两倍（315 → 630），
+   但特效若还按固定 fxK 画，玩家看到的就是「范围完全没变大」（用户报过「画龙点睛☆ 的攻击范围好像没生效」）。 */
+const DASH_FX_R_BASE = 315;
 function petDashLand(u, sk) {
   const D = sk.dash, el = petFormElement(u);
   const dmg = petHitDmg(u.petId, D.mul);
+  const fk = (D.fxK || 6) * (D.r / DASH_FX_R_BASE);   // 特效随判定半径等比放大
   u.dashP = 'land'; u.dashT = 0.24; u.jumpZ = 0;
   let n = 0;
   for (const e of enemies) {
@@ -7944,8 +7964,8 @@ function petDashLand(u, sk) {
     hitEnemy(e, (e.x - u.x) / dd, (e.y - u.y) / dd, 300, dmg);
     n++;
   }
-  fxPush(el, 'cell', u.x, u.y, D.fxK, 0, 0, 0, sk.fxLife || 0);   // ⏱️ 闪焰冲锋的落地火圈只留 0.5 秒
-  rings.push({ x: u.x, y: u.y, r: 14, vr: 700, life: 0.4, max: 0.4, color: PET_FX_TINT[el], width: 7 });
+  fxPush(el, 'cell', u.x, u.y, fk, 0, 0, 0, sk.fxLife || 0);   // ⏱️ 闪焰冲锋的落地火圈只留 0.5 秒
+  rings.push({ x: u.x, y: u.y, r: 14 * (D.r / DASH_FX_R_BASE), vr: 700 * (D.r / DASH_FX_R_BASE), life: 0.4, max: 0.4, color: PET_FX_TINT[el], width: 7 * (D.r / DASH_FX_R_BASE) });
   burst(u.x, u.y, 22, PET_FX_TINT[el], 420);
   shake = Math.max(shake, 5);
   dbgPetSlam++; dbgPetMelee += Math.max(1, n);
@@ -9059,8 +9079,9 @@ function hitEnemy(e, ax, ay, force, dmg, chest) {
   if (!isFinite(e.hp)) e.hp = Math.max(1, Math.round(e.maxhp || 1));   // 已经被污染的敌人：就地满血救回（至少能被打死）
   /* 🌑 地狱奇遇·黑暗游戏：本波**玩家输出也 ×2**（敌我同增，纯拼走位） */
   dmg *= eqDmgMul();
-  /* ☀️ 原始回归·终结之地：大太阳底下**所有敌人受伤 +10%**（用户点名） */
-  if (primalSunOn() && !e.devDummy) dmg *= PRIMAL.sunDmgMul;
+  /* ☀️ 原始回归·终结之地：大太阳底下**所有敌人受伤 +10%**（用户点名）
+     （假人也照吃 —— 它统计所有伤害来源，否则「大太阳到底加没加伤害」在试验场里看不出来） */
+  if (primalSunOn()) dmg *= PRIMAL.sunDmgMul;
   /* ✨ 质变全满后的「闪光追猎」：每斩一只闪光敌人 +1% **最终造成伤害**（本局内永久叠加）
      —— 挂在 hitEnemy 的最终结算口上，所以普攻/奥义/召唤物/灼伤等所有伤害来源通吃 */
   if (p.mutFullKills) dmg *= mutFullDmgMul();
@@ -9978,7 +9999,11 @@ const SHINY_VISIT_T = 2.6;       // 来访的宝可梦在训练家身边停留�
 const SHINY_VISIT_T_SHINY = 5;   // ✨ 闪光版来访停留更久（用户要求：「若出现闪光宝可梦…停留时间增加至 5 秒」）
 const SHINY_TEXT_SIZE = 64;      // ✨ 闪光版来访的**巨大飘字**字号（用户要求：「巨大的飘字展示出闪啦！」）
 const SHINY_TEXT_LIFE = 1.8;     // 巨大飘字停留多久（秒）
-const SHINY_SPECIES = ['bulba', 'charm', 'squirt', 'eevee', 'charcadet', 'dreepy', 'dratini', 'jirachi', 'toge'];
+/* ✨ 刷闪！能刷到的物种（**各 1/12 等概率**）：九只基础宝可梦 + 🌟 神兽三只
+   （用户后来点名「固拉多，盖欧卡，烈空坐，也会进入刷闪的名单中」——
+    它们的 `PET_FR[形态][1]` 闪光条带本来就随生成器一起出好了，所以直接列进来即可）。
+   ⚠️ 加物种必须同步 `SHINY_SPECIES_NAME`（面板/横幅按 id 取中文名），否则横幅会显示英文 id。 */
+const SHINY_SPECIES = ['bulba', 'charm', 'squirt', 'eevee', 'charcadet', 'dreepy', 'dratini', 'jirachi', 'toge', 'kyogre', 'groudon', 'rayquaza'];
 const SHINY_HP_MUL = 5;   // 🟢 闪光词条·绿身体：血量倍率（本轮由 2 倍提高到 5 倍）
 const CARD_ONLY_MUTS = ['deck', 'wild', 'possess', 'multishot'];   // 🃏 牌皇专属四件套（传统弓/士兵/其它职业都拿不到）
 /* 🃏 牌皇专属质变的数值（放在 MUTS 之前：MUTS 数组字面量里要引用这些 cap）
@@ -13691,7 +13716,7 @@ $('meta-body').addEventListener('click', (ev) => {
    遇到过的显示头像 + 「✅ 闪光外观 / ⚪ 普通外观」切换；没遇到过的显示 🔒 与获取提示。
    收录与启用都写进局外存档（`meta.shinyDex` / `meta.shinyOn`）→ **换局、读档都在**，只有删档才清。
    启用的效果：训练家出战时那一只（**含进化后的形态**，按物种 id 记）走 `PET_FR[形态][1]` 闪光贴图。 */
-const SHINY_SPECIES_NAME = { bulba: '妙蛙种子', charm: '小火龙', squirt: '杰尼龟', eevee: '伊布', charcadet: '炭小侍', dreepy: '多龙梅西亚', dratini: '迷你龙', jirachi: '基拉祈', toge: '波克比' };
+const SHINY_SPECIES_NAME = { bulba: '妙蛙种子', charm: '小火龙', squirt: '杰尼龟', eevee: '伊布', charcadet: '炭小侍', dreepy: '多龙梅西亚', dratini: '迷你龙', jirachi: '基拉祈', toge: '波克比', kyogre: '盖欧卡', groudon: '固拉多', rayquaza: '烈空坐' };
 function renderShinyDex() {
   const box = $('shiny-body');
   if (!box) return;
@@ -16833,7 +16858,7 @@ function syncLabTools() {
   }
   h += '<div class="dev-row dev-stat">🧱 假人：' + (devDummyE
     ? ('总伤 <b>' + Math.round(devDmg.total) + '</b> · 秒伤(近 5 秒) <b>' + Math.round(dps) + '</b> · 峰值秒伤 <b>' + Math.round(devDmg.bestDps)
-      + '</b> · 命中 <b>' + devDmg.hits + '</b> 次 · 单次最高 <b>' + Math.round(devDmg.best) + '</b>（只统计命中/技能伤害）')
+      + '</b> · 命中 <b>' + devDmg.hits + '</b> 次 · 单次最高 <b>' + Math.round(devDmg.best) + '</b>（统计**所有伤害来源**：命中/技能 + 灼伤/百分比类）')
     : '（未放出 · 点上面「放出无限血量假人」）') + '</div>';
   if (h !== devToolsTxt) { devToolsTxt = h; box.innerHTML = h; }
 }
@@ -22348,16 +22373,18 @@ function updateGame(dt, rawDt) {
     e.flash -= rawDt; e.bob += dt * 9;
     /* 灼伤持续伤害（每 0.3s 2% 最大生命；Boss 仅 1/4）与离子晕眩计时
        腾空中的战将/总大将无敌：灼伤读条与结算一并冻结（落地后继续烧）
-       🛠 开发者假人：**不吃灼伤**（2% 最大生命那种百分比伤害在 10 亿血假人身上毫无意义，
-          还会把秒伤统计带偏 —— 假人只统计「直接命中 / 技能伤害」） */
+       🛠 开发者假人：血 10 亿、每帧回满，所以**不扣血、只记账**（`devDummyAdd`）——
+       口径与雷法师的雷罚 / 原始回归的百分比伤害一致：**假人统计所有伤害来源**（用户要求，
+       以前这里把假人整个跳过，导致「德尔塔气流对靶子无效」这类误判）。 */
     if (e.stun > 0) e.stun -= dt;
-    if (e.burnT > 0 && !enemyInvuln(e) && !e.devDummy) {
+    if (e.burnT > 0 && !enemyInvuln(e)) {
       e.burnT -= dt;
       e.burnI += dt;
       while (e.burnI >= 0.3) {
         e.burnI -= 0.3;
         dbgBurnTicks++;
         const bdmg = Math.max(1, e.maxhp * (e.boss ? 0.005 : 0.02));
+        if (e.devDummy) { devDummyAdd(bdmg); e.flash = Math.max(e.flash || 0, 0.07); continue; }
         e.hp -= bdmg;
         if (Math.random() < 0.5) {
           addPart(e.x + rnd(-9, 9), e.y - e.r * 0.5 + rnd(-7, 7), rnd(-20, 20), -rnd(40, 95), 0.4, rnd(2, 4.5),
@@ -26687,7 +26714,9 @@ window.__musouPetInfo = () => ({
   formSkills: (function () { const o = {}; for (const fk in PET_SKILLS_FORM) o[fk] = PET_SKILLS_FORM[fk].map(skDump); return o; })(),
   formDef: Object.assign({}, PET_SKILL_DEF_FORM),
   forms: (function () { const o = {}; for (const id in PET_FORM) o[id] = PET_FORM[id].slice(); return o; })(),
-  sets: dbgPetSkillSets
+  sets: dbgPetSkillSets,
+  /* 🎨 宝可梦图集被点开的次数（丰缘之战的三只 Boss 也要点 `petLoad()` —— 见 hoennInit） */
+  petLoads: dbgPetLoad
 });
 function skDump(s) {
   return {
@@ -26763,8 +26792,9 @@ window.__musouDevPetItem = (form) => {
 /* 🖼️ 测试钩子：把某个形态的「每个动作 × 每个方向 × 每一帧」的贴图落点全算一遍，返回有没有非法数字。
    取错 meta 层（`PET_META[形态]` 少了 `[动作]`）时 sw/sh/gy 会 undefined → dx/dy = NaN → 真机上**模型整个不画**，
    而无头桩不校验 drawImage，光跑帧看不出来（这 bug 真出过）→ 这里主动算一遍钉死。
-   入参：物种 id（'bulba' → 当前段位）或形态 key（'bulba2' → 就用这一段） */
-window.__musouPetRectProbe = (form) => {
+   入参：物种 id（'bulba' → 当前段位）或形态 key（'bulba2' → 就用这一段）；
+   第二个参数 `shiny` 传真值时按**闪光条带**（`PET_FR[形态][1]`）算 —— 刷闪名单里的物种必须有它 */
+window.__musouPetRectProbe = (form, shiny) => {
   let sp = form, fk = form;
   if (PET_FORM[form]) { fk = petFormKey(form); }
   else if (PET_META[form]) {
@@ -26783,7 +26813,7 @@ window.__musouPetRectProbe = (form) => {
     let minDx = 1e9, maxDx = -1e9, minDy = 1e9, maxDy = -1e9, minDw = 1e9, n = 0;
     for (let d = 0; d < 8; d++) {
       for (let f2 = 0; f2 < M.n; f2++) {
-        const r2 = petDrawRect({ pet: sp, petForm: fk, petA: role, petDir: d, petF: f2, petScale: 1.67, r: 11 });
+        const r2 = petDrawRect({ pet: sp, petForm: fk, petShiny: shiny ? 1 : 0, petA: role, petDir: d, petF: f2, petScale: 1.67, r: 11 });
         for (const v of [r2.dx, r2.dy, r2.dw, r2.dh, r2.gy, r2.M.sw, r2.M.sh]) if (typeof v !== 'number' || !isFinite(v)) bad++;
         if (!(r2.dw > 1 && r2.dh > 1)) bad++;
         minDx = Math.min(minDx, r2.dx); maxDx = Math.max(maxDx, r2.dx);
@@ -26794,7 +26824,7 @@ window.__musouPetRectProbe = (form) => {
     }
     out.push({ role, n, sw: M.sw, sh: M.sh, minDx: +minDx.toFixed(1), maxDx: +maxDx.toFixed(1), minDy: +minDy.toFixed(1), maxDy: +maxDy.toFixed(1), minDw: +minDw.toFixed(1) });
   }
-  return { form: fk, species: sp, bad, roles: out };
+  return { form: fk, species: sp, shiny: shiny ? 1 : 0, bad, roles: out };
 };
 /* 🖼️ 测试钩子：每只在场宝可梦的**贴图落点**（dx/dy/dw/dh/gy/sw/sh…）——
    全部必须是有限值：取错 meta 层（少写 `[动作]`）时这里会变 NaN，真机表现就是「宝可梦模型消失」 */
