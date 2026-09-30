@@ -4892,17 +4892,18 @@ function drawPet(e) {
 }
 
 /* ============================================================
-   🧢 训练家（弓箭手分支 · **只在开发者版本 / 开发者开关打开时出现**）
-   开局在「选武器」页里多一项「训练家」，选完立刻挑一只**御三家**当伙伴；
+   🧢 训练家（弓箭手分支 · **正式版也有**）
+   开局在「选武器」页里多一项「训练家」，选完**三只御三家一起入队**共同战斗；
+   **第 5 波清剿后必须三选一**（另外两只当场离队，见 `petStarterWaveEnd`）。
    御三家会一直跟在身边保护他，最多同时放 6 只（`PET_MAX`，后续再加新宝可梦只要扩 PET_SUMMON）。
    · **升级不弹词条面板**：每升一级自动给「所有宝可梦」+0.5 伤害、+1 生命上限、+5% 无双充能效率
    · 质变池只留**全职业通用**的那些（各分支专属、含无人机/士兵/牌皇/武器大师等一律禁选）
    · 屏幕右侧有宝可梦列表面板（头像 + 血条）
    ============================================================ */
 const PET_MAX = 6;                  // 训练家最多同时放出 6 只
-/* 🧢 开局能挑的三只**御三家**（顺序 = 面板上的按钮顺序）。
+/* 🧢 **开局一起入队的三只御三家**（顺序 = 第 5 波「三选一」面板上的按钮顺序）。
    ⚠️ 别再写成 `Object.keys(PET_SUMMON)` —— 🐣 波克比也是 PET_SUMMON 里的一员（第 5 波孵出来的），
-   那样它会跑进「挑御三家」面板里变成第 4 个选项（冒烟抓过这个） */
+   那样它会跑进三选一面板里变成第 4 个选项（冒烟抓过这个） */
 const PET_STARTERS = ['bulba', 'charm', 'squirt'];
 const PET_FAINT_T = 8;              // 昏厥后 8 秒满血复活（宝可梦不会真的死）
 const PET_ORBIT_R = 74;             // 待机时围着训练家转的半径
@@ -6971,6 +6972,29 @@ function petEggWaveEnd(wave) {
   if (wave >= PET_HATCH_WAVE) { petEggHatch(); return 2; }
   return 0;
 }
+/* 🧢 御三家「三选一」（用户要求：「开局训练家职业同时拥有三只御三家共同战斗，
+   在第五波结束时必须舍弃其他两只，进行三选一然后再继续冒险」）：
+   · **开局**（选完「训练家」那一刻，见 `openWeaponUp()`）就把 **三只御三家全部入队**，一起参战；
+   · **第 5 波清剿后**弹一次三选一，选中的留下、另外两只**当场离队**，选完才继续下一波。
+   ⚠️ 判定不能只看 `p.starterPend`（它不进存档）：`starterPickDue()` 是**从状态推导**的兜底 ——
+   只要「训练家 + 波次已过 5 + 手里还留着 2 只以上御三家」就成立，所以存档/读档、老存档进来
+   都会在下一次 `tryOpen()` 时把面板补上（`tryOpen` 里它排在奇物/升级前面）。 */
+const PET_STARTER_PICK_WAVE = 5;   // 第 5 波清剿后：御三家三选一
+function starterOwnedN() {
+  const own = p.petOwned || [];
+  let n = 0;
+  for (const id of PET_STARTERS) if (own.indexOf(id) >= 0) n++;
+  return n;
+}
+function starterPickDue() { return isTrainer() && wave >= PET_STARTER_PICK_WAVE && starterOwnedN() > 1; }
+function petStarterWaveEnd(wave) {
+  if (!isTrainer() || wave !== PET_STARTER_PICK_WAVE) return 0;
+  if (starterOwnedN() <= 1) return 0;          // 只剩一只（或本来就只有一只）→ 不需要选
+  p.starterPend = 1;
+  bigBanner('🧢 御 三 家 · 三 选 一', '第 ' + PET_STARTER_PICK_WAVE + ' 波清剿 · 另外两只将离队');
+  tryOpen();                                   // 世界在这里冻结，选完才继续（见 pickChoice → tryOpen）
+  return 1;
+}
 function petEggHatch() {
   p.petEgg = 0;
   dbgPetHatch++;
@@ -8109,7 +8133,7 @@ function tryOpen() {
   }
   else if (mutPending > 0) openMutUp();
   else if (p.weaponPend > 0) openWeaponUp();   // 弓箭手：开局先定武器（弓 / 现代枪械 / 牌皇 / 训练家），再选奇物
-  else if (p.starterPend > 0) openStarterUp();  // 🧢 训练家：开局再挑一只御三家
+  else if (p.starterPend > 0 || starterPickDue()) openStarterUp();  // 🧢 训练家：第 5 波清剿后的御三家三选一（另外两只离队）
   else if (p.catchPend > 0) openCatchUp();      // 🐾 训练家：第 10 波清剿后捕捉宝可梦（二选一）
   else if (p.roninPend > 0) openRoninUp();     // 战士：开局先定战法（战士 / 浪客），再选奇物
   else if (p.artPend > 0) openArtUp();
@@ -8122,7 +8146,7 @@ const WEAPONS = [
   { id: 'gun', icon: '🔫', name: '现 代 枪 械', desc: '大人，时代变了！——换上 AK 与全身军用迷彩，成为士兵；不能再拿「十一月雨 / 雨一直下」' },
   { id: 'card', icon: '🃏', name: '牌 皇', desc: '普攻改为甩出卡牌：**每丢 4 张，第 5 张必是特殊牌**（💥爆破牌 命中爆炸范围伤害 / 🎴穿透牌 穿透敌人且更大 / 🐱召唤牌 召出哈吉咪助战 20 秒）；不能再拿 弹射/分裂/爆炸弩/弹墙，也拿不到「十一月雨 / 雨一直下」等弓专属奇物' }
 ];
-/* 🧢 训练家（**只在开发者版本出现**）：自己不攻击，全靠宝可梦；开局再挑一只御三家。
+/* 🧢 训练家（**正式版也有**）：自己不攻击，全靠宝可梦；开局三只御三家一起上，第 5 波清剿后三选一。
    ⚠️ 卡片上只显示「职业介绍」那一句（CLASS_INTRO.trainer）—— 别再往这里堆大段说明文案 */
 const TRAINER_WEAPON = { id: 'trainer', icon: '🧢', name: '训 练 家', dev: 1 };
 function weaponOptions() { return trainerOn() ? WEAPONS.concat([TRAINER_WEAPON]) : WEAPONS; }
@@ -8230,10 +8254,14 @@ function openWeaponUp() {
     apply() {
       p.weapon = w.id;
       if (w.id === 'trainer') {
-        /* 🧢 训练家：自己不攻击，先挑御三家（下一个面板），再走奇物流程 */
-        p.petKind = ''; p.petOwned = []; p.trainLv = 0;
-        p.starterPend = 1;
-        addText(p.x, p.y - 60, '🧢 训练家 · 挑选你的御三家', 20, '#ffd166', '#3a2a00');
+        /* 🧢 训练家：**开局三只御三家一起上**（用户要求），第 5 波清剿后才三选一（另外两只离队，见 petStarterWaveEnd） */
+        p.petKind = PET_STARTERS[0];
+        p.petOwned = PET_STARTERS.slice();
+        p.trainLv = 0;
+        p.starterPend = 0;
+        petSummonSync();
+        petHeadLoad();
+        addText(p.x, p.y - 60, '🧢 训练家 · 三只御三家全员出动！', 20, '#ffd166', '#3a2a00');
         return;
       }
       const txt = w.id === 'gun' ? '🔫 现代枪械 · 士兵就位!' : (w.id === 'card' ? '🃏 牌皇 · 开局手牌就绪' : '🏹 传统弓');
@@ -8246,15 +8274,16 @@ function openWeaponUp() {
   paintChoices('weapon');
   $('sc-weapon').classList.add('show');
 }
-/* 🧢 训练家：挑御三家（复用「选武器」面板的三个槽位） */
+/* 🧢 训练家：御三家三选一（**第 5 波清剿后**弹出；复用「选武器」面板的三个槽位）
+   —— 选谁留下、另外两只当场离队（用户要求：「必须舍弃其他两只，进行三选一然后再继续冒险」） */
 function openStarterUp() {
-  if (p.starterPend <= 0) return;
+  if (p.starterPend <= 0 && !starterPickDue()) return;
   curKind = 'starter';
   choosing = true;
   flashG = Math.max(flashG, 0.12);
   addRing(p.x, p.y, '#ffd166', 12);
   sfx.mut();
-  bigBanner('🧢 挑 选 御 三 家', CLASS_INTRO.trainer);
+  bigBanner('🧢 御 三 家 · 三 选 一', '选择留下的一只 · 另外两只离队');
   curChoices = PET_STARTERS.map(id => {
     const S2 = PET_SUMMON[id];
     return {
@@ -8265,15 +8294,16 @@ function openStarterUp() {
         + '**<br>生命 ' + petSummonHp(id) + ' · 伤害 ' + petHitDmgBase(id, 1) + ' · 射程 ' + S2.range,
       apply() {
         p.petKind = id;
-        p.petOwned = [id];
+        p.petOwned = [id];            // 🚫 另外两只御三家当场离队（petSummonSync 会把它们从场上收走）
+        p.starterPend = 0;
         petSummonSync();
         petHeadLoad();
-        addText(p.x, p.y - 62, '🧢 御三家：' + S2.name + '!', 22, '#ffd166', '#3a2a00');
+        addText(p.x, p.y - 62, '🧢 留下 ' + S2.name + ' · 另外两只离队', 22, '#ffd166', '#3a2a00');
         burst(p.x, p.y, 24, PET_FX_TINT[S2.element], 360);
       }
     };
   });
-  const lv = $('wp-lv'); if (lv) lv.textContent = '训练家 · 出发之前先挑一只御三家';
+  const lv = $('wp-lv'); if (lv) lv.textContent = '训练家 · 三选一（另外两只离队）';
   const st = $('wp-stats'); if (st) st.innerHTML = CLASS_INTRO.trainer;
   rerollLeft = 0;
   paintChoices('starter');
@@ -8377,7 +8407,7 @@ function buildPetPanel() {
   const eggRow = () => '<div class="pets-row pets-eggrow"><div class="pets-head"><img class="pets-ic" src="' + PET_HEAD[PET_EGG_FORM] + '" alt="">'
     + '<b>宝可梦蛋</b>'
     + '<span class="pets-hp">第 ' + PET_HATCH_WAVE + ' 波清剿后孵化 —— 会孵出什么还不知道</span></div></div>';
-  if (!owned.length) h = '<div class="pets-row"><div class="pets-head"><b>还没有宝可梦</b><span class="pets-hp">开局先挑一只御三家</span></div></div>';
+  if (!owned.length) h = '<div class="pets-row"><div class="pets-head"><b>还没有宝可梦</b><span class="pets-hp">选「训练家」开局就有三只御三家</span></div></div>';
   for (const id of owned) {
     const S2 = PET_SUMMON[id], sk = petSkillOf(id);
     const u = allyUnits.find(a => a.kind === 'pet' && a.petId === id && !a.dead);
@@ -15067,6 +15097,8 @@ function loadGame() {
   if (artWaveOn(s.artDueWv)) {
     triggerArtPick(s.artDueWv);
   }
+  /* 🧢 训练家：存盘时「御三家三选一」还没做完（第 5 波清剿后面板没答就退出 / 老存档进来）→ 当场补上 */
+  if (starterPickDue()) tryOpen();
   bigBanner('从 存 档 归 来', '第 ' + fromWave + ' 波 再战');
   return true;
 }
@@ -21714,6 +21746,9 @@ function updateGame(dt, rawDt) {
       petCatchWaveEnd(wave);
       /* 🐉 大器晚成（多龙梅西亚 / 迷你龙）：第 20 波清剿后一段 · 第 25 波清剿后二段 */
       petWaveEvoCheck(wave);
+      /* 🧢 御三家三选一：第 5 波清剿后**必须**留下三只里的其中一只（另外两只离队），选完才继续下一波。
+         放在 `saveGame` 之前 —— 存档里的波次已经推进到 6，读档时 `starterPickDue()` 会把面板补上 */
+      petStarterWaveEnd(wave);
       /* 每波结束自动存档（奇物奖励波记录待补发标记） */
       saveGame(wave + 1, artWaveOn(wave) ? wave : 0);
       /* 奇物：第 5/10/15/20/25 波清剿完毕各得一件（♾ 无尽：每 5 层一件） */
@@ -25319,6 +25354,8 @@ window.__musouTrainerInfo = () => {
     on: trainerOn() ? 1 : 0, devBuild: DEV_BUILD ? 1 : 0, dev: devOnNow() ? 1 : 0,
     isTrainer: isTrainer() ? 1 : 0, weapon: p.weapon || '', starter: p.petKind || '',
     owned: (p.petOwned || []).slice(), max: PET_MAX, trainLv: p.trainLv || 0,
+    /* 🧢 御三家三选一（第 5 波清剿后必须留一只）：读「还留着几只御三家 / 该不该选 / 是哪一波」 */
+    starterN: starterOwnedN(), starterPickWave: PET_STARTER_PICK_WAVE, starterDue: starterPickDue() ? 1 : 0,
     edge: PET_EDGE, edgeN: dbgPetEdgeN,   // 🚧 场地边界 + 「被墙夹回来」的次数（宝可梦越界 bug 的回归读数）
     pets, petN: pets.length,
     /* 🧬 进化读数：当前段位 / 各段形态 key 与名字 / 进化等级 / 本局进化次数 */
