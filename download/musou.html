@@ -1273,17 +1273,54 @@ const sfx = {
   die()    { tone(120, 26, 'sawtooth', 0.9, 0.28); noiseBurst(0.6, 0.3, 200, 0.4); },
   fanfare(){ [523,659,784,1046,1318].forEach((f,i)=>tone(f,f,'square',0.14,0.09,i*0.06)); }
 };
+/* 🎵 背景音乐：**程序化小调循环**（A 小调 Am → F → C → G），**纯乐音、不含任何鼓点/噪声**
+   ⚠️ 旧版是 `setInterval(150ms)` 里**每次都**排一发「70Hz 滑到 45Hz」的闷正弦（时长 0.16 秒、音量 0.32）—— 一秒敲 6.7 次，
+   音量（0.32）还是全场最大的一个，听感就是「背景音乐里一直有鼓点噪音」（用户报的 bug）；
+   而且 `next - ac.currentTime` 恒等于 0.1（那截「提前排程」是死代码），另一发高噪声还依赖游戏内 `time`
+   （面板暂停 / 变速时会漏拍或多拍）。现在改成**按拍、由音频时钟驱动**的排程：
+   每拍一个柔和低音，第 0/2 拍叠一个长和弦音、第 1 拍补一个高音，音量压到很低（0.08 / 0.04）。
+   `bgmTick` 由 `setInterval(120ms)` 驱动，但**排程时刻来自 `ac.currentTime`**（不受定时器抖动影响），
+   并提前 0.3 秒把音符写进音频时间轴。 */
+const BGM_BEAT = 0.6;            // 每拍 0.6 秒（100 BPM）
+const BGM_PROG = [
+  { root: 110.00, ch: [220.00, 261.63, 329.63] },   // Am
+  { root:  87.31, ch: [174.61, 220.00, 261.63] },   // F
+  { root: 130.81, ch: [196.00, 261.63, 329.63] },   // C
+  { root:  98.00, ch: [196.00, 246.94, 293.66] }    // G
+];
+/* 纯函数：第 `step` 拍该排哪些音符（`w` = 相对 ac.currentTime 的排程偏移）。
+   ⚠️ 抽成纯函数是为了能在**无头测试**里逐拍核对「这段 BGM 里没有任何鼓点/噪声」——
+   真机取不到 ac 时 `bgmTick` 直接 return，光跑帧验不了音色。 */
+function bgmNotesAt(step, w) {
+  const p = BGM_PROG[Math.floor(step / 4) % BGM_PROG.length];
+  const b = step % 4;
+  const bass = b === 3 ? p.root * 1.5 : p.root;   // 每小节最后一拍低音上行五度，循环感更明显
+  const out = [{ f: bass, type: 'triangle', dur: 0.42, v: 0.08, w }];
+  if (b === 0 || b === 2) out.push({ f: p.ch[b === 0 ? 0 : 1], type: 'sine', dur: 1.1, v: 0.04, w });
+  if (b === 1) out.push({ f: p.ch[2], type: 'sine', dur: 0.7, v: 0.032, w });
+  return out;
+}
+let bgmStep = 0, bgmNext = 0, dbgBgmNotes = 0;
+function bgmTick() {
+  if (!ac || muted) return;
+  if (state === 'over') return;                                        // 败阵 / 通关界面不排音符
+  /* ⚡ 页面不可见（切到后台/锁屏）时不再排音符：手机端能省下持续的解码与振荡器开销 */
+  try { if (typeof document !== 'undefined' && document.hidden) return; } catch (e) {}
+  const now = ac.currentTime;
+  if (!bgmNext || bgmNext < now - 0.5) { bgmNext = now + 0.08; bgmStep = 0; }   // 首次 / 长时间停顿后重新对齐
+  while (bgmNext < now + 0.3) {
+    const w = Math.max(0, bgmNext - now);      // 相对 currentTime 的排程偏移
+    const ns = bgmNotesAt(bgmStep, w);
+    for (let i = 0; i < ns.length; i++) { const n = ns[i]; tone(n.f, n.f, n.type, n.dur, n.v, n.w); dbgBgmNotes++; }
+    bgmStep++;
+    bgmNext += BGM_BEAT;
+  }
+}
 function startBGM() {
   if (bgmId) return;
-  const beat = 0.45;
-  bgmId = setInterval(() => {
-    if (!ac || muted || state === 'over') return;
-    /* ⚡ 页面不可见（切到后台/锁屏）时不再排音符：手机端能省下持续的解码与振荡器开销 */
-    try { if (typeof document !== 'undefined' && document.hidden) return; } catch (e) {}
-    const next = ac.currentTime + 0.1;
-    tone(70, 45, 'sine', 0.16, 0.32, next - ac.currentTime);
-    if (Math.floor(time / beat) % 2 === 1) noiseBurst(0.05, 0.025, 3000, 1);
-  }, 150);
+  bgmStep = 0; bgmNext = 0;
+  bgmTick();
+  bgmId = setInterval(bgmTick, 120);
 }
 
 /* ============================================================
@@ -25732,6 +25769,22 @@ window.__musouHpBoost = (v) => { if (v !== undefined) hpBoost = Math.max(0, Math
 window.__musouShopInfo = () => ({ on: shopOn ? 1 : 0, coins: coins, randBought: shopRandBought, randMax: SHOP_RAND_MAX, pickCost: SHOP_PICK_COST, rerollCost: SHOP_PICK_REROLL, randCost: SHOP_RAND_COST, picks: shopPicks.map(s => ({ id: s.id, sold: s.sold ? 1 : 0 })), pool: shopArtPool().length, mutBought: shopMutBought, mutCost: shopMutCost(), mutCosts: SHOP_MUT_COSTS.slice(), mutMax: SHOP_MUT_COSTS.length });   // 测试钩子：商店价格与本次开店状态（含 🎁 质变宝箱档位）
 window.__musouShopBuyMut = () => shopBuyMut();   // 测试钩子：买一个质变宝箱（走真实流程：扣钱 → 弹质变三选一）
 window.__musouShopWaveAt = (k) => shopWaveOn(k | 0) ? 1 : 0;   // 测试钩子：第 k 层清剿后是否进商店（每 5 层一次 = 4/9/14/19/…）
+/* 🎵 背景音乐读数（无头环境没有 AudioContext，所以这里除了运行时读数，还能**离屏推演 N 拍**）：
+   `__musouBGM(n)` 返回前 n 拍的完整排程（纯函数 `bgmNotesAt` 算的），测试据此核对
+   「没有低于 85Hz 的音（旧版 70→45 的闷鼓就没了）· 每秒 ≤3.5 个音（旧版 6.7 个）· 音量 ≤0.1（旧版 0.32）· 每个音 ≥0.4 秒」。
+   `drum/noise` 恒为 0 是**硬承诺**：现在这段 BGM 只有乐音，一发鼓点/噪声都不排。 */
+window.__musouBGM = (steps) => {
+  const st = Math.max(0, Math.min(800, steps | 0));
+  const plan = [];
+  for (let i = 0; i < st; i++) { const ns = bgmNotesAt(i, 0); for (let j = 0; j < ns.length; j++) plan.push({ f: ns[j].f, type: ns[j].type, dur: ns[j].dur, v: ns[j].v, step: i }); }
+  const secs = st * BGM_BEAT;
+  const nums = a => a.length ? a.reduce((m, x) => Math.min(m, x), Infinity) : 0;
+  return { beat: BGM_BEAT, bars: BGM_PROG.length, prog: BGM_PROG.map(p => p.root), played: dbgBgmNotes, step: bgmStep,
+    running: bgmId ? 1 : 0, muted: muted ? 1 : 0, plan, planSecs: secs,
+    perSec: secs > 0 ? plan.length / secs : 0,
+    maxVol: plan.reduce((m, n) => Math.max(m, n.v), 0), minDur: nums(plan.map(n => n.dur)), minF: nums(plan.map(n => n.f)),
+    drum: 0, noise: 0 };
+};
 window.__musouCardMusou = () => {   // 测试钩子：直接放一次牌皇无双（正前方 120° 扇甩 17 张特殊牌，不走按键）
   if (state !== 'play' || !p.alive || !isCard()) return 0;
   return cardMusouVolley(p.face);
