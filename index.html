@@ -927,14 +927,26 @@ const MM_W = 210, MM_H = Math.round(210 * H / W);   // 210 × 118
 const MM_PAD = 18;                                   // 距屏幕右/上边距
 function mmX() { return VW - MM_PAD - MM_W; }
 function mmY() { return isTouchUI ? 130 : 16; }      // 手机端让开右上角的暂停按钮
-/* 小地图上要画的友方单位（角色 + 召唤物 + 猫咪 + 影分身分身） */
+/* 小地图上要画的友方单位（角色 + 召唤物 + 猫咪 + 影分身分身）
+   ⚠️ 这是**每帧**调用的（drawMiniMap）→ 数组与元素对象都复用（`miniMapReuse`），
+   不再每帧 push 出 N 个新对象（训练家带 6 只宝可梦就是 7 个/帧 = 420 个/秒的短命垃圾）。
+   调用方只读 `out[0..n-1]`，不要把它存起来跨帧用。 */
+const miniMapReuse = [];
+let miniMapDotN = 0;
 function miniMapDots() {
-  const out = [{ k: 'player', x: p.x, y: p.y }];
-  for (const u of allyUnits) if (!u.dead) out.push({ k: u.kind, x: u.x, y: u.y });
-  if (catE) out.push({ k: 'cat', x: catE.x, y: catE.y });
-  if ((p.mut.clone || 0) > 0) { const cp = cloneMirrorPos(); if (cp) out.push({ k: 'clone', x: cp.x, y: cp.y }); }
-  return out;
+  let n = 0;
+  const put = (k, x, y) => {
+    const o = miniMapReuse[n] || (miniMapReuse[n] = { k: '', x: 0, y: 0 });
+    o.k = k; o.x = x; o.y = y; n++;
+  };
+  put('player', p.x, p.y);
+  for (const u of allyUnits) if (!u.dead) put(u.kind, u.x, u.y);
+  if (catE) put('cat', catE.x, catE.y);
+  if ((p.mut.clone || 0) > 0) { const cp = cloneMirrorPos(); if (cp) put('clone', cp.x, cp.y); }
+  miniMapDotN = n;
+  return miniMapReuse;   // ⚠️ 有效长度是 miniMapDotN（数组本身会留旧格子复用）
 }
+function miniMapDotList() { return miniMapReuse.slice(0, miniMapDotN); }   // 只给测试钩子用（它要 map 出可序列化的快照）
 
 /* ---------------- 全局状态 ---------------- */
 let state = 'title';               // title | play | pause | over
@@ -2174,6 +2186,9 @@ function leapSkill(e, dt, tg, d) {
    idle → [近距或随机] chargeAim(0.8s 实时瞄准+预警线) → charge(直线狂冲，撞墙急停) → rest
         → [否则] blinkAim(标记落点 0.9s) → 传送爆发 + 扇形弹 → rest */
 function tickBossAI(e, isF2, dt) {
+  /* ⚠️ 形参 `isF2` 在本函数里其实是**死分支**：终焉齿轮（final2）下一行就直接 return 了，
+     所以下面的 `isF2 ? 1200 : 1000`（冲刺速度）/ `isF2 ? 46 : 38`（冲撞伤害）/ 蓝色预警都是走不到的一半。
+     保留形参只是不想动调用点；**想给齿轮调冲刺参数的话要改的是 20308 那一带的固定炮台分支**，不是这里。 */
   const col = isF2 ? '#7fd4ff' : '#ff8a70';
   /* 🎡 终焉齿轮：**本版删掉冲刺与瞬移战技**（用户要求「只保留发射弹幕和释放法阵」）——
      它固定钉在地图正中间当炮台，所以这里直接待机，不进 chargeAim/charge/blinkAim 任何一段。 */
@@ -2414,7 +2429,8 @@ const BOSS_TEST = {
 let bossTestOn = false;                  // 测试闸门：默认关闭
 let bossTestSpawned = 0;                 // 诊断：本局通过测试闸门生成的新 Boss 数
 let planteraVines = [];                  // 世纪之花：场上藤蔓（含预警 → 绽放 → 每 0.5s 结算）
-function isTestBoss(type) { const t = ETYPES[type]; return !!(t && t.testBoss); }
+/* （这里原来有个 `isTestBoss(type)`：`ETYPES` 里**没有任何类型带 `testBoss` 标记**、全文件也没有调用点
+   → 恒返回 false 的死函数，已删。`bossTestOn` 只作为 `dbg().bossTest` 的读数保留。） */
 function wormSegs(head) { return enemies.filter(e => !e.dead && e.segOwner === head); }
 /* 波次「仍有敌人」判定：多节躯体（e.segPhantom）不算——它们随头部一起消失 */
 function waveFoes() { let n = 0; for (const e of enemies) if (!e.dead && !e.segPhantom) n++; return n; }
@@ -2967,7 +2983,7 @@ function voidFanHit(cx, cy, ang, r, arc, dmg, src) {
     if (da <= half) { hurtPlayer(dmg, px2 / (pd || 1), py2 / (pd || 1)); n++; }
   }
   for (const u of allyUnits) {
-    if (u.dead) continue;
+    if (u.dead || u.kind === 'shinypet') continue;   // ✨ 刷闪来访者不参战：AoE 也不该把它算进命中数（它 invT 999，只会白刷一圈蓝环）
     const ux = u.x - cx, uy = u.y - cy, ud = Math.hypot(ux, uy);
     if (ud > r + u.r) continue;
     if (Math.abs(angDiff(Math.atan2(uy, ux), ang)) > half) continue;
@@ -2981,7 +2997,7 @@ function voidCircleHit(cx, cy, r, dmg) {
   const px2 = p.x - cx, py2 = p.y - cy, pd = Math.hypot(px2, py2);
   if (p.alive && pd < r + p.r) { hurtPlayer(dmg, px2 / (pd || 1), py2 / (pd || 1)); n++; }
   for (const u of allyUnits) {
-    if (u.dead) continue;
+    if (u.dead || u.kind === 'shinypet') continue;   // 同上
     const ux = u.x - cx, uy = u.y - cy, ud = Math.hypot(ux, uy);
     if (ud < r + u.r) { hurtAlly(u, dmg, ux / (ud || 1), uy / (ud || 1)); n++; }
   }
@@ -4459,6 +4475,18 @@ const PET_SPECIES = {
     melee: { hitAt: 0.24, end: 0.58, r: 240, arc: Math.PI * 0.9, dmgMul: 1.2, fxK: 4, rot: 0, spin: 0, name: '甩尾' },
     slam: { warn: 0.5, air: 0.44, land: 0.22, r: 200, dmgMul: 1.5, fxK: 6, name: '泰山压顶' },
     skillW: [4, 3, 3]
+  },
+  /* ⭐ 基拉祈（图鉴 385 · PSYCHIC）—— ⚠️ 这张表**以前漏了它**：`PS({ pet:'jirachi' })`
+     会回退到妙蛙种子那条（属性变草系 → `PET_FX_TINT[PS(u).element]` 配色、`petFormElement()` 的
+     兜底、`PFX(u)` 全错）。有形态优先走 `PET_FORM_ELEMENT`，所以只有「按物种查」的这几处会中招。 */
+  jirachi: {
+    key: 'jirachi', element: 'PSYCHIC', label: '基拉祈',
+    scale: 1.67, keep: 210, walkSpd: 160,
+    walkT: [1.0, 1.9], restT: [0.25, 0.6], atkGap: [1.0, 1.7], touchCd: 1.2,
+    shot: { n: 8, first: 0.14, every: 0.09, spd: 460, dmgMul: 0.5 * 3, fxK: 3, name: '高速星星☆' },
+    melee: { hitAt: 0.2, end: 0.5, r: 230, arc: Math.PI * 0.9, dmgMul: 1.2, fxK: 5, rot: 0, spin: 0, name: '撞击' },
+    slam: { warn: 0.5, air: 0.44, land: 0.22, r: 190, dmgMul: 1.5, fxK: 5, name: '泰山压顶' },
+    skillW: [4, 3, 3]
   }
 };
 /* 属性配色（粒子/光环/蓄力光点用）—— NORMAL = 🐣 波克比的米黄 */
@@ -4546,7 +4574,8 @@ function petFormName(id, stage) {
 }
 function petForm(e) { return (e && e.petForm) || petFormKey((e && e.pet) || 'bulba'); }
 function petFormElement(e) { return PET_FORM_ELEMENT[petForm(e)] || PS(e).element; }
-const PET_SHINY_HP_MUL = 5;   // 🟢 闪光版本 = 本作闪光个体口径：血量 ×5 + 金光
+/* （原来的 `PET_SHINY_HP_MUL` 是死常量：闪光个体血量真正读的是后面的 `SHINY_HP_MUL`，
+   两份同名同值很容易改错一份还以为生效了 —— 已删。） */
 let petImg = {}, petOK = {}, petBad = false, petTintCv = null, petTintBad = false;
 let dbgPetShots = 0, dbgPetMelee = 0, dbgPetHops = 0, dbgPetHurt = 0, dbgPetTicks = 0, dbgPetSlam = 0, dbgJetTicks = 0, dbgPetAura = 0, dbgPetDash = 0;
 /* 🧢 训练家：宝可梦召唤物的诊断计数 */
@@ -4594,11 +4623,16 @@ function fxLoad() {
     }
   }
 }
-/* 立刻在 (x,y) 画一帧特效（k = 放大倍数，rot = 旋转弧度，alpha = 透明度） */
+/* 立刻在 (x,y) 画一帧特效（k = 放大倍数，rot = 旋转弧度，alpha = 透明度）
+   ⚠️ `PET_FX_ANCHOR` 只登记了 GRASS / FIRE / WATER 三套属性，而 `PET_FX` 有 7 套 ——
+   DRAGON / ELECTRIC / GHOST / PSYCHIC 每一帧都会走缺省分支。缺省锚点提成模块级常量，
+   别在热路径里写 `|| {}` / `|| [0.5, 0.5]`（那是每帧每特效一次对象 + 一次数组分配）。 */
+const FX_ANCHOR_DEF = [0.5, 0.5];
 function fxFrame(el, name, f, x, y, k, rot, alpha) {
   const M = (PET_FX[el] || {})[name], im = (fxImg[el] || {})[name];
   if (!M || !im || !(fxOK[el] || {})[name]) return false;
-  const an = ((PET_FX_ANCHOR[el] || {})[name]) || [0.5, 0.5];
+  const anchorTbl = PET_FX_ANCHOR[el];
+  const an = (anchorTbl && anchorTbl[name]) || FX_ANCHOR_DEF;
   const ax = an[0] * M.sw * k, ay = an[1] * M.sh * k;
   ctx.save();
   ctx.translate(x, y);
@@ -5246,7 +5280,7 @@ const PET_SKILLS_VAPOREON = [
    伏特替换（和**多龙奇的急速折返**同一套：撞完折返待机 0.5 秒，**顺带溅射附近的敌人**） */
 const PET_SKILLS_JOLTEON = [
   { id: 'thunder', name: '打雷', icon: '⚡', kind: 'thunder', cd: 5.0, range: 900, def: 1,
-    desc: '**先跑到战场中心**，**蓄力 0.5 秒**后随机选战场上 **5 名**敌人各劈一道单体雷击 · ' + petCdText(5.0),
+    desc: '**原地蓄力 0.5 秒**后随机选战场上 **5 名**敌人各劈一道单体雷击 · ' + petCdText(5.0),
     thunder: { charge: 0.5, n: 5, mul: 3.0, moveSpd: 420 } },
   { id: 'voltswitch', name: '伏特替换', icon: '🔌', kind: 'strike', cd: 1.1, range: 900, fxEl: 'ELECTRIC',
     desc: '和「急速折返」同一套：撞到就**立刻折返训练家身边待 0.5 秒**再冲 · 命中时**周围的敌人也一起吃伤害** · ' + petCdText(1.1),
@@ -5644,13 +5678,21 @@ function addBigShinyText(x, y, txt) {
   texts.push({ x, y, vy: -28, life: SHINY_TEXT_LIFE, max: SHINY_TEXT_LIFE, txt, size: SHINY_TEXT_SIZE, color: '#ffe873', stroke: '#6b3a00', big: 1 });
 }
 /* 来访的宝可梦：停/飘在训练家身边 SHINY_VISIT_T 秒（**闪光的停 SHINY_VISIT_T_SHINY 秒**），
-   送完金币就走（用独立 kind，不参与宠物 AI / 索敌 / 队伍） */
+   送完金币就走（用独立 kind，**不参与宠物 AI / 不参战 / 不被索敌 / 不进队伍**）
+   ⚠️⚠️ 参数 `id` 是**字符串**（'eevee' / 'jirachi' …），而 `PS(e)` 读的是 `e.pet` 字段 ——
+   字符串没有 `.pet` → `PS(id)` 会**恒等于 `PET_SPECIES.bulba`**（妙蛙种子那条）：
+   于是半径写成 `PS(id).r`（`PET_SPECIES` 里**根本没有 `r` 字段** → undefined → **NaN**，
+   地面影 + 闪光金环全部画不出来、无头桩里还会被当成非法绘制参数报红）、
+   大小取到妙蛙种子那条的 5.0（**比设计的 1/3 大小再大 3 倍**）、
+   名字取 `PS(id).name`（表里字段叫 `label` → undefined → 横幅显示英文 id「✨ 闪 光 eevee 来 了 ✨」）。
+   现在统一改读**召唤物那张表** `PET_SUMMON[id]`（和 `spawnPetAlly` 同一个口径）。 */
 function spawnShinyVisit(id, shiny) {
   const a2 = rnd(0, TAU);
   const rad = 58;
+  const S2 = PET_SUMMON[id] || PET_SUMMON.bulba;
   allyUnits.push({
     kind: 'shinypet', petId: id, pet: id, petForm: petFormKey(id), petShiny: shiny ? 1 : 0,
-    r: PS(id).r, scaleK: PS(id).scale, petScale: PS(id).scale,
+    r: S2.r, scaleK: S2.scale, petScale: S2.scale,
     x: Math.max(44, Math.min(W - 44, p.x + Math.cos(a2) * rad)),
     y: Math.max(44, Math.min(H - 44, p.y + Math.sin(a2) * rad)),
     hp: 1, maxhp: 1, flash: 0, invT: 999, dead: false, visitT: shiny ? SHINY_VISIT_T_SHINY : SHINY_VISIT_T, visitShiny: shiny ? 1 : 0,
@@ -5685,7 +5727,7 @@ function shinyMutWaveEnd(wave, forceShiny) {
   addCoins(gold);
   spawnShinyVisit(id, shiny);
   dbgShinyVisit++;
-  const nm = PS(id).name || id;
+  const nm = (PET_SUMMON[id] && PET_SUMMON[id].name) || SHINY_SPECIES_NAME[id] || id;   // ⚠️ 别用 `PS(id).name`：字符串喂给 PS() 会回退到妙蛙种子，而且那张表里字段叫 label 没有 name
   if (shiny) {
     const isNew = shinyRecord(id);
     dbgShinySeen++;
@@ -6886,12 +6928,21 @@ const PET_CATCHES = [
   { wave: 15, pool: ['eevee', 'charcadet'] }
 ];
 let petCatchCfg = null;      // 当前正在弹的那一档（面板文案用）
+/* ⚠️ 「已捕捉过的波次」只在**玩家真的选了一只之后**才写（`petCatchMark()`）——
+   以前是弹面板前就写：`p.catchPend` 不进存档，而切后台/锁屏会自动弹暂停面板（可以「💾 保存并回主页」），
+   于是「存档里已经记着第 10 波捕捉过了、面板却没了」→ 这一档捕捉机会**永久丢失**（读档后
+   `petCatchWaveEnd` 因为 indexOf 命中而永远跳过）。改成「选完才落账」后，没选就退出还能再弹一次。 */
+function petCatchMark() {
+  if (!petCatchCfg) return;
+  if (!Array.isArray(p.petCatchWv)) p.petCatchWv = [];
+  if (p.petCatchWv.indexOf(petCatchCfg.wave) < 0) p.petCatchWv.push(petCatchCfg.wave);
+}
 function petCatchWaveEnd(wave) {
   if (!isTrainer()) return 0;
   if (!Array.isArray(p.petCatchWv)) p.petCatchWv = [];
+  if (p.catchPend > 0) return 0;            // 已经有一档挂在面板上（没选完不重复弹）
   for (const c of PET_CATCHES) {
     if (wave < c.wave || p.petCatchWv.indexOf(c.wave) >= 0) continue;
-    p.petCatchWv.push(c.wave);
     petCatchCfg = c;
     p.catchPend = 1;
     tryOpen();
@@ -7730,6 +7781,10 @@ function makeTwins() {
   for (const role of ['laser', 'flame']) {
     const e = spawnEnemy('final5', false);
     e.twinRole = role;
+    /* 🌙 激光眼一出生就标「已经成对过了」——否则「先打死火焰眼」时，`twinsEnsurePartner`
+       会认为「场上没有火焰眼」而再补一只满血的（第 20 关永远打不完）。
+       正常路径（两只一起刷）靠这一行；「只刷出一只」的路径由 `twinsEnsurePartner` 自己补人并置位。 */
+    if (role === 'laser') e.twinPaired = 1;
     e.twinCd = role === 'laser' ? 1.2 : 1.6;
     e.twinOrbit = role === 'laser' ? rnd(0, TAU) : 0;
     e.x = Math.max(90, Math.min(W - 90, p.x + (role === 'laser' ? 520 : 300)));
@@ -7740,10 +7795,16 @@ function makeTwins() {
   }
   return out;
 }
-/* 第 20 关：双子魔眼 从队列里刷出第一只时，立刻把另一只也带出来（保证总是「一对」） */
+/* 第 20 关：双子魔眼 从队列里刷出第一只时，立刻把另一只也带出来（保证总是「一对」）
+   ⚠️ 必须**只成对一次**（`e.twinPaired`）：以前这里是「场上没有活的火焰眼就补一只」——
+   于是玩家**先打死火焰眼**时，同帧激光眼就补出一只**满血**火焰眼（还再播一次登场横幅+音效），
+   第 20 关永远打不完。现在成对成功/已存在都置位，之后不再补。 */
 function twinsEnsurePartner(e) {
   if (e.twinRole !== 'laser') return;   // 以激光眼为「先出场的那只」，避免重复补
-  if (enemies.some(o => !o.dead && o.type === 'final5' && o.twinRole === 'flame')) return;
+  if (e.twinPaired) return;             // 已经成对过了（含「一开始就是一对」的情况）
+  if (enemies.some(o => !o.dead && o.type === 'final5' && o.twinRole === 'flame')) { e.twinPaired = 1; return; }
+  e.twinPaired = 1;
+  window.__musouTwinPairN = (window.__musouTwinPairN || 0) + 1;   // 诊断：成对补人到底发生了几次
   const m = spawnEnemy('final5', false);
   m.twinRole = 'flame';
   m.twinCd = 1.6;
@@ -8570,7 +8631,10 @@ function rerollChoices() {
   if (!nxt || nxt.length < 3) return;
   if (curKind === 'art') {
     artOptIds = nxt.slice();
-    curChoices = nxt.map(id => { const d = ART_DEFS[id]; return { id, icon: d.icon, name: d.name, desc: d.desc, apply(){ artGain(id); } }; });
+    /* ⚠️ 这里必须和 `openArtUp()` 的 `apply` **完全一致**（都走 `artTryGain`）：
+       以前刷新后换成了 `artGain`，而它不做 `artFull()` 判定 → 「槽满 → 免费刷新 → 选一件」
+       会直接 `p.art[id] = 1` 白拿（面板显示 11/10），替换面板也不弹。 */
+    curChoices = nxt.map(id => { const d = ART_DEFS[id]; return { id, icon: d.icon, name: d.name, desc: d.desc, apply(){ artTryGain(id); } }; });
   } else {
     curChoices = nxt;
   }
@@ -8700,7 +8764,7 @@ const RONIN_ONLY_MUTS = ['firestep', 'cold', 'blade'];   // 浪客专属质变�
 /* 🧢 训练家专属质变（用户点名：训练家之魂 / 星之助战 / 羁绊奇迹）—— 别的职业候选池里一律剔除 */
 const TRAINER_ONLY_MUTS = ['trainsoul', 'starhelp', 'miracle', 'shinymut'];
 const TRAINER_SOUL_CAP = 5;      // 训练家之魂满层数（+10%/层 → 满层 +50%）
-const STARHELP_CAP = 5;          // 星之助战满层数（满层 = 基拉祈 45 级 = 解锁破灭之愿）
+const STARHELP_CAP = 5;          // 星之助战满层数（满层 = 基拉祈 50 级 = 解锁破灭之愿；拿了「千年之愿」上限 70）
 const MIRACLE_CAP = 4;           // 羁绊奇迹满层数（20/15/10/5 秒）
 /* ✨ 刷闪！（训练家专属质变，用户本轮点名）：每波清剿后**一只基础宝可梦来访送金币**（不进队伍），
    并有小概率是**闪光**（遇到即永久收录进「训练家闪光图鉴」）。
@@ -9219,7 +9283,9 @@ function wmRollStock() {
     if (tot <= 0) break;
     let r = Math.random() * tot, pick = pool[0];
     for (const id of pool) { r -= (w[wmBase(id).q] || 0); if (r <= 0) { pick = id; break; } }
-    const q = wmRollQual();
+    /* ⚠️ `wmRollQual()` 的结果在这里**从来没被用过**（品质一直取武器自带的 `wmBase(pick).q`）——
+       留着不只是死代码：它每次掷货架都会白推进 3 次共享 `Math.random()` 流（扰动一切与随机序列
+       有关的回归）。真要「货架品质随机」就得连着价格/显示口径一起改，那是另一件事。 */
     out.push({ id: pick, q: wmBase(pick).q });
     pool.splice(pool.indexOf(pick), 1);
   }
@@ -9564,7 +9630,7 @@ function wmPrismNew(inst, mul, i, key) {
   const s = wmStatOf(inst);
   const d = { inst: inst, key: key === undefined ? ((inst && inst.uid ? inst.uid : 0) + '#0') : key,
               mul: mul === undefined ? 1 : mul, ph: (TAU * i) / Math.max(1, s.swords), x: p.x, y: p.y - 40,
-              ang: rnd(0, TAU), hitCd: {}, cd: rnd(0.2, WM_PRISM_CD), dashT: 0, dashTrav: 0 };
+              ang: rnd(0, TAU), hitCd: new Map(), cd: rnd(0.2, WM_PRISM_CD), dashT: 0, dashTrav: 0 };
   wmPrisms.push(d);
   return d;
 }
@@ -10728,7 +10794,25 @@ function shopBuy(kind) {
     coins -= SHOP_RAND_COST;
     shopRandBought = (shopRandBought || 0) + 1;
     const id = pool[Math.floor(Math.random() * pool.length)];
-    artTryGain(id);
+    /* ⚠️ 槽满时 `artTryGain()` 只是挂起 + 弹「替换」面板、并返回 false —— 以前这条路**不登记挂起状态**，
+       玩家在替换面板点「放弃」时 `shopPendingPick` 是 null → 5000 金币不退、奇物也没拿到（钱货两空），
+       而「自选奇物（7000）」那条路是退款的 → 两条口径必须一致。 */
+    if (artFull()) {
+      shopPendingRand = 1;
+      pendArtId = id;
+      openSlotUp();
+      sfx.pick();
+      shopPaint();
+      saveGame(shopWaveNext, 0);
+      return;
+    }
+    if (artTryGain(id) === false) {   // 互斥等异常情况：原价退回，别让玩家白花
+      coins += SHOP_RAND_COST;
+      shopRandBought = Math.max(0, (shopRandBought || 0) - 1);
+      addText(p.x, p.y - 60, '这件奇物与已持有的互斥，买不了', 16, '#ff9d7a', '#3a1400');
+      shopPaint();
+      return;
+    }
   } else return;
   sfx.pick();
   burst(p.x, p.y, 14, '#ffd166', 300);
@@ -11043,6 +11127,7 @@ const SLOT_PAGE_SIZE = 5;
 const SLOT_PAGE_MAX = 3;         // 槽上限 13 → `ceil(13/5)` = 3 页（这行是口径说明 + 断言用；页数仍按列表长度算）
 let slotPage = 0;
 let shopPendingPick = null;        // 商店自选格因槽满挂起的交易 { i, id }（放弃时退款）
+let shopPendingRand = 0;           // 商店「随机奇物」因槽满挂起的交易（放弃时按 SHOP_RAND_COST 退款并把购买次数退回）
 function artTryGain(id) {
   if (!ART_DEFS[id]) return false;
   if (artGot(id)) return true;
@@ -11051,7 +11136,7 @@ function artTryGain(id) {
   openSlotUp();
   return false;
 }
-/* 🎒 槽满替换面板：**分页**列出已持有奇物（每页 SLOT_PAGE_SIZE = 7 件），点一件丢掉换新，或直接放弃 */
+/* 🎒 槽满替换面板：**分页**列出已持有奇物（每页 `SLOT_PAGE_SIZE = 5` 件 · 最多 3 页），点一件丢掉换新，或直接放弃 */
 function openSlotUp() {
   if (!pendArtId) return;
   slotList = artOwnedList();
@@ -11121,9 +11206,10 @@ function slotPick(i) {
   addText(p.x, p.y - 62, '换入 ' + ART_DEFS[add].icon + ART_DEFS[add].name, 16, '#8ff0e8', '#14404d');
   sfx.pick();
   burst(p.x, p.y, 16, '#8ff0e8', 320);
-  const shop = shopPendingPick;
+  const shop = shopPendingPick, rand = shopPendingRand;
   closeSlotUp();
   if (shop) { shopPicks[shop.i].sold = true; shopPendingPick = null; shopPaint(); saveGame(shopWaveNext, 0); }
+  else if (rand) { shopPendingRand = 0; shopPaint(); saveGame(shopWaveNext, 0); }   // 随机奇物：钱在买入时已扣，这里只是落账
   else tryOpen();
 }
 /* 放弃这次奇物（商店买的会退款） */
@@ -11131,9 +11217,16 @@ function slotSkip() {
   if (curKind !== 'slot' || !pendArtId) return;
   const lostId = pendArtId;
   addText(p.x, p.y - 62, '放弃了 ' + ART_DEFS[lostId].icon + ART_DEFS[lostId].name, 15, '#ff9d7a', '#3a1400');
-  const shop = shopPendingPick;
+  const shop = shopPendingPick, rand = shopPendingRand;
   closeSlotUp();
   if (shop) { coins += SHOP_PICK_COST; shopPendingPick = null; shopPaint(); saveGame(shopWaveNext, 0); }
+  else if (rand) {   // 随机奇物：原价退回 + 把「本店已买过一次」的次数也退回（等于这笔交易没发生）
+    coins += SHOP_RAND_COST;
+    shopRandBought = Math.max(0, (shopRandBought || 0) - 1);
+    shopPendingRand = 0;
+    addText(p.x, p.y - 86, '已退款 +' + SHOP_RAND_COST + ' 金币', 15, '#ffe08a', '#3a2a00');
+    shopPaint(); saveGame(shopWaveNext, 0);
+  }
   else tryOpen();
 }
 /* 护盾值上限：持奇物·超级护盾时 50 → 200 */
@@ -11825,13 +11918,22 @@ function wmWeaponHtml(x, key, sub) {
   return '<span class="up-ic">' + d.icon + '</span><span class="up-tx"><b style="color:' + wmQualCol(x.q) + '">' + d.name + ' ★' + x.star +
     '</b><small>' + wmQualName(x.q) + ' · ' + sub + '</small></span><span class="up-key">' + key + '</span>';
 }
-/* 货架/装备栏那一行「效果」文案：**被动武器没有伤害与间隔**（领袖旗帜 / 本源之力），
-   旧写法直接拼 `d.dmg`/`d.cd` 会显示成 `伤害 undefined / 间隔 undefineds` */
+/* 货架/装备栏那一行「效果」文案：**被动 / 光环类武器没有 `dmg` 与 `cd`**
+   （领袖旗帜 · 本源之力 · 水波护符 · 护盾打造器 · 生命再生器 · 无限手套），
+   旧写法直接拼 `b.dmg`/`b.cd` → 面板显示成「伤害 undefined / 间隔 undefineds」。 */
 function wmEffectText(id) {
   const b = wmBase(id);
   if (b.kind === 'passive') {
-    return b.bonus ? ('被动 · 角色伤害 +' + Math.round(b.bonus * 100) + '%/星') : '被动 · 不占普攻';
+    /* 🚩 领袖旗帜的字段叫 `buff`（每星 ×buffPer）、💠 本源之力叫 `bonus` —— 两个都要认，
+       否则旗帜会被笼统写成「被动 · 不占普攻」。 */
+    const pct = b.bonus ? b.bonus : (b.buff || 0);
+    return pct ? ('被动 · 角色伤害 +' + Math.round(pct * 100) + '%/星') : '被动 · 不占普攻';
   }
+  if (b.kind === 'aura') {
+    return '光环 · ' + (b.aura === 'wave' ? '波浪冲击' : b.aura === 'shield' ? '自动铸盾' : b.aura === 'regen' ? '持续回血' : '全屏一击')
+      + ' / 每 ' + (b.auraCd || 0) + 's';
+  }
+  if (typeof b.dmg !== 'number' || typeof b.cd !== 'number') return '被动 · 不占普攻';
   return '伤害 ' + b.dmg + ' / 间隔 ' + b.cd + 's';
 }
 function wmPaint() {
@@ -11841,7 +11943,9 @@ function wmPaint() {
   const bagFull = st.length >= wmBagMax() && eq.length >= wmMaxEquip();
   if (info) info.innerHTML = '🪙 金币 <b>' + coinLabel() + '</b> · 🎁 免费次数 <b>' + (p.wmFree || 0) + '</b> · ⚔ 装备 <b>' + eq.length + '/' + wmMaxEquip() + '</b> · 🎒 背包 <b>' + st.length + '/' + wmBagMax() + '</b>'
     + (bagFull ? '　<b style="color:#ff9d7a;">⚠ 背包已满！</b><span style="color:#c98a72;font-size:13px;">（先卖掉/卸下，或凑 3 件同名同星合成腾格子）</span>' : '');
-  if (sub) sub.innerHTML = '手上：' + (w ? w.icon + ' <b style="color:' + wmQualCol(w.q) + '">' + w.name + ' ★' + w.star + '</b>（' + wmQualName(w.q) + ' · ' + (w.kind === 'passive' ? wmEffectText(w.id) : '伤害 <b>' + w.dmg + '</b> · 间隔 <b>' + w.cd.toFixed(2) + 's</b> · 距离 <b>' + Math.round(w.reach) + '</b>') + '）' : '（没装备武器）');
+  /* 主手那一行：被动 / 光环类武器没有「伤害 / 间隔」这两个概念 →
+     光环武器的 `wmStatOf().cd` 只是兜底常量 0.04s，直接打印会和真实 `auraCd`（2/5/1/5 秒）矛盾 */
+  if (sub) sub.innerHTML = '手上：' + (w ? w.icon + ' <b style="color:' + wmQualCol(w.q) + '">' + w.name + ' ★' + w.star + '</b>（' + wmQualName(w.q) + ' · ' + ((w.kind === 'passive' || w.kind === 'aura') ? wmEffectText(w.id) : '伤害 <b>' + w.dmg + '</b> · 间隔 <b>' + w.cd.toFixed(2) + 's</b> · 距离 <b>' + Math.round(w.reach) + '</b>') + '）' : '（没装备武器）');
   /* 🛒 货架 3 格 */
   for (let i = 0; i < WM_STOCK_N; i++) {
     const b = $('wm-b' + i);
@@ -11987,22 +12091,30 @@ function pickChoice(i) {
   /* 🧢 宝可梦管理面板不是「三选一」：它有自己的技能卡按钮，别让数字键/残留按钮点进来把它关掉 */
   if (curKind === 'pets') return;
   const c = curChoices[i];
+  /* ⚠️⚠️ `c.apply()` **可能改掉 `curKind`**：奇物槽满时 `artTryGain()` 内部会 `openSlotUp()` 把
+     `curKind` 改成 `'slot'`。以前这里在 apply 之后才读 `curKind` 做记账 → ① 奇物那次数不消耗
+     （`p.artPend--` 走不到，反而落到最后 `else p.pending--` 把升级计数减成负数、吞掉一次升级三选一）；
+     ② 接着 `tryOpen()` 又按「artPend 还在」把奇物面板重新弹出来盖在替换面板上 → 替换面板的
+     slotPick/slotSkip 都要求 `curKind === 'slot'` → 两个面板互相压着、按键全部静默失效、
+     `choosing` 永远为真 → **世界冻结，只能刷新页面**。所以先存一份 kind0，并用它做全部记账/飘字。 */
+  const kind0 = curKind;
   c.apply();
-  if (curKind === 'mut') mutPending--;
-  else if (curKind === 'art') {
+  const slotUp = !!($('sc-slot') && $('sc-slot').classList && $('sc-slot').classList.contains('show'));
+  if (kind0 === 'mut') mutPending--;
+  else if (kind0 === 'art') {
     p.artPend--;
     /* 第 JOB_WAVE 波（第 10 波）的奇物选完后：法师额外开启「魔法转职」页面 */
     if (artWv === JOB_WAVE && isMage() && !p.job) p.jobPend = 1;
   }
-  else if (curKind === 'job') p.jobPend--;
-  else if (curKind === 'weapon') p.weaponPend--;
-  else if (curKind === 'starter') p.starterPend--;   // 🧢 训练家挑完御三家
-  else if (curKind === 'catch') p.catchPend--;       // 🐾 训练家捕捉完宝可梦
-  else if (curKind === 'ronin') p.roninPend--;
+  else if (kind0 === 'job') p.jobPend--;
+  else if (kind0 === 'weapon') p.weaponPend--;
+  else if (kind0 === 'starter') p.starterPend--;   // 🧢 训练家挑完御三家
+  else if (kind0 === 'catch') { p.catchPend--; petCatchMark(); }   // 🐾 训练家捕捉完宝可梦（**选完才记「这一档已用掉」**）
+  else if (kind0 === 'ronin') p.roninPend--;
   else p.pending--;
   sfx.pick();
-  burst(p.x, p.y, 14, curKind === 'art' ? '#7fd4ff' : (curKind === 'mut' ? '#d9a8ff' : '#ffe9a8'), 280);
-  addText(p.x, p.y - 46, '✦ ' + c.name + (curKind === 'art' ? ' 入手!' : ''), 22, curKind === 'art' ? '#8ff0e8' : (curKind === 'mut' ? '#d9a8ff' : '#ffe9a8'), curKind === 'art' ? '#14404d' : '#3a1d55');
+  burst(p.x, p.y, 14, kind0 === 'art' ? '#7fd4ff' : (kind0 === 'mut' ? '#d9a8ff' : '#ffe9a8'), 280);
+  addText(p.x, p.y - 46, '✦ ' + c.name + (kind0 === 'art' ? ' 入手!' : ''), 22, kind0 === 'art' ? '#8ff0e8' : (kind0 === 'mut' ? '#d9a8ff' : '#ffe9a8'), kind0 === 'art' ? '#14404d' : '#3a1d55');
   choosing = false;
   rerollLeft = 0;
   $('sc-level').classList.remove('show');
@@ -12012,9 +12124,10 @@ function pickChoice(i) {
   $('sc-weapon').classList.remove('show');
   $('sc-ronin').classList.remove('show');
   $('sc-wmshop').classList.remove('show');
+  /* 奇物槽满时 apply() 弹出了「替换」面板：它优先级最高 —— 继续冻结世界等玩家决定，
+     **绝不能再 tryOpen()**（那会把奇物面板重新盖上、`curKind` 顶回 'art' → 替换面板直接失效）。 */
+  if (slotUp) { choosing = true; return; }
   tryOpen();
-  /* 奇物槽满时 apply() 会弹出「替换」面板：它优先级最高，继续冻结世界等玩家决定 */
-  if ($('sc-slot').classList.contains('show')) choosing = true;
 }
 for (let i = 0; i < 4; i++) {   // 三选一面板（升级/质变/奇物）+ 转职 3 项 + 武器/战法/武器大师 4 项
   const ub = $('up-b' + i); if (ub) ub.addEventListener('click', () => pickChoice(i));
@@ -12454,14 +12567,19 @@ function killEnemy(e) {
   tryOpen();   // 有质变宝箱/升级在排队则弹出
   /* ♾ 无尽模式：**任何 Boss 被讨伐都只是「继续」** —— 没有通关结算，血量档位由层数决定（见 startWave），
      所以这里统一走一条「无尽讨伐」横幅，不再落进下面那些「第 10 / 20 / 30 关里程碑」分支。
-     ⚠️ 双子魔眼要**两只都倒下**、超级史莱姆要**最后一只小史莱姆倒下**才算讨伐（与普通模式同判据） */
-  if (endlessMode() && e.boss
+     ⚠️ 双子魔眼要**两只都倒下**、超级史莱姆要**最后一只小史莱姆倒下**才算讨伐（与普通模式同判据）；
+     ⚠️ `slimeMini` **没有 `boss` 标记**（它是分裂出来的小怪）→ 判据必须写成 `e.boss || e.type === 'slimeMini'`，
+     否则「最后一只小史莱姆倒下」会落进普通模式的第 10 关分支：无尽里弹「继续向第 20 关推进」，
+     还会把 `hpBoost` 顶到 1（无尽档位本该只由 `startWave` 的 `min(2, floor(k/10))` 给）。 */
+  const lastSlimeDown = (e.type === 'slimeKing' || e.type === 'slimeMini')
+    && !enemies.some(o => !o.dead && (o.type === 'slimeKing' || o.type === 'slimeMini'));
+  if (endlessMode() && (e.boss || e.type === 'slimeMini')
     && !(e.type === 'final5' && enemies.some(o => !o.dead && o.type === 'final5'))
-    && !(e.type === 'slimeKing' && enemies.some(o => !o.dead && (o.type === 'slimeKing' || o.type === 'slimeMini')))) {
+    && (!(e.type === 'slimeKing' || e.type === 'slimeMini') || lastSlimeDown)) {
     if (e.type === 'final3' || e.type === 'commander') for (const s of wormSegs(e)) s.dead = true;
     if (e.type === 'final2') { for (const hx of hexes) if (hx.warn) hx.warn.dead = true; hexes = []; }
     if (e.type === 'final4' || e.type === 'plunder' || e.type === 'final5' || e.type === 'final6' || e.type === 'sprinter') setSceneDark();
-    const lb = (ETYPES[e.type] && ETYPES[e.type].label) || 'Boss';
+    const lb = e.type === 'slimeMini' ? '超级史莱姆' : ((ETYPES[e.type] && ETYPES[e.type].label) || 'Boss');
     bigBanner('♾ ' + lb + ' 已被讨伐', '无尽征程继续 —— 第 ' + (wave + 1) + ' 层在等你（每 5 层一位 Boss）');
     slowT = Math.max(slowT, 0.4);
   } else if (e.type === 'final4' || e.type === 'plunder') {
@@ -12473,7 +12591,11 @@ function killEnemy(e) {
       bigBanner(bn, '🔥 地狱征程还没结束：还有第 31~35 关 —— 第 34 关清剿后会再开一次商店，第 35 关是「终焉齿轮」');
       slowT = Math.max(slowT, 0.5);
     } else {
-      victory();
+      /* 🧪 试验场里打死这只**绝不能走通关结算** —— `victory()` 第一件事就是 `storeDel()`（删存档）！
+         以前只有 final2（终焉齿轮）那条加了 `if (!p.lab)`，世纪之花 / 光明掠夺者漏了：
+         在试验场里打死任一只 → 弹通关面板 + **玩家存档被删**。 */
+      if (!p.lab) victory();
+      else { setSceneDark(); bigBanner(bn, '试验场：只放演出，不结算通关（存档安全）'); slowT = Math.max(slowT, 0.4); }
     }
   } else if (e.type === 'slimeKing' || e.type === 'slimeMini') {
     /* 🟢 第 10 关 Boss（三选一）里的超级史莱姆：**最后一只史莱姆倒下**才算讨伐
@@ -13181,6 +13303,10 @@ function enemyTarget(e) {
   let bd = (p.x - e.x) * (p.x - e.x) + (p.y - e.y) * (p.y - e.y), best = null;
   for (const u of allyUnits) {
     if (u.dead || u.kind === 'decoy' || u.faintT > 0) continue;   // 昏厥中的宝可梦不再被索敌
+    /* ✨ 刷闪！的来访宝可梦**不参战**（`invT = 999` + 只在训练家身边飘）——
+       以前它会被当成最近的合法目标：弓兵/法阵/Boss 瞄准弹全打在它身上、
+       伤害被 `invT` 无敌帧白吃掉 → 玩家凭空多出一段免伤窗口（与「不参战」的口径相反）。 */
+    if (u.kind === 'shinypet') continue;
     const d2 = (u.x - e.x) * (u.x - e.x) + (u.y - e.y) * (u.y - e.y);
     if (d2 < bd) { bd = d2; best = u; }
   }
@@ -14043,9 +14169,13 @@ function segDist(px2, py2, x1, y1, x2, y2) {
 /* 每帧：水柱喷射（跟随面向/指针），持续扣法术条；每 0.3s 结算一次，命中瞬间也立刻结算；
    多条水柱打在同一敌人身上可叠加伤害 */
 function updateWaterJet(dt) {
-  if (!isWater() || !p.alive) { p.jetOn = 0; p.jetNew = null; return; }
+  /* ⚠️ 停喷时**必须把 `jetPrev` 一起清掉**（和光法师那条 `lightJetPrev = null` 对称）：
+     只清 `jetOn` 的话，断喷（蓝耗见底 / 切职业 / 读档）后重新起喷时，
+     「上一轮记录里的敌人」会被当成已经吃过「刚压到的那一口」→ 要等 0.3s 节拍才掉第一滴血。
+     （`p.jetNew` 是历史死字段：只被赋值、全文件没有任何读取点，已删。） */
+  if (!isWater() || !p.alive) { p.jetOn = 0; p.jetPrev = null; return; }
   const canJet = p.memT <= 0 && p.mem > 0;
-  if (!canJet) { p.jetOn = 0; p.jetNew = null; return; }
+  if (!canJet) { p.jetOn = 0; p.jetPrev = null; return; }
   if (!p.jetOn) { p.jetOn = 1; p.jetTick = 0.3; }   // 起喷：首次周期结算在 0.3s 后（起喷瞬间由"命中即伤"补上）
   /* 持续消耗法术条：75/秒（满魔能 450 恰好连喷 6 秒；初始 200 自动为 ≈2.67 秒） */
   p.mem = Math.max(0, p.mem - waterDrainRate() * dt);
@@ -14060,7 +14190,7 @@ function updateWaterJet(dt) {
       p.memT = memFullT();
       tone(180, 90, 'square', 0.10, 0.07);
     }
-    p.jetOn = 0; p.jetNew = null;
+    p.jetOn = 0; p.jetPrev = null;
     return;
   }
   const lanes = waterLanes(), Wd = waterWidth(), L = waterLen();
@@ -14202,8 +14332,11 @@ function updateHellHazards(dt) {
     if (h.tick <= 0) {
       h.tick = h.gear ? GEAR_FIRE_TICK : HELL_PIT_TICK;
       if (Math.hypot(p.x - h.x, p.y - h.y) <= h.r + p.r) {
-        /* 火坑 / 地火都是**穿盾**伤害（无视守护盾与护盾值；pierceShield 同时意味着不给无敌帧） */
-        hurtPlayer(h.dmg || HELL_PIT_DMG, (p.x - h.x) || 1, (p.y - h.y) || 1, true);
+        /* 火坑 / 地火都是**穿盾**伤害（无视守护盾与护盾值）。
+           ⚠️ 第 5 个参数 `noIframe = true` 也必须给：**节拍型伤害不能被别的伤害的无敌帧隔断** ——
+           否则玩家刚被小怪碰一下（0.75 秒无敌），「每 0.5 秒 5 点」的地火就会被吞掉一两跳
+           （实测过：2 秒里结算计数 4 次、真正掉血只有 2 次）。 */
+        hurtPlayer(h.dmg || HELL_PIT_DMG, (p.x - h.x) || 1, (p.y - h.y) || 1, true, true);
         if (h.gear) dbgGearFireHits++; else dbgHellPitsHit++;
       }
     }
@@ -14221,7 +14354,7 @@ function updateHellHazards(dt) {
     if (hellRest.ringT <= 0) {
       hellRest.ringT = HELL_RING_TICK;
       if (inHellRing(p.x, p.y)) {
-        hurtPlayer(HELL_RING_DMG, p.x < W / 2 ? 1 : -1, 0, true);   // 火海穿盾
+        hurtPlayer(HELL_RING_DMG, p.x < W / 2 ? 1 : -1, 0, true, true);   // 火海穿盾 + 节拍型（不吃/不给无敌帧，同地火）
         dbgHellRing++;   // 只计数：火海边缘本身画得很清楚，不再每次扣血都飘字
       }
     }
@@ -14677,12 +14810,19 @@ function saveWaveInfo() {
 /* 所有可能被 tryOpen / 商店 / 暂停 / 结算弹出的面板。
    读档、重开、败阵、通关时统一用 hideAllPanels() 收干净——只 hide 一部分的话，
    像「战士之道 / 武器选择」这种开局面板就会在读档后残留（点了也没反应，因为 choosing=false）。 */
-const PANEL_IDS = ['sc-start', 'sc-level', 'sc-mut', 'sc-art', 'sc-slot', 'sc-ronin', 'sc-weapon', 'sc-job', 'sc-shop', 'sc-wmshop', 'sc-pause', 'sc-confirm', 'sc-over', 'sc-win', 'sc-meta', 'sc-codex', 'sc-pets', 'sc-shiny'];
+const PANEL_IDS = ['sc-start', 'sc-level', 'sc-mut', 'sc-art', 'sc-slot', 'sc-ronin', 'sc-weapon', 'sc-job', 'sc-shop', 'sc-wmshop', 'sc-pause', 'sc-confirm', 'sc-over', 'sc-win', 'sc-meta', 'sc-codex', 'sc-pets', 'sc-shiny', 'sc-bosslab'];
 function hideAllPanels() {
   for (const id of PANEL_IDS) { const el = $(id); if (el && el.classList) el.classList.remove('show'); }
   shopOn = false; shopPend = 0; startConfirm = false;
-  pendArtId = null; slotList = []; shopPendingPick = null;
+  pendArtId = null; slotList = []; shopPendingPick = null; shopPendingRand = 0;
   petPanelOn = false;   // 🧢 宝可梦管理面板也一起收起（否则读档/回主页后还挂着，且 choosing 会卡住世界）
+  /* ⚠️ 面板收起必须**连「世界冻结」一起解除**：宝可梦面板走的是 `choosing + curKind='pets'`，
+     而 `pickChoice` 对 `curKind === 'pets'` 是直接 return 的 —— 只摘面板不清 choosing 的话，
+     一旦出现「先弹面板、同帧又判败阵/结算」的时序就是**永久不更新 + 所有按键点不动**（只能刷新）。
+     各调用点原有的 `choosing = false` 留着无害，这里是唯一的收口。 */
+  choosing = false;
+  curKind = 'level';
+  curChoices = [];
 }
 function loadGame() {
   const s = saveWaveInfo();
@@ -14779,11 +14919,17 @@ function loadGame() {
     catE = { x: p.x, y: p.y, ang: rnd(0, TAU), atkCd: 0.9, busy: false, bT: 0, tx: 0, ty: 0, meow: rnd(1, 4), roarT: 3 };
   }
   const fromWave = clampWave(s.wave || 1);
+  /* ⚠️ `resetRun()` 末尾已经跑过一次 `startWave(1)`，而 `startWave()` **不清场**（只重排刷怪队列）——
+     地狱/无尽下第 1 波必出奇遇，抽到「绿巨人团建」会当场 spawn 5 只战将；这里若不先清掉，
+     读档后地图中心就多出 5 只第 1 波的幽灵战将（玩家出生点旁边），波次清剿还得先把它们打光。 */
+  enemies = []; spawnQ = [];
   startWave(fromWave);
   /* 恢复黑暗战场（若存档于 20 层魔君讨伐之后） */
   if (s.sceneDark) setSceneDark();
-  /* 未领取的奇物奖励（如结算第5波后立即刷新）补发 */
-  if (s.artDueWv === 5 || s.artDueWv === 10 || s.artDueWv === 15 || s.artDueWv === 20 || s.artDueWv === 25) {
+  /* 未领取的奇物奖励（如结算第5波后立即刷新）补发
+     ⚠️ 判据必须走 `artWaveOn()`：无尽模式的奇物波是**每 5 层**（第 30/35/40… 层也要补发），
+     以前这里写死 `=== 5/10/15/20/25` → 无尽里第 30 层之后存盘、回来继续时奇物**永久丢失**。 */
+  if (artWaveOn(s.artDueWv)) {
     triggerArtPick(s.artDueWv);
   }
   bigBanner('从 存 档 归 来', '第 ' + fromWave + ' 波 再战');
@@ -14820,6 +14966,10 @@ function resetRun() {
   p.noDashT = 0;
   p.bladeT = 0; p.bladeBuffT = 0;   // 🗡 祖传宝刀：天降倒计时 / 增伤计时随新局归零
   blackHoles = [];
+  /* 🧨 跨局战斗实体：漏清会「带着上一局的残留开新局」——
+     `nukeFx`（士兵无双核弹还没落地就死亡重开 → 新局在旧坐标炸一次并真的结算伤害）
+     `planteraVines`（世纪之花战里带着活藤蔓死亡重开 → 新局头几秒藤蔓照旧对玩家掉血，还会被画出来） */
+  nukeFx = null; planteraVines = [];
   spawnQ = []; spawnT = 0;
   p.x = W / 2; p.y = H / 2; p.vx = 0; p.vy = 0;
   p.maxhp = baseHp() + metaHpBonus();   // 新的一局生命上限回到初始值（困难 30 / 简单 50）+ 局外传承「体魄」
@@ -15075,10 +15225,12 @@ function startGame() {
 /* 真正开新局；carry = 放弃旧档时结算出的传承金币（用于提示） */
 function doStartGame(carry) {
   initAudio();
-  $('sc-confirm').classList.remove('show');
+  /* ⚠️ 先统一收干净：以前只 remove sc-start/sc-confirm/sc-codex，而**主页**上还能开着
+     养成 / 闪光图鉴 / Boss 试验场（`sc-meta` / `sc-shiny` / `sc-bosslab`），
+     开着它们按回车（或点「开始游戏」）→ 新局开始但面板还挂在屏幕上，而 `choosing = false`
+     → 世界在面板背后照跑（玩家会被看不见的敌人打），面板按钮在战斗中依然可点。 */
+  hideAllPanels();
   startConfirm = false;
-  $('sc-start').classList.remove('show');
-  $('sc-codex').classList.remove('show');
   storeDel();          // 新游戏：清除旧存档
   p.role = selRole;    // 出征前选定的角色（主页角色卡）
   diffMode = selDiff;  // 出征前选定的难度（主页难度卡）
@@ -15783,9 +15935,10 @@ function syncRoleUI() {
   on('btn-role-a', selRole === 'archer');
   on('btn-role-m', selRole === 'mage');
   /* 主页只留「一句话人设」（角色卡小字），**不再列出专属质变/专属奇物清单** ——
-     那些属于进游戏后的探索内容；想看完整清单请去「📖 图鉴」。 */
-  const tip = $('role-tip');
-  if (tip) { tip.classList.remove('on'); tip.innerHTML = ''; }
+     那些属于进游戏后的探索内容；想看完整清单请去「📖 图鉴」。
+     （原来这里还在清一个 `#role-tip` 元素，那一整块 UI 早就删掉了 → 死代码已移除；
+      `.role-tip` 这个 CSS 类现在只被 `#diff-tip` 用。）
+  */
   /* 按键说明随角色切换（自动挥砍 → 自动射击 → 自动咏唱） */
   const desk = $('kbd-atk-d'), tch = $('kbd-atk-t');
   if (!desk || !tch) return;
@@ -18157,9 +18310,16 @@ function drawAllies() {
 }
 /* 局外·闪光套装：脚下金色光环（职业色调辉光）+ 头顶齿轮装饰（三套共同的标志） */
 let dbgAura = 0, dbgGear = 0, dbgGearAt = null;   // 诊断：套装光环/头顶齿轮的实际绘制次数与落点
+/* 职业配色查表：`CLASS_SETS` 是常量表，但这两处绘制**每帧**都要取一次颜色 ——
+   以前写成 `CLASS_SETS.filter(...)`（每帧 2 次数组分配 + 闭包），这里按 role 记一次就够。 */
+const SET_COL_CACHE = {};
+function classSetCol(role) {
+  if (SET_COL_CACHE[role] === undefined) SET_COL_CACHE[role] = ((CLASS_SETS.filter(c => c.role === role)[0] || {}).col) || '#ffd166';
+  return SET_COL_CACHE[role];
+}
 function drawShinyAura() {
   dbgAura++;
-  const col = ((CLASS_SETS.filter(c => c.role === p.role)[0] || {}).col) || '#ffd166';
+  const col = classSetCol(p.role);
   const pul = 0.5 + Math.sin(time * 6) * 0.5;
   ctx.save();
   const g = ctx.createRadialGradient(p.x, p.y, 4, p.x, p.y, 46);
@@ -18184,7 +18344,7 @@ function drawShinyAura() {
 }
 /* 头顶齿轮：金色 8 齿小齿轮，缓慢旋转 + 职业色芯 + 高光（闪光套装的标志性装饰） */
 function drawShinyGear() {
-  const col = ((CLASS_SETS.filter(c => c.role === p.role)[0] || {}).col) || '#ffd166';
+  const col = classSetCol(p.role);
   const cx = p.x, cy = p.y - 40 + Math.sin(time * 3) * 1.6;
   dbgGear++; dbgGearAt = { x: Math.round(cx), y: Math.round(cy), teeth: 8, head: Math.round(p.y), role: p.role, col };
   const rot = time * 1.1;
@@ -20128,7 +20288,10 @@ function updateGame(dt, rawDt) {
       if (!isArcher() && !isMage()) {
         for (const e of enemies) {
           if (e.dead) continue;
-          const dx = e.x - p.x, dy = e.y - p.y, d = Math.hypot(dx, dy);
+          /* `|| 1` 兜底：dx/dy 同时为 0 时（敌人坐标与玩家完全重合）会算出 NaN 方向 →
+             `e.kx += NaN` 把敌人坐标写成 NaN → 之后所有距离判定全是 false：
+             既打不中也不算死，却仍被 `waveFoes()` 计数 → **那一波永远清不掉**（软锁）。 */
+          const dx = e.x - p.x, dy = e.y - p.y, d = Math.hypot(dx, dy) || 1;
           if (d < 330) hitEnemy(e, dx / d, dy / d, 1400, Math.max(2, Math.round(dmgNow() * musouDmgMul())));
         }
       }
@@ -20367,6 +20530,9 @@ function updateGame(dt, rawDt) {
       pr.mul = owner.mul;
       const pst = wmStatOf(pr.inst);
       pr.cd -= dt;
+      /* 冷却表里已经死掉的敌人要清掉（和永恒飞剑 `swordE.hitCd` 同款）——
+         按对象记冷却的 Map 若不清，长时间局（无尽）会一直攥着几千个死敌人对象。 */
+      if (pr.hitCd.size) for (const en of pr.hitCd.keys()) if (en.dead) pr.hitCd.delete(en);
       if (pr.dashT > 0) {                     // 扑击：直线冲向目标，命中即回
         pr.dashT -= dt;
         const step = pst.spd * dt;
@@ -20377,8 +20543,11 @@ function updateGame(dt, rawDt) {
           if (e.dead) continue;
           const dx = e.x - pr.x, dy = e.y - pr.y;
           if (dx * dx + dy * dy > (e.r + 16) * (e.r + 16)) continue;
-          if ((pr.hitCd[e] || -9) > time - 0.4) continue;
-          pr.hitCd[e] = time;
+          /* ⚠️ 冷却必须按**敌人对象**分别记 → 只能用 Map。以前写成 `pr.hitCd[e] = time`
+             （普通对象下标）→ 键恒为 "[object Object]"（整个对象只有一格），
+             撞到任意一只后这柄飞剑 0.4 秒内对**其它所有敌人**也打不出伤害。 */
+          if ((pr.hitCd.get(e) || -9) > time - 0.4) continue;
+          pr.hitCd.set(e, time);
           hitEnemy(e, dx / (Math.hypot(dx, dy) || 1), dy / (Math.hypot(dx, dy) || 1), pst.force, wmPrismDmg(pr));
           burst(pr.x, pr.y, 8, '#9adcff', 300);
           dbgWMPrismHits++;
@@ -21126,6 +21295,9 @@ function updateGame(dt, rawDt) {
         if (aCav && bCav) continue;       // 铁骑互不推挤（各自冲锋）
         const dx = b.x - a.x, dy = b.y - a.y;
         const rr2 = (a.r + b.r) * 0.85;
+        /* ⚡ 先按 x 距离剪枝：这是全帧唯一的 O(n²)（出怪上限 400 → 8 万对/帧），
+           绝大多数敌人对连 x 都不重叠，一次比较就能跳过（结果与原来完全一致）。 */
+        if (dx >= rr2 || dx <= -rr2) continue;
         const d2 = dx * dx + dy * dy;
         if (d2 > 0.01 && d2 < rr2 * rr2) {
           const d = Math.sqrt(d2);
@@ -21892,7 +22064,14 @@ function drawGame() {
 
   /* 哈姆黑洞 */
   for (const h of blackHoles) {
-    const k = Math.min(1, (8 - Math.max(0, h.t)) * 0.55 + 0.4);
+    /* 归一化半径系数：起手 0.35 秒涨开、最后 0.4 秒收束（黑洞寿命固定 4 秒）。
+       ⚠️ 老写法 `Math.min(1, (8 - h.t) * 0.55 + 0.4)`：`h.t ∈ (0, 4]` → 括号里恒 ≥ 2.6
+       → `k` **永远是 1**（半径动画完全没生效）；而且一旦有人把寿命调到 8.7 秒以上，
+       `62 * k` 就会变**负数** → 真机 `createRadialGradient` / `arc` 抛 IndexSizeError
+       → drawGame 中断（相机 translate 泄漏 → 就是本项目踩过的「画面卡死」）。
+       现在按真实寿命归一，并夹在 [0.2, 1] 里，永远不会出负数。 */
+    const age = Math.max(0, 4 - Math.max(0, h.t));
+    const k = Math.max(0.2, Math.min(1, age / 0.35, Math.max(0, h.t) / 0.4));
     ctx.save();
     ctx.translate(h.x, h.y);
     const rg = ctx.createRadialGradient(0, 0, 2, 0, 0, 62 * k);
@@ -21912,7 +22091,10 @@ function drawGame() {
 
   /* 敌人 */
   for (const e of enemies) {
-    if (e.airH > 0) shadeAir(e.x, e.y, e.r, e.airH); else shade(e.x, e.y, e.r);
+    /* 💡 光明掠夺者隐身时**连影子都不能留**：影子是这里（调用方）画的，而 `drawEnemy` 里那句
+       「隐身 → 直接 return 不画」只挡得住本体 —— 以前椭圆影子照样跟着它满场跑，
+       玩家靠影子就能读出它的走位，「隐身」在视觉层等于没用（小地图那边都已经专门跳过它了）。 */
+    if (!plunderHidden(e)) { if (e.airH > 0) shadeAir(e.x, e.y, e.r, e.airH); else shade(e.x, e.y, e.r); }
     /* 闪光词条·疾风尘迹：高速时拖出两道残影（1.5 倍移速的视觉读法） */
     if (e.aff && e.aff.spd) {
       const sp = Math.hypot(e.vx + e.kx, e.vy + e.ky);
@@ -21934,7 +22116,7 @@ function drawGame() {
       const w = e.r * 2.4;
       ctx.fillStyle = 'rgba(10,10,10,0.65)';
       ctx.fillRect(e.x - w / 2, e.y - e.r * 2.3 - 8, w, 3.4);
-      ctx.fillStyle = e.boss ? '#ffd166' : '#e05545';
+      ctx.fillStyle = '#e05545';   // 小兵血条（Boss 走下面的大血条，这个三元以前永远取同一边 → 死代码已删）
       ctx.fillRect(e.x - w / 2, e.y - e.r * 2.3 - 8, w * Math.max(0, e.hp / e.maxhp), 3.4);
     }
     if (e.boss) {
@@ -23044,7 +23226,9 @@ function drawGame() {
     ctx.lineCap = 'round';
     for (const d of rainDrops) {
       const L = d.len;
-      const nx = d.vx / (Math.hypot(d.vx, d.vy) || 1), ny = d.vy / (Math.hypot(d.vx, d.vy) || 1);
+      /* `Math.hypot` 比 sqrt 还贵（内部要做溢出保护）—— 这里算一次就够，别算两次 */
+      const dm = Math.hypot(d.vx, d.vy) || 1;
+      const nx = d.vx / dm, ny = d.vy / dm;
       ctx.globalAlpha = d.a * 0.85;
       ctx.strokeStyle = '#cfe6ff';
       ctx.lineWidth = d.w;
@@ -23318,8 +23502,10 @@ function drawMiniMap() {
     ctx.strokeRect(zx + 0.75, zy + 0.75, zw - 1.5, zh - 1.5);
     ctx.restore();
   }
-  /* 友方召唤物（机枪/火箭炮/医疗/假人/小跟班） */
-  for (const d of miniMapDots()) {
+  /* 友方召唤物（机枪/火箭炮/医疗/假人/小跟班）—— 复用数组，只画前 miniMapDotN 个 */
+  miniMapDots();
+  for (let di = 0; di < miniMapDotN; di++) {
+    const d = miniMapReuse[di];
     if (d.k === 'player') continue;
     const dx = tx(d.x), dy = ty(d.y);
     if (d.k === 'clone') {
@@ -23399,10 +23585,15 @@ function drawHUD() {
   ctx.fillStyle = 'rgba(0,0,0,0.45)';
   rr(56, 20, 250, 18, 9); ctx.fill();
   const hpw = 250 * Math.max(0, p.hp / p.maxhp);
-  const hg = ctx.createLinearGradient(56, 0, 306, 0);
-  hg.addColorStop(0, p.hp < 10 ? '#ff2d1a' : '#e05545');
-  hg.addColorStop(1, p.hp < 10 ? '#ff7a60' : '#ff8a70');
-  ctx.fillStyle = hg;
+  /* HP 条渐变只有「低血 / 正常」两种、坐标又是常量 → 缓存两份（同文件里全屏渐变早就这么做了） */
+  const hpLow = p.hp < 10;
+  if (!vigHpNorm || !vigHpLow) {
+    vigHpNorm = ctx.createLinearGradient(56, 0, 306, 0);
+    vigHpNorm.addColorStop(0, '#e05545'); vigHpNorm.addColorStop(1, '#ff8a70');
+    vigHpLow = ctx.createLinearGradient(56, 0, 306, 0);
+    vigHpLow.addColorStop(0, '#ff2d1a'); vigHpLow.addColorStop(1, '#ff7a60');
+  }
+  ctx.fillStyle = hpLow ? vigHpLow : vigHpNorm;
   rr(58, 22, Math.max(hpw - 4, 2), 14, 7); ctx.fill();
   ctx.fillStyle = 'rgba(255,255,255,0.85)';
   ctx.fillText(Math.max(0, Math.ceil(p.hp)) + ' / ' + p.maxhp, 70, 38);
@@ -23433,7 +23624,7 @@ function drawHUD() {
     ctx.globalAlpha = 0.6 + Math.sin(time * 10) * 0.4;
     ctx.fillStyle = '#ffd166';
     ctx.font = 'bold 15px "Microsoft YaHei",sans-serif';
-    ctx.fillText('按 U 发动!', 314, 66);
+    ctx.fillText(isTouchUI ? '点右下「奥义」键发动!' : '按 U 发动!', 314, 66);   // 📱 手机档位不能提示键盘键位
     ctx.globalAlpha = 1;
   }
   /* 奇物·过量治疗：护盾值读数 */
@@ -23569,7 +23760,7 @@ function drawHUD() {
   ctx.textAlign = 'right';
   ctx.fillStyle = 'rgba(255,255,255,0.4)';
   ctx.font = '13px "Microsoft YaHei",sans-serif';
-  ctx.fillText('M 静音 · P 暂停', VW - 24, VH - 20);
+  ctx.fillText(isTouchUI ? '暂停键在右上' : 'M 静音 · P 暂停', VW - 24, VH - 20);   // 📱 手机档位给触屏入口，别写键盘键位
   /* 士兵：弹夹余弹（打空时显示装弹进度条） */
   if (isGunner()) {
     const magMax = gunMagMax();
@@ -23645,7 +23836,7 @@ function overlayKey() {
 }
 let perfAcc = 0, perfN = 0;
 /* 全屏渐变的缓存（尺寸固定 → 建一次就够；浓度变化用 globalAlpha 表达） */
-let vigRain = null, vigLowHp = null, vigMusou = null;
+let vigRain = null, vigLowHp = null, vigMusou = null, vigHpNorm = null, vigHpLow = null;
 function frame(now) {
   requestAnimationFrame(frame);
   let rawDt = (now - last) / 1000;
@@ -23694,8 +23885,9 @@ function frame(now) {
   syncTouchUI();       // 触屏控制层只在游戏内显示（主页收起）
   syncDashJoyUI();     // 闪避摇杆的瞄准/冷却外观（仅在变化时写 DOM）
   syncLabBar(false);   // 🧪 Boss 试验场状态条（只在试验场里显示）
-  dbgDrawN++;
   drawGame();
+  dbgDrawN++;          // ⚠️ 计数必须在 drawGame() **之后**：`__musouPerf().draws` 的语义是
+                       //    「真正画完的帧数」，写在前面的话 drawGame 中途抛异常也会被算上（诊断失真）。
 }
 requestAnimationFrame(frame);
 /* 调试钩子（供无头测试使用，浏览器中无副作用） */
@@ -24162,7 +24354,7 @@ window.__musouShinyDex = () => ({
   bigTextList: texts.filter(t => t.big).map(t => ({ txt: t.txt, size: t.size, life: +t.life.toFixed(2) })),
   allTexts: texts.map(t => t.txt),
   visitN: dbgShinyVisit, seenN: dbgShinySeen, newN: dbgShinyNew,
-  visitors: allyUnits.filter(u => u.kind === 'shinypet').map(u => ({ id: u.petId, shiny: u.visitShiny ? 1 : 0, t: +(u.visitT || 0).toFixed(2), petShiny: u.petShiny ? 1 : 0 })),
+  visitors: allyUnits.filter(u => u.kind === 'shinypet').map(u => ({ id: u.petId, shiny: u.visitShiny ? 1 : 0, t: +(u.visitT || 0).toFixed(2), petShiny: u.petShiny ? 1 : 0, r: u.r, scale: u.petScale, name: (PET_SUMMON[u.petId] && PET_SUMMON[u.petId].name) || '' })),
   panel: ($('sc-shiny') && $('sc-shiny').classList && $('sc-shiny').classList.contains('show')) ? 1 : 0,
   bodyLen: (($('shiny-body') || {}).innerHTML || '').length,
   html: ($('shiny-body') || {}).innerHTML || ''    // 面板 HTML（收录/启用状态都渲染在里面，测试按它断言）
@@ -24438,12 +24630,12 @@ window.__musouMiniMap = () => ({   // 测试钩子：小地图矩形 / 视野框
   vw: VW, vh: VH, worldW: W, worldH: H,
   view: { x: Math.round(camX), y: Math.round(camY), w: VW, h: VH },
   clone: (p.mut.clone || 0) > 0 ? Object.assign({ on: cloneInCenter() ? 1 : 0 }, cloneZone()) : null,
-  dots: miniMapDots().map(d => ({ k: d.k, x: Math.round(d.x), y: Math.round(d.y) })),
+  dots: miniMapDotList().map(d => ({ k: d.k, x: Math.round(d.x), y: Math.round(d.y) })),
   foeCol: MM_FOE_COL, bossCol: MM_BOSS_COL, foeR: MM_FOE_R, bossR: MM_BOSS_R,
   foes: enemies.filter(e => !e.dead).map(e => ({ t: e.type, boss: e.boss ? 1 : 0, col: e.boss ? MM_BOSS_COL : MM_FOE_COL, x: Math.round(e.x), y: Math.round(e.y) })),
   ring: arenaRing() ? { w: HELL_RING_W, band: Math.round(HELL_RING_W * MM_W / W), safeW: W - HELL_RING_W * 2, safeH: H - HELL_RING_W * 2, inFire: inHellRing(p.x, p.y) ? 1 : 0, col: MM_RING_COL, gear: gearArena } : null
 });
-window.__musouClearField = (keepOrbs) => { if (state !== 'play') return; enemies = []; shots = []; warnFx = []; roninWalls = []; blades = []; plunderRunes = []; hexes = []; blackHoles = []; homingM = []; catE = null; cardCats = []; charmUnits = []; klLances = []; royalCavs = []; skySpears = []; wmThrusts = []; wmPlanes = []; wmOrbit = {}; wmOrbitOn = {}; wmOrbitHit = {}; wmOrbitDmg = {}; wmAnim = {}; wmDrones = []; wmBottles = []; wmFires = []; wmDashSlashes = []; wmShurikens = []; wmPrisms = []; wmHolySeq = {}; wmBeams = []; wmCharge = {}; wmAuraT = {}; dbgWMShotOrigins = []; swordE = null; drones = []; pBullets = []; bolts = []; if (!keepOrbs) orbs = []; spawnQ = []; meteors = []; firePits = []; thunderClouds = []; arcs = []; lightBeams = []; rainDrops = []; rainHits = []; voidImpacts = []; fxSprites = []; petBeams = []; petPools = []; petTornadoes = []; petMeteors = []; }; // 测试钩子：清场 + 停出怪 + 移除随行攻击体/火坑/陨石/雷云/光炮/雨幕/哈吉咪（keepOrbs=true 时保留掉落物，测「每波吸取」用）
+window.__musouClearField = (keepOrbs) => { if (state !== 'play') return; enemies = []; shots = []; warnFx = []; roninWalls = []; blades = []; plunderRunes = []; hexes = []; blackHoles = []; homingM = []; catE = null; cardCats = []; charmUnits = []; klLances = []; royalCavs = []; skySpears = []; wmThrusts = []; wmPlanes = []; wmOrbit = {}; wmOrbitOn = {}; wmOrbitHit = {}; wmOrbitDmg = {}; wmAnim = {}; wmDrones = []; wmBottles = []; wmFires = []; wmDashSlashes = []; wmShurikens = []; wmPrisms = []; wmHolySeq = {}; wmBeams = []; wmCharge = {}; wmAuraT = {}; dbgWMShotOrigins = []; swordE = null; drones = []; pBullets = []; bolts = []; if (!keepOrbs) orbs = []; spawnQ = []; meteors = []; firePits = []; thunderClouds = []; arcs = []; lightBeams = []; rainDrops = []; rainHits = []; voidImpacts = []; fxSprites = []; petBeams = []; petPools = []; petTornadoes = []; petMeteors = []; planteraVines = []; nukeFx = null; }; // 测试钩子：清场 + 停出怪 + 移除随行攻击体/火坑/陨石/雷云/光炮/雨幕/哈吉咪/**世纪之花藤蔓/未落地的核弹**（keepOrbs=true 时保留掉落物，测「每波吸取」用）
 window.__musouClearAllies = () => { allyUnits = []; };   // 测试钩子：清空部署单位（敌人索敌会优先打假人/随从，探针期必须清掉才锁定角色）
 window.__musouDummy = (dx, dy, hp, r, boss) => { // 测试钩子：玩家前方放一只高血「不动靶」兵卒（射程/穿透探针：不移动、不吃击退）；
   /* 可选第 4 参 r：放大判定圈（模拟大体型 / Boss）；第 5 参 boss=1：按 Boss 级目标处理（验证剑气对 Boss 翻倍） */
@@ -24830,7 +25022,7 @@ window.__musouBossWaveList = () => {   // 测试钩子：各波出现的 Boss �
   return out;
 };
 window.__musouTwins = () => enemies.filter(e => !e.dead && e.type === 'final5').map(e => ({   // 测试钩子：双子魔眼两只各自的独立血条 / 二阶段状态 / 🔥 火焰喷射
-  role: e.twinRole, hp: Math.round(e.hp), maxhp: e.maxhp, x: Math.round(e.x), y: Math.round(e.y),
+  role: e.twinRole, paired: e.twinPaired ? 1 : 0, hp: Math.round(e.hp), maxhp: e.maxhp, x: Math.round(e.x), y: Math.round(e.y),
   ph: e.twinDashT > 0 ? 'dash' : (e.twinAim > 0 ? 'aim' : 'idle'), cd: +(e.twinCd || 0).toFixed(2),
   p2: twinPhase2(e) ? 1 : 0, hpr: +(e.hp / e.maxhp).toFixed(3), dashN: e.twinDashN || 0,
   cdBase: BOSS_TEST.twinRangedCd, cdNow: +(BOSS_TEST.twinRangedCd * (twinPhase2(e) ? BOSS_TEST.twin2CdMul : 1)).toFixed(3),
@@ -25218,8 +25410,6 @@ window.__musouPetHitDmg = (id, mul) => petHitDmgBase(id || 'bulba', mul === unde
 window.__musouPetBeams = () => petBeams.map(b => ({   // 测试钩子：☀️ 日光束的光柱（段数 / 撞墙点 / 命中数）
   segs: b.segs.length, bounces: (b.bounces || []).length, hits: b.hits, bounced: b.segs.filter(s => s.bounce).length
 }));
-window.__musouTrainerInfo = window.__musouTrainerInfo;
-
 window.__musouFxInfo = () => ({
   elements: Object.keys(PET_FX),
   meta: PET_FX,
@@ -25311,8 +25501,9 @@ window.__musouBonusSet = (k, v) => { if (state === 'play' && k in p.bonus) p.bon
 window.__musouJobPanel = () => { if (state === 'play' && p.alive) { p.jobPend = 1; tryOpen(); return true; } return false; }; // 测试钩子：弹出魔法转职面板
 window.__musouJob = (j) => { if (state === 'play') p.job = (j === 'water') ? 'water' : (j === 'thunder' ? 'thunder' : (j === 'light' ? 'light' : (j === 'fire' ? 'fire' : ''))); }; // 测试钩子：直接设定元素专精
 window.__musouLevelApply = (idv) => { if (state !== 'play' || !p.alive) return false; const u = levelPool().find(x => x.id === idv); if (!u) return false; u.apply(); return true; }; // 测试钩子：直接套用某升级词条（验证数值成长）
-window.__musouSetLvl = (v) => { if (state !== 'play') return -1; p.lvl = Math.max(1, v | 0); p.xpNeed = Math.round(5 + Math.pow(p.lvl, 1.5) * 2.6); return p.lvl; };   // 测试钩子：直接设定等级（品质掉落分段验证用）
 window.__musouGainXP = (n) => { if (state !== 'play' || !p.alive) return -1; gainXP(n === undefined ? 1 : n); return Math.round(p.xp); };   // 测试钩子：直接给经验（走真实升级流程 → 训练家会在这里结算宝可梦强化）
+/* ⚠️ 这个钩子原来写了**两份**（前一份只改 lvl/xpNeed、没有 `petEvoCheck`），后声明的会把前一份整个顶掉 ——
+   已经合成一份：**必须带 `petEvoCheck(true)`**（宝可梦进化阈值那批用例就是靠它），并清 `p.xp`。 */
 window.__musouSetLvl = (n) => {   // 测试钩子：直接把角色等级设到 n（进化阈值 15 / 25 的边界探针；随后做一次进化检查）
   if (state !== 'play' || !p.alive) return -1;
   p.lvl = Math.max(1, Math.min(999, n | 0));
@@ -25374,6 +25565,52 @@ window.__musouCharmTry = (n) => {   // 测试钩子：对场上前 n 只敌人�
   return got;
 };
 window.__musouArtSlots = () => ({ count: artCount(), cap: artCap(), list: artOwnedList(), pend: pendArtId, open: $('sc-slot').classList.contains('show') ? 1 : 0, choosing: choosing ? 1 : 0, metaSlot: metaLv('slot'), page: slotPage, pages: slotPageN(), pageSize: SLOT_PAGE_SIZE, pageMax: SLOT_PAGE_MAX, pageShown: slotList.slice(slotPage * SLOT_PAGE_SIZE, slotPage * SLOT_PAGE_SIZE + SLOT_PAGE_SIZE), pagerVisible: ($('slot-pager') && $('slot-pager').style.display !== 'none') ? 1 : 0 });   // 测试钩子：奇物槽状态（数量 / 上限 / 待入手 / 替换面板是否打开 / **分页**）
+/* 🧪 NaN 体检钩子（自查用）：把**所有活着的实体数组**扫一遍，找出任何一个数值字段为 NaN / ±Infinity 的对象。
+   用途：绘制参数出现 NaN 时真机 canvas 会抛异常 → 整个 drawGame 中断 → **画面永久卡住**（逻辑还在跑），
+   而无头桩默认把它吞掉。有了这个钩子就能一眼指出「是哪个数组的第几只、哪个字段坏了」。
+   `Infinity` 单独归一类：像龙箭弹体的 `maxTrav = Infinity`（无限射程）是**合法**的。 */
+window.__musouNaNAudit = (limit) => {
+  const ARRS = {
+    enemies, allyUnits, shots, orbs, parts, texts, rings, slashes, warnFx, drones, pBullets, bolts, hexes,
+    meteors, firePits, thunderClouds, arcs, lightBeams, petBeams, petPools, petTornadoes, petMeteors, fxSprites,
+    rainDrops, voidImpacts, blades, roninWalls, blackHoles, homingM, charmUnits, klLances, royalCavs, skySpears,
+    gunNades, gunRockets, cardCats, plunderRunes, wmDrones, wmBottles, wmFires, wmThrusts, wmPlanes, wmShurikens,
+    wmPrisms, wmBeams, wmAltTimers
+  };
+  const cap = limit === undefined ? 40 : (limit | 0);
+  const nan = [], inf = [], missing = [];
+  const scan = (arrName, i, obj) => {
+    if (!obj || typeof obj !== 'object') return;
+    const fields = {};
+    let isInf = false;
+    for (const k of Object.keys(obj)) {
+      const v = obj[k];
+      if (typeof v !== 'number') continue;
+      if (Number.isNaN(v)) fields[k] = 'NaN';
+      else if (!isFinite(v)) { fields[k] = v > 0 ? 'Inf' : '-Inf'; isInf = true; }
+    }
+    /* ⚠️ 光查「是 number 的字段是不是 NaN」会漏掉最常见的那一类：**字段根本不存在 / 不是数字**
+       （例如老代码里 `r: PS(id).r` 取错表 → `r === undefined` → 绘制时算出 NaN）。
+       **单位数组**（敌人 / 我方）必须有有限的 x / y / r，这里显式点出来；
+       其它数组（粒子 / 飘字 / 环…）没有 `r` 这个概念，只报它们自己的 NaN。 */
+    if (arrName === 'enemies' || arrName === 'allyUnits') {
+      const lack = {};
+      for (const k of ['x', 'y', 'r']) if (typeof obj[k] !== 'number' || !isFinite(obj[k])) lack[k] = (obj[k] === undefined ? 'undefined' : String(obj[k]));
+      if (Object.keys(lack).length && missing.length < cap) missing.push({ arr: arrName, i, kind: obj.kind || obj.type || obj.petId || '', lack });
+    }
+    if (!Object.keys(fields).length) return;
+    const e = { arr: arrName, i, kind: obj.kind || obj.type || obj.petId || obj.el || '', form: obj.petForm || '', fields };
+    if (isInf) { if (inf.length < cap) inf.push(e); } else if (nan.length < cap) nan.push(e);
+  };
+  for (const name of Object.keys(ARRS)) {
+    const a = ARRS[name];
+    if (!Array.isArray(a)) continue;
+    for (let i = 0; i < a.length; i++) scan(name, i, a[i]);
+  }
+  scan('player', 0, p);
+  for (const i in wmOrbit) scan('wmOrbit', i, wmOrbit[i]);
+  return { nan, inf, missing, nanN: nan.length, infN: inf.length, missingN: missing.length, counts: (() => { const o = {}; for (const k of Object.keys(ARRS)) if (Array.isArray(ARRS[k])) o[k] = ARRS[k].length; return o; })() };
+};
 window.__musouSlotList = () => slotList.slice();   // 测试钩子：替换面板里列出的已持有奇物（**分页前的全量**；界面上按 SLOT_PAGE_SIZE=7 一页）
 window.__musouSlotPick = (i) => { if (curKind !== 'slot' || !choosing) return false; slotPick(i | 0); return true; };   // 测试钩子：点第 i 个槽位丢掉（**绝对下标**，跨页有效）
 window.__musouSlotPage = (d) => { if (curKind !== 'slot' || !choosing) return -1; slotPageMove(d === undefined ? 1 : d | 0); return slotPage; };   // 测试钩子：翻页（返回翻页后的页码）
