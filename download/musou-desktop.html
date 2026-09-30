@@ -991,17 +991,34 @@ function hellBonusOn() { return hellMode() || endlessMode(); }   // 「按地狱
 const WAVE_MAX_ENDLESS = 9999;  // 无尽：不设终点（只认阵亡 / 主动退出）
 const ENDLESS_BOSS_HP = 5000;       // ♾ 无尽模式：Boss **基础血量**统一 5000
 const ENDLESS_BOSS_HP_TWIN = 3000;  // ♾ 双子魔眼：**每只** 3000（它本来就是 3000）
-/* ♾ 无尽里某位 Boss 的**基础血量**（换掉基数，之后的每波里程碑 / 难度 / 翻倍曲线照常吃） */
-function endlessBossBaseHp(type) { return (type === 'final5') ? ENDLESS_BOSS_HP_TWIN : ENDLESS_BOSS_HP; }
+/* ♾ 无尽里某位 Boss 的**基础血量**（换掉基数，之后的每波里程碑 / 难度 / 翻倍曲线照常吃）
+   ⚠️ **丰缘之战（`hoenn`）不吃「统一 5000」**：用户这次单独给了它 2000 / 2000 / 3000 的基数，
+   而且它一阶段是**两只同时在场的 2000**，按 5000 算会变成两只 5000（合计 10000）—— 那不是用户要的。 */
+function endlessBossBaseHp(type) {
+  if (type === 'final5') return ENDLESS_BOSS_HP_TWIN;
+  if (type === 'hoenn') return 2000;          // 固拉多 / 盖欧卡各 2000（烈空坐另算 3000）
+  return ENDLESS_BOSS_HP;
+}
 /* ♾ 无尽模式的随机 Boss 池：**总大将也在里面**（血量同样 5000）——
    10/20/30 关那些「二选一 / 三选一」的编排在无尽里取消，改成每 5 层从这个池子随机抽一位。
-   ⚠️ 终焉齿轮（final2）也在池子里：它被杀时**不结算通关**（见 killEnemy 里的 endless 分支），场地火海自动收回。 */
-const ENDLESS_BOSSES = ['general', 'final3', 'commander', 'slimeKing', 'final5', 'final6', 'sprinter', 'final4', 'plunder', 'final2'];
+   ⚠️ 终焉齿轮（final2）也在池子里：它被杀时**不结算通关**（见 killEnemy 里的 endless 分支），场地火海自动收回。
+   ⚠️ `hoenn` 是**丰缘之战的哨兵名**（不是 ETYPES 里的类型）：抽到它 = 固拉多 + 盖欧卡一起上场，
+   展开在 `waveCompBase` 里做（`hoennComp()`），别把它直接塞进 spawnQ（spawnEnemy 不认识它）。 */
+const ENDLESS_BOSSES = ['general', 'final3', 'commander', 'slimeKing', 'final5', 'final6', 'sprinter', 'final4', 'plunder', 'final2', 'hoenn'];
 function endlessBossPick() { return ENDLESS_BOSSES[Math.floor(Math.random() * ENDLESS_BOSSES.length)]; }
 /* ♾ 无尽的 Boss 层抽谁：**第 5 层固定「总大将」**（用户要求：每局第一个 Boss 稳定是它，而且它第 5 波不放
-   双环螺旋弹幕，见 tickEnemy 里那条 —— 开局好过一点）；**第 10 / 15 / 20 … 全部随机**（从上面 10 位里抽，
-   总大将也仍在池子里，所以后面再遇到它时照旧会放双环螺旋弹幕）。 */
-function endlessBossAt(k) { return (k === 5) ? 'general' : endlessBossPick(); }
+   双环螺旋弹幕，见 tickEnemy 里那条 —— 开局好过一点）；**训练家在第 20 层固定「丰缘之战」**（用户要求：
+   「若训练家职业在无尽模式时，也会在第 20 波固定作为 boss 并可以任选神兽加入队伍」）；
+   **其余第 10 / 15 / 25 … 全部随机**（从上面 11 位里抽，总大将也仍在池子里，所以后面再遇到它时照旧会放双环螺旋弹幕）。 */
+function endlessBossAt(k) {
+  if (k === 5) return 'general';
+  /* ⚠️ **先抽一次再判训练家**（而不是提前 return）：这样每次调用的随机数消耗与历史完全一致 ——
+     少消耗一个 `Math.random()` 会让整条随机流往后平移，把别的用例（比如 S49 的宝可梦走位）弄红。
+     训练家第 20 层固定丰缘之战时，这次抽到的结果直接丢掉。 */
+  const pick = endlessBossPick();
+  if (k === 20 && isTrainer()) return 'hoenn';
+  return pick;
+}
 const HELL_SPAWN_MUL = 1.5;     // 地狱：刷怪量 = 困难 ×1.5
 const HELL_HP_MUL = 1.5;        // 地狱：敌人基础血量 = 困难 ×1.5
 const HELL_SPD_MUL = 1.2;       // 地狱：敌人移速 = 困难 ×1.2
@@ -1118,6 +1135,7 @@ const p = {
   petKind: '', petOwned: [], trainLv: 0, starterPend: 0,  // 🧢 训练家：御三家 id / 已拥有的宝可梦（最多 6 只）/ 升级强化层数 / 「挑御三家」面板挂起
   petEgg: 0,                                             // 🥚 宝可梦蛋（第 1 波清剿后到手 · 第 5 波清剿后孵出波克比）
   petCatchWv: [], catchPend: 0,                          // 🐾 已经捕捉过的波次（第 10 / 15 波各一次）· 面板挂起
+  legendPend: 0, legendGot: 0,                           // 🌟 丰缘之战奖励：面板挂起 · 本局是否已经收过一只神兽（一局只能有一只，进存档）
   petWv: {},                                             // 🐉 大器晚成那两条线的**波次进化段位**（第 20 / 25 波后 +1）
   petEvoPick: {},                                        // 🔮 道具进化：`{ 物种: 形态 key }`（伊布→水/雷/火伊布 · 炭小侍→红莲铠骑/苍炎刃鬼）
   petItemBuy: '',                                        // 🔮 本局买过的进化道具 id（**整局只能买一件**）
@@ -1186,7 +1204,17 @@ const ETYPES = {
   skull: { label:'骷髅头', r:13, hp:2, spd:473, dmg:22, score:200, col:'#e8e4d8', dark:'#5a5347', acc:'#c9a6ff', resist:1, skull:1 },
   /* 🏃 超级跑者（第 20 关 Boss 三选一）：贴着地图外圈绕跑道，每 2~5 秒冲出赛道撞玩家（无预警线）；
      基础血量略高于其他 Boss；撑满 120 秒它会自己体力耗尽自杀；60 秒喝雪碧回 50%、90 秒吃巧乐兹回 30% 且跑速 +20% */
-  sprinter: { label:'超级跑者', r:22, hp:8000, spd:1200, dmg:26, score:95000, col:'#ff7a52', dark:'#5a2010', acc:'#ffd166', resist:0.05, boss:1, sprinter:1, waveBoss:1 }
+  sprinter: { label:'超级跑者', r:22, hp:8000, spd:1200, dmg:26, score:95000, col:'#ff7a52', dark:'#5a2010', acc:'#ffd166', resist:0.05, boss:1, sprinter:1, waveBoss:1 },
+  /* 🌟 **丰缘之战**（训练家第 20 波固定 Boss / ♾ 无尽随机 Boss 池）——
+     一阶段：**固拉多 + 盖欧卡同时出现**（各 5 秒一次断崖之剑 / 根源波动，基础血量各 2000）；
+     两只都被击败 → **烈空坐登场**（每 3 秒一次画龙点睛，基础血量 3000）。
+     只有「**第 20 波的这一场**」被讨伐时，训练家才能**任选一只神兽入队**（一局仅一只）。
+     —— 详细口径见 `HOENN` 常量块；画的是宝可梦贴图（`drawEnemy` 里走 `drawPet`）。
+     ⚠️ `hoenn` 这个标记很重要：无尽模式「Boss 基础血量统一 5000」那条**要跳过它们**
+        （用户这次单独给了 2000/2000/3000 的基数），闪光词条也要屏蔽（5 倍血量会把设计血量彻底毁掉）。 */
+  groudon:  { label:'丰缘之战 · 固拉多', r:30, hp:2000, spd:72, dmg:22, score:60000, col:'#c04a26', dark:'#4a1408', acc:'#ffd166', resist:0.05, boss:1, hoenn:'groudon' },
+  kyogre:   { label:'丰缘之战 · 盖欧卡', r:30, hp:2000, spd:64, dmg:22, score:60000, col:'#2a6bb8', dark:'#0a2244', acc:'#8fd8ff', resist:0.05, boss:1, hoenn:'kyogre' },
+  rayquaza: { label:'丰缘之战 · 烈空坐', r:32, hp:3000, spd:112, dmg:24, score:90000, col:'#3f9a4a', dark:'#123a18', acc:'#ffe08a', resist:0.04, boss:1, hoenn:'rayquaza' }
   /* 🐸🔥💧 妙蛙种子 / 小火龙 / 杰尼龟**不是敌人**：它们是开发者版本新职业「训练家」的召唤物，
      走 allyUnits（见 PET_SUMMON / petSummonSync），贴图与属性特效同样是内嵌素材（PET_* 数据块） */
 };
@@ -1394,11 +1422,15 @@ function wave10Boss() {
   const r = Math.random();
   return r < 1 / 3 ? 'final3' : (r < 2 / 3 ? 'commander' : 'slimeKing');
 }
-/* 第 20 关 Boss 三选一：🌙 双子魔眼 / 🗡️ 虚空执剑者 / 🏃 超级跑者（各 1/3） */
+/* 第 20 关 Boss 三选一：🌙 双子魔眼 / 🗡️ 虚空执剑者 / 🏃 超级跑者（各 1/3）
+   ⚠️ 🧢 **训练家不走三选一**：他的第 20 波**固定**是「🌟 丰缘之战」（见 waveCompBase） */
 function wave20Boss() {
   const r = Math.random();
   return r < 1 / 3 ? 'final5' : (r < 2 / 3 ? 'final6' : 'sprinter');
 }
+/* 🌟 丰缘之战：把「固拉多 + 盖欧卡」两只**一起**排进本波构成（用户要求：两只同时出现）。
+   烈空坐不在构成里 —— 它是这两只都被击败后由 `hoennSpawnRayquaza()` 现场登场的。 */
+function hoennComp(q) { q.push('groudon'); q.push('kyogre'); }
 /* 第 30 关 Boss 二选一：🌸 世纪之花 / 💡 光明掠夺者（各 50%） */
 function wave30Boss() { return Math.random() < 0.5 ? 'final4' : 'plunder'; }
 function waveComp(k) {
@@ -1446,6 +1478,8 @@ function waveCompBase(k) {
     for (let i = 0; i < s15(6); i++) q.push('mage');
     for (let i = 0; i < 3; i++) q.push('cavalry');   // 20 波起铁骑主力：3 只
     for (let i = q.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = q[i]; q[i] = q[j]; q[j] = t; }
+    /* 🧢 训练家：第 20 波**固定**「🌟 丰缘之战」（固拉多 + 盖欧卡同时出现 → 烈空坐登场） */
+    if (isTrainer()) { hoennComp(q); return q; }
     /* 本版：双子魔眼 与 虚空执剑者 **各 50% 二选一**（虚空执剑者从原来的 25 关挪到这里） */
     q.push(wave20Boss());
     return q;
@@ -1479,7 +1513,9 @@ function waveCompBase(k) {
   if (endless) {
     if (k % 5 === 0) {
       for (let i = q.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = q[i]; q[i] = q[j]; q[j] = t; }
-      q.push(endlessBossAt(k));
+      /* ⚠️ 丰缘之战是个「哨兵名」：抽到它就展开成固拉多 + 盖欧卡两只（见 hoennComp） */
+      const bt = endlessBossAt(k);
+      if (bt === 'hoenn') hoennComp(q); else q.push(bt);
       return q;
     }
     for (let i = q.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = q[i]; q[i] = q[j]; q[j] = t; }
@@ -1543,6 +1579,7 @@ function startWave(k) {
     if (hellEv.id === 'runner') spawnQ = spawnQ.map(() => 'runner');   // 轻骑士大军：全换成轻骑贼（数量不变）
   }
   const types = [];
+  if (spawnQ.includes('groudon')) types.push('🌟 丰缘之战 · 固拉多 & 盖欧卡 同时现身 🌟');
   if (spawnQ.includes('final4')) types.push('🌸 世纪之花 绽放 🌸');
   if (spawnQ.includes('final3')) types.push('🪱 世界吞噬者 破土 🪱');
   if (spawnQ.includes('final6')) types.push('🗡️ 虚空执剑者 现世 🗡️');
@@ -1733,14 +1770,15 @@ function spawnEnemy(type, forceShiny, noShiny, probe) {
     const q0 = trackPoint(0);
     e.x = q0.x; e.y = q0.y; e.spS = 0; e.ang = q0.ang;
     e.spDashT = rnd(SPRINT.dashGap[0], SPRINT.dashGap[1]);
-  }  /* ─────────── ♾ 无尽模式：Boss「基础血量」统一 ───────────
+  }
+  if (type === 'groudon' || type === 'kyogre' || type === 'rayquaza') hoennInit(e, type);  /* ─────────── ♾ 无尽模式：Boss「基础血量」统一 ───────────
      用户要求：无尽里**每位 Boss 的基础血量都是 5000**（双子魔眼**每只 3000**，它本来就是 3000），
      **总大将也在随机池里、基础血量同样是 5000**。
      口径与历史上那些「XX 的基础血量改为 N」完全一致 = **换掉基数**：之后的每波里程碑曲线
      （×2 / ×4 / ×6 / ×9）、地狱加成（×1.5）、Boss 后翻倍（×2 / ×4）照常吃 —— 所以这里按
      `bossWaveHpMul(wave)` 重算一次（而不是钉成常数 5000）。
      ⚠️ 废案 Boss `final`（灭世魔君）不走这条：它有自己的里程碑口径，也不在无尽的随机池里。 */
-  if (endlessMode() && e.boss && type !== 'final') {
+  if (endlessMode() && e.boss && type !== 'final' && !ETYPES[type].hoenn) {
     const ehp = Math.round(endlessBossBaseHp(type) * bossWaveHpMul(wave));
     e.hp = ehp; e.maxhp = ehp;
   }
@@ -1748,8 +1786,9 @@ function spawnEnemy(type, forceShiny, noShiny, probe) {
      🔴 武器变红 = 双倍攻击力 · 🟢 身体变绿 = **5 倍血量** · 💨 奔跑尘迹 = 1.5 倍移速
      必定至少带 1 条（各 50% 独立抽取，若全空则随机补 1 条），最多三条全占；
      **地狱 / 无尽模式：闪光个体必定三条全带** */
-  if (type === 'final3' || type === 'final4' || type === 'slimeKing' || type === 'plunder' || type === 'sprinter') {
-    /* 测试沙盒 Boss 永不闪光：「地狱闪光必带三条词条」里有一条是 5 倍血量，会把设计血量放大 */
+  if (type === 'final3' || type === 'final4' || type === 'slimeKing' || type === 'plunder' || type === 'sprinter'
+    || type === 'groudon' || type === 'kyogre' || type === 'rayquaza') {
+    /* 测试沙盒 Boss / 🌟 丰缘之战 永不闪光：「地狱闪光必带三条词条」里有一条是 5 倍血量，会把设计血量放大 */
     e.shiny = false; e.aff = null;
   }
   if (e.shiny) {
@@ -1788,12 +1827,16 @@ function spawnEnemy(type, forceShiny, noShiny, probe) {
   /* Boss 登场演出 */
   if (e.boss) {
     const bigBoss = e.type === 'final' || e.type === 'final2' || e.type === 'final3' || e.type === 'final4'
-      || e.type === 'slimeKing' || e.type === 'plunder' || e.type === 'sprinter';
+      || e.type === 'slimeKing' || e.type === 'plunder' || e.type === 'sprinter'
+      || e.type === 'groudon' || e.type === 'kyogre' || e.type === 'rayquaza';   // 🌟 丰缘之战三只都是大体型 Boss
     addRing(x, y, bigBoss ? '#ff5540' : '#ffd166', bigBoss ? 14 : 10);
-    if (e.type === 'final4') { sfx.big(); bigBanner('🌸 世纪之花 · 绽放 🌸', '击败它即可通关 30 层!'); }
+    /* 🌟 丰缘之战：固拉多 / 盖欧卡 的登场横幅由波次横幅负责（两只一起上场，这里不重复喊），
+       烈空坐的登场横幅在 `hoennSpawnRayquaza()` 里（它是二阶段的专场演出）。 */
+    if (e.type === 'groudon' || e.type === 'kyogre' || e.type === 'rayquaza') { sfx.big(); }
+    else if (e.type === 'final4') { sfx.big(); bigBanner('🌸 世纪之花 · 绽放 🌸', '击败它即可通关 30 层!'); }
     else if (e.type === 'final3') { sfx.big(); bigBanner('🪱 世界吞噬者 · 破土 🪱', '讨伐它，征程仍未结束…'); }
     else if (e.type === 'slimeKing') { sfx.big(); bigBanner('🟢 超级史莱姆 · 降临 🟢', '整张图变成黏糊糊场地（移速 −50%）：小心它高高跳起砸下来'); }
-    if (e.type === 'plunder') { sfx.big(); bigBanner('💡 光明掠夺者 · 现世 💡', '它会让你渐渐失明 · 不攻击时完全不可见也打不到'); }
+    else if (e.type === 'plunder') { sfx.big(); bigBanner('💡 光明掠夺者 · 现世 💡', '它会让你渐渐失明 · 不攻击时完全不可见也打不到'); }
     else if (e.type === 'sprinter') { sfx.big(); bigBanner('🏃 超级跑者 · 开跑 🏃', '它绕着地图最外圈跑：「你跑不过我你信吗？」（撑满 120 秒它自己会累倒）'); }
     else if (e.type === 'final5') { sfx.big(); bigBanner('🌙 双子魔眼 · 睁眼 🌙', '一只远攻 · 一只近战 · 两只都倒下才算赢'); }
     else if (e.type === 'final6') { sfx.big(); bigBanner('🗡️ 虚空执剑者 · 现世 🗡️', '本体多半隐于虚空 · 只有它显形的那几秒才砍得动'); }
@@ -5067,6 +5110,374 @@ function legendOn() { return devOnNow(); }   // 只有开发者版本（开发�
 const PET_LEGEND_MUL = 1.5 * 1.5 * 1.5;      // = 3.375「进化过三次」（1.5 就是 PET_EVO_STAT_MUL）
 const PET_LEGEND_HP = Math.round(60 * PET_LEGEND_MUL);    // 203 = 御三家基准生命 60 × 3.375
 const PET_LEGEND_DMG = Math.round(8 * PET_LEGEND_MUL);    // 27  = 御三家基准伤害 8 × 3.375
+/* ============================================================
+   🌟 **丰缘之战**（#382 盖欧卡 / #383 固拉多 / #384 烈空坐）—— 训练家的专属 Boss 战
+   出场时机（用户逐条点名）：
+     · **普通 / 困难 / 地狱 的第 20 波** —— 只要玩家是**训练家**，第 20 波就**固定**是它（不再三选一）
+     · **♾ 无尽模式** —— 它进了**随机 Boss 池**（每 5 层都可能抽到）；
+       而且训练家在无尽的**第 20 层**同样**固定**是它
+   战斗流程（两阶段）：
+     ① **固拉多 + 盖欧卡同时出现**（各 2000 基础血量）：固拉多每 **5 秒**一次「🗡️ 断崖之剑」，
+        盖欧卡每 **5 秒**一次「🌊 根源波动」——**有预警线，方向锁定后 0.5 秒才发射**
+     ② 两只**都被击败** → **烈空坐登场**（3000 基础血量），每 **3 秒**一次「🐉 画龙点睛」，
+        **落点位置也有预警线**
+   奖励：只有**第 20 波的那一场**被讨伐时，训练家才能**从三只里任选一只入队**；
+        而且**一局游戏只能有一只神兽入队**（`p.legendGot` 记账，无尽里再遇到也不给第二只）。
+   ⚠️ 三只都不吃「无尽 Boss 基础血量统一 5000」那条（用户这次单独给了 2000/2000/3000 的基数），
+      也**永不闪光**（闪光词条里的「5 倍血量」会把设计血量彻底毁掉）。
+   ⚠️ 数值口径：血量一律「基础 × `bossWaveHpMul(wave)`」，所以地狱 ×1.5、Boss 后翻倍照常吃。
+   ============================================================ */
+const HOENN_IDS = ['groudon', 'kyogre', 'rayquaza'];
+const HOENN = {
+  groHp: 2000, kyoHp: 2000, rayHp: 3000,   // 基础血量（用户点名：固拉多 / 盖欧卡 各 2000 · 烈空坐 3000）
+  castCd: 5, rayCd: 3,                     // 出手间隔：两只 5 秒一次 · 烈空坐 3 秒一次（用户点名）
+  warn: 0.5,                               // 🌊 根源波动：**方向锁定后 0.5 秒才发射**（用户点名）
+  spikeWarn: 0.9,                          // 🗡️ 断崖之剑的落点预警（比 0.5 长一点，5 个圈才有躲的余地）
+  ascentWarn: 0.9,                         // 🐉 画龙点睛的落点预警线
+  spikeR: 150, spikeGap: 170, spikeLife: 0.9, spikeDmg: 26,   // 单根地刺：判定半径 / 与玩家的错开距离 / 刺存在时长 / 伤害
+  beamLen: 760 / 2, beamW: 200, beamDmg: 24,   // 根源波动：长度 = 日光束的一半（同宠物那招）· 200px 宽光柱
+  ascentR: 200, ascentSpd: 2200, ascentDmg: 30, ascentDist: 472,   // 画龙点睛：落点半径 / 冲刺速度 / 伤害 / 冲刺距离（同宠物版 472）
+  groudonSpd: 72, kyogreSpd: 64, kyogreKeep: 300, groudonKeep: 150, rayKeep: 240, touchDmg: 22, touchCd: 1.35,
+  scaleW: 300, scaleWRay: 320   // 立绘画出来多宽（像素）：三只的贴图源尺寸不同，按它反推 petScale
+};
+let hoennSpikes = [];   // 🗡️ 断崖之剑的落点：{x,y,r,t,ph:'warn'|'up',life,hit}
+let hoennBeams = [];    // 🌊 根源波动的光柱：{ref,ang,t,max,len,w,fired,life}
+let dbgHoennSpike = 0, dbgHoennBeamCast = 0, dbgHoennBeamFire = 0, dbgHoennAscent = 0, dbgHoennHit = 0, dbgHoennRay = 0, dbgHoennReward = 0;
+/* 立绘尺寸 → petScale：贴图源帧宽各不相同，按「想画多宽」反推，三只看起来才一样大 */
+function hoennScale(id) {
+  const dirs = petFrames({ pet: id, petForm: id, petShiny: 0 }, 'idle');
+  const f = dirs && dirs[0] && dirs[0][0];
+  const sw = (f && f[2]) || 64;
+  return (id === 'rayquaza' ? HOENN.scaleWRay : HOENN.scaleW) / sw;
+}
+/* 出场初始化（在 spawnEnemy 里调）：血量 / 宝可梦贴图字段 / 第一次出手的倒计时 */
+function hoennInit(e, type) {
+  const base = type === 'rayquaza' ? HOENN.rayHp : HOENN.groHp;
+  const h = Math.round(base * bossWaveHpMul(wave));
+  e.hp = h; e.maxhp = h;
+  e.hoenn = 1; e.bossUnit = 1;          // Boss 单位：免疫秒杀类效果（改按最大生命百分比结算）
+  e.petForm = type; e.pet = type; e.petShiny = 0;
+  e.petScale = hoennScale(type);
+  e.petA = 'idle'; e.petDir = 0; e.petF = 0; e.petAF = 0;
+  e.hnCast = (type === 'rayquaza' ? HOENN.rayCd : HOENN.castCd);   // 出场后第一次出手的倒计时
+  if (type === 'rayquaza') e.spd = 112;
+  /* 一阶段的第二只（盖欧卡）**站到玩家的另一侧**：两只同时出场时不该叠在一起 */
+  if (type === 'kyogre') {
+    const g = enemies.find(o => !o.dead && o.type === 'groudon');
+    if (g) {
+      const a = Math.atan2(g.y - p.y, g.x - p.x) + Math.PI + 0.5;
+      const d = Math.max(360, Math.min(760, Math.hypot(g.x - p.x, g.y - p.y)));
+      e.x = Math.max(60, Math.min(W - 60, p.x + Math.cos(a) * d));
+      e.y = Math.max(60, Math.min(H - 60, p.y + Math.sin(a) * d));
+    }
+  }
+  return e;
+}
+function hoennAnyAlive() { for (const e of enemies) if (!e.dead && e.hoenn) return true; return false; }
+/* 一阶段（固拉多 / 盖欧卡）还有活着的吗 —— 两只都没了才轮到烈空坐登场 */
+function hoennPairAlive() {
+  for (const e of enemies) if (!e.dead && (e.type === 'groudon' || e.type === 'kyogre')) return true;
+  return false;
+}
+/* 🐉 烈空坐登场（二阶段）：固拉多与盖欧卡都被击败的**同一帧**里叫出来 */
+function hoennSpawnRayquaza() {
+  dbgHoennRay++;
+  const e = spawnEnemy('rayquaza', false, true);   // noShiny = 真：绝不闪光
+  /* 从玩家正上方压下来，气势足一点 */
+  e.x = Math.max(60, Math.min(W - 60, p.x));
+  e.y = Math.max(60, Math.min(H - 60, p.y - 460));
+  addRing(e.x, e.y, '#8ff0a0', 16);
+  addRing(e.x, e.y, '#ffe08a', 9);
+  burst(e.x, e.y, 44, '#8ff0a0', 520);
+  flashG = Math.max(flashG, 0.3);
+  shake = Math.max(shake, 9);
+  bigBanner('🐉 烈空坐 · 降临 🐉', '固拉多与盖欧卡倒下了 —— 天空的霸主现身（每 3 秒一次画龙点睛 · 落点有预警线）');
+  slowT = Math.max(slowT, 0.5);
+}
+/* 🗡️ 断崖之剑（固拉多）：在玩家脚下 + 前后左右各一个落点埋下 5 根地刺（预警 → 破土 → 范围伤害） */
+function hoennCastPrecipice(e) {
+  dbgHoennSpike++;
+  const offs = [[0, 0], [-1, 0], [1, 0], [0, -1], [0, 1]];
+  for (const o of offs) {
+    const x = Math.max(50, Math.min(W - 50, p.x + o[0] * HOENN.spikeGap));
+    const y = Math.max(50, Math.min(H - 50, p.y + o[1] * HOENN.spikeGap));
+    hoennSpikes.push({ x, y, r: HOENN.spikeR, t: HOENN.spikeWarn, ph: 'warn', life: 0, hit: 0 });
+  }
+  addText(e.x, e.y - 52, '🗡️ 断崖之剑!', 22, '#ffd166', '#4a1408');
+  noiseBurst(0.16, 0.08, 320, 1.2);
+  tone(180, 60, 'sawtooth', 0.25, 0.12);
+}
+/* 🌊 根源波动（盖欧卡）：**先拉一条预警线**（方向在开招瞬间就锁死，之后不再追玩家），0.5 秒后发射蓝色光柱 */
+function hoennCastOriginPulse(e) {
+  dbgHoennBeamCast++;
+  const ang = Math.atan2(p.y - e.y, p.x - e.x);
+  hoennBeams.push({ ref: e, x: e.x, y: e.y, ang, t: HOENN.warn, max: HOENN.warn, len: HOENN.beamLen, w: HOENN.beamW, fired: 0, life: 0 });
+  addText(e.x, e.y - 52, '🌊 根源波动!', 22, '#8fd8ff', '#0a2244');
+  tone(320, 900, 'sine', 0.18, 0.10);
+}
+/* 🐉 画龙点睛（烈空坐）：**落点位置先拉预警线** → 俯冲过去 → 落地范围伤害（同宠物那一招：冲 472px） */
+function hoennCastAscent(e) {
+  dbgHoennAscent++;
+  const ang = Math.atan2(p.y - e.y, p.x - e.x);
+  const dist = Math.min(HOENN.ascentDist, Math.max(120, Math.hypot(p.x - e.x, p.y - e.y)));
+  const tx = Math.max(60, Math.min(W - 60, e.x + Math.cos(ang) * dist));
+  const ty = Math.max(60, Math.min(H - 60, e.y + Math.sin(ang) * dist));
+  e.hnA = { ph: 'warn', t: HOENN.ascentWarn, max: HOENN.ascentWarn, dur: HOENN.ascentWarn, sx: e.x, sy: e.y, tx, ty };
+  addText(e.x, e.y - 52, '🐉 画龙点睛!', 22, '#ffe08a', '#123a18');
+  tone(900, 240, 'sawtooth', 0.2, 0.12);
+}
+/* 🌟 三只的 AI：走位（靠近 / 拉开）→ 出手计时 → 各自的状态机。**位置完全由这里接管**
+   （updateEnemies 里对它们是 `continue`，不会再走通用的追击/接触伤害那一段） */
+function tickHoennAI(e, dt, tg) {
+  const dx = p.x - e.x, dy = p.y - e.y, dd = Math.hypot(dx, dy) || 1;
+  const nx = dx / dd, ny = dy / dd;
+  /* 朝向玩家（8 方向逐帧贴图） */
+  e.petDir = petDir(Math.atan2(dy, dx));
+  /* 走位：远了就靠过去、太近了（盖欧卡 / 烈空坐）就拉开，保持一个「好打但不贴脸」的距离 */
+  const keep = e.type === 'kyogre' ? HOENN.kyogreKeep : (e.type === 'rayquaza' ? HOENN.rayKeep : HOENN.groudonKeep);
+  let moving = 0;
+  if (!(e.hnA && e.hnA.ph === 'go')) {
+    const sp = (e.slowT > 0 ? (e.slowK === undefined ? 1 : e.slowK) : 1) * e.spd * dt;
+    if (dd > keep + 24) { e.x += nx * sp; e.y += ny * sp; moving = 1; }
+    else if (dd < keep - 70) { e.x -= nx * sp * 0.7; e.y -= ny * sp * 0.7; moving = 1; }
+    e.x = Math.max(60, Math.min(W - 60, e.x));
+    e.y = Math.max(60, Math.min(H - 60, e.y));
+  }
+  petAnim(e, (moving || (e.hnA && e.hnA.ph === 'go')) ? 'walk' : 'idle');
+  petTickFrame(e, dt, true);
+  /* 接触伤害（和普通敌人同口径：1.35 秒一次） */
+  e.hnTouch = Math.max(0, (e.hnTouch || 0) - dt);
+  if (dd < e.r + p.r + 6 && e.hnTouch <= 0) {
+    e.hnTouch = HOENN.touchCd;
+    dbgHoennHit++;
+    hurtPlayer(HOENN.touchDmg, nx, ny);
+  }
+  /* 🐉 画龙点睛的冲刺状态机（接管坐标） */
+  if (e.hnA) {
+    const A = e.hnA;
+    if (A.ph === 'warn') {
+      A.t -= dt;
+      if (A.t <= 0) { A.ph = 'go'; A.dur = Math.max(0.12, Math.hypot(A.tx - A.sx, A.ty - A.sy) / HOENN.ascentSpd); A.t = A.dur; }
+      return;
+    }
+    if (A.ph === 'go') {
+      A.t -= dt;
+      const k = Math.max(0, Math.min(1, 1 - A.t / A.dur));
+      e.x = A.sx + (A.tx - A.sx) * k;
+      e.y = A.sy + (A.ty - A.sy) * k;
+      if (Math.random() < 0.8) addPart(e.x, e.y + rnd(-10, 10), rnd(-30, 30), rnd(-30, 10), 0.3, rnd(2.5, 5), '#8ff0a0', 0);
+      if (k >= 1) {
+        A.ph = 'land'; A.t = 0.3;
+        const lx = p.x - e.x, ly = p.y - e.y, ld = Math.hypot(lx, ly) || 1;
+        burst(e.x, e.y, 30, '#8ff0a0', 440);
+        rings.push({ x: e.x, y: e.y, r: 16, vr: 900, life: 0.35, max: 0.35, color: '#ffe08a', width: 8 });
+        rings.push({ x: e.x, y: e.y, r: 8, vr: 520, life: 0.45, max: 0.45, color: '#8ff0a0', width: 5 });
+        shake = Math.max(shake, 7);
+        if (ld < HOENN.ascentR + p.r) { dbgHoennHit++; hurtPlayer(HOENN.ascentDmg, lx / ld, ly / ld); }
+      }
+      return;
+    }
+    A.t -= dt;
+    if (A.t <= 0) e.hnA = null;
+    return;
+  }
+  /* ⏱️ 出手计时（用户点名：两只 5 秒一次 · 烈空坐 3 秒一次） */
+  e.hnCast -= dt;
+  if (e.hnCast > 0) return;
+  e.hnCast = (e.type === 'rayquaza') ? HOENN.rayCd : HOENN.castCd;
+  if (e.type === 'groudon') hoennCastPrecipice(e);
+  else if (e.type === 'kyogre') hoennCastOriginPulse(e);
+  else hoennCastAscent(e);
+}
+/* 光柱是否扫到玩家（线段距离判定：投影在 [0, len] 内、垂距小于半宽 + 玩家半径） */
+function hoennBeamHits(b, ox, oy) {
+  const ux = Math.cos(b.ang), uy = Math.sin(b.ang);
+  const dx = p.x - ox, dy = p.y - oy;
+  const proj = dx * ux + dy * uy;
+  if (proj < -p.r || proj > b.len + p.r) return false;
+  return Math.abs(-dx * uy + dy * ux) < b.w / 2 + p.r;
+}
+/* 🌟 丰缘之战的「场地物」推进：地刺落点 / 光柱。**每帧都要跑**（施法者死了也要把已经在场的打完） */
+function tickHoennFields(dt) {
+  /* —— 🗡️ 断崖之剑 —— */
+  for (const s of hoennSpikes) {
+    if (s.ph === 'warn') {
+      s.t -= dt;
+      if (s.t <= 0) {
+        s.ph = 'up'; s.life = HOENN.spikeLife;
+        burst(s.x, s.y, 18, '#c8a05a', 340);
+        burst(s.x, s.y, 8, '#ffe9a8', 200);
+        rings.push({ x: s.x, y: s.y, r: 12, vr: 620, life: 0.3, max: 0.3, color: '#ffd166', width: 6 });
+        shake = Math.max(shake, 4);
+        const dx = p.x - s.x, dy = p.y - s.y, dd = Math.hypot(dx, dy) || 1;
+        if (dd < s.r + p.r) { s.hit = 1; dbgHoennHit++; hurtPlayer(HOENN.spikeDmg, dx / dd, dy / dd); }
+      }
+    } else {
+      s.life -= dt;
+    }
+  }
+  hoennSpikes = hoennSpikes.filter(s => s.ph === 'warn' || s.life > 0);
+  /* —— 🌊 根源波动 —— */
+  for (const b of hoennBeams) {
+    if (!b.fired) {
+      b.t -= dt;
+      if (b.t <= 0) {
+        b.fired = 1; b.life = 0.24;
+        dbgHoennBeamFire++;
+        const ox = b.ref ? b.ref.x : b.x, oy = b.ref ? b.ref.y : b.y;
+        flashB = Math.max(flashB, 0.2);
+        shake = Math.max(shake, 6);
+        tone(1200, 300, 'sine', 0.22, 0.10);
+        if (hoennBeamHits(b, ox, oy)) {
+          const ux = Math.cos(b.ang), uy = Math.sin(b.ang);
+          const dx = p.x - ox, dy = p.y - oy;
+          const side = (-dx * uy + dy * ux) >= 0 ? 1 : -1;
+          dbgHoennHit++;
+          hurtPlayer(HOENN.beamDmg, -uy * side, ux * side);
+        }
+      }
+    } else {
+      b.life -= dt;
+    }
+  }
+  hoennBeams = hoennBeams.filter(b => !b.fired || b.life > 0);
+}
+/* 🌟 丰缘之战的场地物绘制（预警线 / 地刺 / 光柱）—— 在 drawGame 里与 warnFx 同一层调用 */
+function drawHoennFields() {
+  const pulse = 0.5 + Math.sin(time * 14) * 0.3;
+  /* —— 🗡️ 断崖之剑：预警圈（内圈随倒计时收缩）→ 破土而出的 5 根石刺 —— */
+  for (const s of hoennSpikes) {
+    if (s.ph === 'warn') {
+      const k = Math.max(0, Math.min(1, s.t / HOENN.spikeWarn));
+      ctx.fillStyle = 'rgba(150,110,60,' + (0.14 + 0.10 * pulse).toFixed(2) + ')';
+      ctx.beginPath(); ctx.ellipse(s.x, s.y, s.r, s.r * 0.62, 0, 0, TAU); ctx.fill();
+      ctx.strokeStyle = 'rgba(215,175,105,0.9)'; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.ellipse(s.x, s.y, s.r, s.r * 0.62, 0, 0, TAU); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,236,185,' + (0.5 + 0.4 * pulse).toFixed(2) + ')'; ctx.lineWidth = 2.4;
+      ctx.beginPath(); ctx.ellipse(s.x, s.y, Math.max(4, s.r * k), s.r * 0.62 * k, 0, 0, TAU); ctx.stroke();
+      ctx.strokeStyle = 'rgba(255,215,140,0.55)'; ctx.lineWidth = 1.6;
+      ctx.beginPath();
+      ctx.moveTo(s.x - s.r * 1.2, s.y); ctx.lineTo(s.x - s.r * 0.5, s.y);
+      ctx.moveTo(s.x + s.r * 0.5, s.y); ctx.lineTo(s.x + s.r * 1.2, s.y);
+      ctx.moveTo(s.x, s.y - s.r * 0.8); ctx.lineTo(s.x, s.y - s.r * 0.3);
+      ctx.moveTo(s.x, s.y + s.r * 0.3); ctx.lineTo(s.x, s.y + s.r * 0.8);
+      ctx.stroke();
+    } else {
+      /* 石刺：0.12 秒长到最高，最后一截慢慢缩回去；5 根一丛 */
+      const rise = Math.min(1, (HOENN.spikeLife - s.life) / 0.12);
+      const fall = Math.min(1, Math.max(0.15, s.life / 0.35));
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.globalAlpha = 0.35 * rise * fall;
+      ctx.fillStyle = '#3a2a14';
+      ctx.beginPath(); ctx.ellipse(0, 0, s.r * 0.85, s.r * 0.3, 0, 0, TAU); ctx.fill();
+      ctx.globalAlpha = 1;
+      for (let i = 0; i < 5; i++) {
+        const a = i * (TAU / 5) + 0.4;
+        const rr = s.r * (i === 0 ? 0 : 0.42);
+        const bx = Math.cos(a) * rr, by = Math.sin(a) * rr * 0.62;
+        const hh = (i === 0 ? 104 : 66) * rise * fall;
+        const w0 = (i === 0 ? 22 : 15) * rise;
+        ctx.fillStyle = '#6b4a26';
+        ctx.beginPath();
+        ctx.moveTo(bx - w0, by); ctx.lineTo(bx, by - hh); ctx.lineTo(bx + w0, by);
+        ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#b08a52';
+        ctx.beginPath();
+        ctx.moveTo(bx - w0 * 0.45, by); ctx.lineTo(bx, by - hh); ctx.lineTo(bx + w0 * 0.2, by);
+        ctx.closePath(); ctx.fill();
+      }
+      ctx.restore();
+    }
+  }
+  /* —— 🌊 根源波动：预警线（细带 + 前进的亮线 + 箭头）→ 蓝色光柱 —— */
+  for (const b of hoennBeams) {
+    const ox = b.ref ? b.ref.x : b.x, oy = b.ref ? b.ref.y : b.y;
+    const ux = Math.cos(b.ang), uy = Math.sin(b.ang);
+    const px2 = -uy * b.w / 2, py2 = ux * b.w / 2;
+    if (!b.fired) {
+      const k = 1 - Math.max(0, Math.min(1, b.t / b.max));
+      ctx.save();
+      ctx.globalAlpha = 0.30 + 0.16 * pulse;
+      ctx.fillStyle = '#3f8fe0';
+      ctx.beginPath();
+      ctx.moveTo(ox + px2 * 0.5, oy + py2 * 0.5);
+      ctx.lineTo(ox + ux * b.len + px2 * 0.5, oy + uy * b.len + py2 * 0.5);
+      ctx.lineTo(ox + ux * b.len - px2 * 0.5, oy + uy * b.len - py2 * 0.5);
+      ctx.lineTo(ox - px2 * 0.5, oy - py2 * 0.5);
+      ctx.closePath(); ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = '#9adcff'; ctx.lineWidth = 2.6;
+      ctx.beginPath();
+      ctx.moveTo(ox + px2 * 0.5, oy + py2 * 0.5); ctx.lineTo(ox + ux * b.len + px2 * 0.5, oy + uy * b.len + py2 * 0.5);
+      ctx.moveTo(ox - px2 * 0.5, oy - py2 * 0.5); ctx.lineTo(ox + ux * b.len - px2 * 0.5, oy + uy * b.len - py2 * 0.5);
+      ctx.stroke();
+      /* 沿预警线推进的白色亮线：走满 = 发射 */
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(ox + px2 * 0.2, oy + py2 * 0.2);
+      ctx.lineTo(ox + ux * b.len * k + px2 * 0.2, oy + uy * b.len * k + py2 * 0.2);
+      ctx.moveTo(ox - px2 * 0.2, oy - py2 * 0.2);
+      ctx.lineTo(ox + ux * b.len * k - px2 * 0.2, oy + uy * b.len * k - py2 * 0.2);
+      ctx.stroke();
+      /* 终点箭头 */
+      ctx.fillStyle = 'rgba(200,240,255,0.9)';
+      ctx.beginPath();
+      ctx.moveTo(ox + ux * b.len, oy + uy * b.len);
+      ctx.lineTo(ox + ux * (b.len - 26) + px2 * 0.6, oy + uy * (b.len - 26) + py2 * 0.6);
+      ctx.lineTo(ox + ux * (b.len - 26) - px2 * 0.6, oy + uy * (b.len - 26) - py2 * 0.6);
+      ctx.closePath(); ctx.fill();
+      ctx.restore();
+    } else {
+      ctx.save();
+      ctx.globalAlpha = Math.max(0, Math.min(1, b.life / 0.24));
+      ctx.translate(ox, oy); ctx.rotate(b.ang);
+      ctx.fillStyle = '#2f7fd8'; ctx.fillRect(0, -b.w / 2, b.len, b.w);
+      ctx.fillStyle = '#8fd8ff'; ctx.fillRect(0, -b.w * 0.3, b.len, b.w * 0.6);
+      ctx.fillStyle = '#eaf8ff'; ctx.fillRect(0, -b.w * 0.12, b.len, b.w * 0.24);
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, -7, b.len, 14);
+      ctx.restore();
+    }
+  }
+  /* —— 🐉 画龙点睛：从烈空坐到落点的预警线 + 落点圈 —— */
+  for (const e of enemies) {
+    if (e.dead || !e.hnA || e.hnA.ph !== 'warn') continue;
+    const A = e.hnA;
+    const dx = A.tx - e.x, dy = A.ty - e.y, L = Math.hypot(dx, dy) || 1;
+    const ux = dx / L, uy = dy / L, px2 = -uy * 34, py2 = ux * 34;
+    const k = Math.max(0, Math.min(1, 1 - A.t / A.max));
+    ctx.save();
+    ctx.globalAlpha = 0.22 + 0.14 * pulse;
+    ctx.fillStyle = '#8ff0a0';
+    ctx.beginPath();
+    ctx.moveTo(e.x + px2, e.y + py2); ctx.lineTo(A.tx + px2, A.ty + py2);
+    ctx.lineTo(A.tx - px2, A.ty - py2); ctx.lineTo(e.x - px2, e.y - py2);
+    ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = 'rgba(200,255,200,0.9)'; ctx.lineWidth = 2.6;
+    ctx.beginPath();
+    ctx.moveTo(e.x + px2, e.y + py2); ctx.lineTo(A.tx + px2, A.ty + py2);
+    ctx.moveTo(e.x - px2, e.y - py2); ctx.lineTo(A.tx - px2, A.ty - py2);
+    ctx.stroke();
+    /* 落点圈：内圈随倒计时收缩 */
+    ctx.fillStyle = 'rgba(120,230,140,' + (0.12 + 0.10 * pulse).toFixed(2) + ')';
+    ctx.beginPath(); ctx.ellipse(A.tx, A.ty, HOENN.ascentR, HOENN.ascentR * 0.62, 0, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(180,255,190,0.9)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.ellipse(A.tx, A.ty, HOENN.ascentR, HOENN.ascentR * 0.62, 0, 0, TAU); ctx.stroke();
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.ellipse(A.tx, A.ty, Math.max(6, HOENN.ascentR * k), HOENN.ascentR * 0.62 * k, 0, 0, TAU); ctx.stroke();
+    ctx.restore();
+  }
+}
+/* 🎁 丰缘之战被讨伐：**只有第 20 波** + 训练家 + 这一局还没拿过神兽 → 弹「三选一」面板 */
+function hoennReward() {
+  if (!isTrainer()) return false;
+  if (p.legendGot) return false;         // 一局只能有一只神兽（无尽里再讨伐也不给）
+  p.legendPend = 1;
+  tryOpen();
+  return true;
+}
+
 /* 每只宝可梦的战斗参数：dmg 是「伤害」这一项（升级 +1 就是加在它身上），攻击伤害按 mul 折算。
    ⚠️ 走位**永远在训练家身边绕圈**（PET_ORBIT_R），`range` 只决定「能打到多远」，绝不压上去近身 */
 const PET_SUMMON = {
@@ -5865,16 +6276,34 @@ function petShellBreak() {
 function petOwned() { return isTrainer() ? (p.petOwned || []) : []; }
 function petAlive(id) { return allyUnits.some(u => !u.dead && u.kind === 'pet' && u.petId === id); }
 /* 🎒 收一只宝可梦（最多 6 只；后续加新宝可梦/专属质变都走这里） */
-function petGrant(id) {
+function petGrant(id, fromBoss) {
   if (!PET_SUMMON[id]) return false;
-  /* 🌟 神兽（盖欧卡 / 固拉多 / 烈空坐）：**只有开发者版拿得到**（用户要求「仅在开发者版更新」）——
+  const isLegend = PET_LEGEND.indexOf(id) >= 0;
+  /* 🌟 神兽（盖欧卡 / 固拉多 / 烈空坐）：**平时只有开发者版拿得到**（用户要求「仅在开发者版更新」）——
      正式版里 `devOnNow()` 恒为 false（`devSet()` 直接返回 0）→ 这里的闸门就是最后一道保险，
-     连编辑器里手改存档、`__musouPetGrant` 都一样拒绝。 */
-  if (PET_LEGEND.indexOf(id) >= 0 && !legendOn()) return false;
+     连编辑器里手改存档、`__musouPetGrant` 都一样拒绝。
+     ⚠️ **唯一的例外是丰缘之战第 20 波的奖励**（`fromBoss = true`）：用户要求训练家击败它之后
+     可以任选一只神兽入队 —— 那是正式版玩家唯一能拿到神兽的路，**一局只放一只**（`p.legendGot`）。 */
+  if (isLegend && !legendOn() && !fromBoss) return false;
+  if (isLegend && fromBoss && p.legendGot) return false;   // 一局游戏只能有一只神兽
   if (!p.petOwned) p.petOwned = [];
   if (p.petOwned.indexOf(id) >= 0) return false;
-  if (p.petOwned.length >= PET_MAX) return false;
+  if (p.petOwned.length >= PET_MAX) {
+    /* 队伍满了：**神兽奖励不能被浪费** —— 挤掉一只（优先挤不是「主宝可梦」的非神兽），
+       普通宝可梦照旧收不下（保持「最多 6 只」的口径不变） */
+    if (!fromBoss) return false;
+    let out = -1;
+    for (let i = p.petOwned.length - 1; i >= 0; i--) {
+      const o = p.petOwned[i];
+      if (PET_LEGEND.indexOf(o) >= 0) continue;
+      if (o !== p.petKind) { out = i; break; }
+      if (out < 0) out = i;
+    }
+    if (out < 0) out = p.petOwned.length - 1;
+    p.petOwned.splice(out, 1);
+  }
   p.petOwned.push(id);
+  if (isLegend && fromBoss) p.legendGot = 1;   // 🌟 记账：一局只能有一只（进存档）
   petSummonSync();
   addText(p.x, p.y - 62, '🧢 宝可梦 +1 ：' + PET_SUMMON[id].name, 20, '#ffd166', '#3a2a00');
   sfx.pick();
@@ -8430,6 +8859,7 @@ function tryOpen() {
   else if (p.weaponPend > 0) openWeaponUp();   // 弓箭手：开局先定武器（弓 / 现代枪械 / 牌皇 / 训练家），再选奇物
   else if (p.starterPend > 0 || starterPickDue()) openStarterUp();  // 🧢 训练家：第 5 波清剿后的御三家三选一（另外两只离队）
   else if (p.catchPend > 0) openCatchUp();      // 🐾 训练家：第 10 波清剿后捕捉宝可梦（二选一）
+  else if (p.legendPend > 0) openLegendUp();    // 🌟 丰缘之战（第 20 波）讨伐后：三只神兽任选一只入队（一局仅一次）
   else if (p.roninPend > 0) openRoninUp();     // 战士：开局先定战法（战士 / 浪客），再选奇物
   else if (p.artPend > 0) openArtUp();
   else if (p.jobPend > 0) openJobUp();
@@ -8636,6 +9066,42 @@ function openCatchUp() {
   const st = $('wp-stats'); if (st) st.innerHTML = '它会入队和你并肩作战（自己上前打，场上没敌人时才回到你身边）';
   rerollLeft = 0;
   paintChoices('catch');
+  $('sc-weapon').classList.add('show');
+}
+/* 🌟 丰缘之战 · 讨伐奖励：**从盖欧卡 / 固拉多 / 烈空坐里任选一只入队**（三选一，复用「选武器」面板）
+   用户口径：只有**第 20 波**的那一场丰缘之战才给，而且**一局只能有一只神兽**（`p.legendGot`）。
+   ⚠️ 这三只平时是「只在开发者版拿得到」的，这里是**唯一的正式版获取路径** → `petGrant(id, true)`
+      （fromBoss = 真，绕开 `legendOn()` 那道闸门，但一局只放一只进来）。 */
+function openLegendUp() {
+  if (p.legendPend <= 0) return;
+  curKind = 'legend';
+  choosing = true;
+  flashG = Math.max(flashG, 0.2);
+  addRing(p.x, p.y, '#ffe08a', 14);
+  addRing(p.x, p.y, '#8fd8ff', 9);
+  sfx.musou ? sfx.musou() : sfx.mut();
+  bigBanner('🌟 神 兽 · 三 选 一', '丰缘之战 讨伐成功 · 任选一只加入你的队伍（这一局只有这一次）');
+  curChoices = PET_LEGEND.map(id => {
+    const S2 = PET_SUMMON[id], sk = petSkillList(id), dex = PET_DEX[petFormKey(id)];
+    return {
+      id, icon: '<img class="up-ic-img" src="' + PET_HEAD[petFormKey(id)] + '" alt="">',
+      name: S2.name + (dex ? '（No.' + dex + '）' : ''),
+      desc: '**' + sk.map(s => s.name).join(' / ') + '**<br>生命 ' + petSummonHp(id) + ' · 伤害 ' + petHitDmgBase(id, 1)
+        + ' · 神兽级（= 进化过三次的基础数值）',
+      apply() {
+        const ok = petGrant(id, true);
+        p.legendPend = 0;
+        petHeadLoad();
+        addText(p.x, p.y - 62, ok ? ('🌟 ' + S2.name + ' 加入了队伍!') : ('🌟 ' + S2.name + ' 没能入队（队伍已满）'), 24, '#ffe08a', '#3a2a00');
+        rings.push({ x: p.x, y: p.y, r: 14, vr: 700, life: 0.5, max: 0.5, color: '#ffe08a', width: 7 });
+        burst(p.x, p.y, 34, PET_FX_TINT[S2.element], 460);
+      }
+    };
+  });
+  const lv = $('wp-lv'); if (lv) lv.textContent = '丰缘之战 讨伐 · 任选一只神兽入队';
+  const st = $('wp-stats'); if (st) st.innerHTML = '一局游戏只能收下一只神兽';
+  rerollLeft = 0;
+  paintChoices('legend');
   $('sc-weapon').classList.add('show');
 }
 /* 🧢 训练家升级：不弹词条面板，直接给所有宝可梦 +0.5 伤害 / +1 生命上限 / +5% 无双充能效率 */
@@ -8918,15 +9384,15 @@ function choiceCapped(id) {
 }
 /* ===== 三选一面板：免费刷新一次（把三个换成完全不同的另外三个） ===== */
 function paintChoices(kind) {
-  /* 转职 3 项 / 战法 4 项 / 选武器 3~4 项（开发者版本多一个「训练家」）/ 御三家 3 项 / 🐾 捕捉 2 项 */
+  /* 转职 3 项 / 战法 4 项 / 选武器 3~4 项（开发者版本多一个「训练家」）/ 御三家 3 项 / 🐾 捕捉 2 项 / 🌟 神兽 3 项 */
   const n = (kind === 'job' || kind === 'ronin') ? Math.max(3, curChoices.length)
-    : ((kind === 'weapon' || kind === 'starter') ? Math.max(3, curChoices.length)
+    : ((kind === 'weapon' || kind === 'starter' || kind === 'legend') ? Math.max(3, curChoices.length)
       : (kind === 'catch' ? Math.max(2, curChoices.length) : 3));
   /* ⚠️ 一律扫到第 4 个按钮：**超出本次选项数的按钮要清空并隐藏** ——
      否则「选武器」面板的第 4 格（训练家）会在别的面板里留下残影，正式版还会多出一个空按钮 */
   for (let i = 0; i < 4; i++) {
     const b = $(kind === 'level' ? 'up-b' + i : kind === 'mut' ? 'mt-b' + i : kind === 'job' ? 'job-b' + i
-      : (kind === 'weapon' || kind === 'starter' || kind === 'catch') ? 'wp-b' + i : kind === 'ronin' ? 'rn-b' + i : 'art-b' + i);
+      : (kind === 'weapon' || kind === 'starter' || kind === 'catch' || kind === 'legend') ? 'wp-b' + i : kind === 'ronin' ? 'rn-b' + i : 'art-b' + i);
     if (!b) continue;
     if (i >= n) { b.innerHTML = ''; b.disabled = true; b.style.display = 'none'; continue; }
     b.style.display = '';
@@ -12545,6 +13011,7 @@ function pickChoice(i) {
   else if (kind0 === 'weapon') p.weaponPend--;
   else if (kind0 === 'starter') p.starterPend--;   // 🧢 训练家挑完御三家
   else if (kind0 === 'catch') { p.catchPend--; petCatchMark(); }   // 🐾 训练家捕捉完宝可梦（**选完才记「这一档已用掉」**）
+  else if (kind0 === 'legend') p.legendPend = 0;   // 🌟 丰缘之战的神兽三选一（`apply()` 里已经记账 legendGot）
   else if (kind0 === 'ronin') p.roninPend--;
   else p.pending--;
   sfx.pick();
@@ -12968,6 +13435,9 @@ function killEnemy(e) {
         : e.type === 'slimeKing' ? '超级史莱姆 炸开!!!'
         : e.type === 'plunder' ? '光明掠夺者 陨落!!!'
         : e.type === 'sprinter' ? '超级跑者 累倒!!!'
+        : e.type === 'groudon' ? '固拉多 倒地!!!'
+        : e.type === 'kyogre' ? '盖欧卡 倒地!!!'
+        : e.type === 'rayquaza' ? '烈空坐 陨落!!!'
         : '总大将 击破!';
       addText(e.x, e.y - 30, killTxt, 30, '#ffe08a', '#5a3a00');
       if (!noOrb) for (let i = 0; i < 9; i++) orbs.push({ x: e.x, y: e.y, kind: i < 7 ? 'hp' : 'ms', vx: 0, vy: 0, dead: false });
@@ -13001,6 +13471,23 @@ function killEnemy(e) {
     mIdx++;
   }
   tryOpen();   // 有质变宝箱/升级在排队则弹出
+  /* 🌟 丰缘之战 · 一阶段：固拉多与盖欧卡**两只都被击败** → 烈空坐登场（同一帧里叫出来，
+     所以 `waveFoes()` 不会出现「两只都死了、场上一个敌人都没有」的空档 → 波次不会被误判为清剿完毕） */
+  if ((e.type === 'groudon' || e.type === 'kyogre') && !hoennPairAlive()) hoennSpawnRayquaza();
+  /* 🌟 丰缘之战 · 收尾：烈空坐倒下 = 这一场结束。
+     **只有第 20 波的那一次**才发神兽（用户明确要求：只有 20 波的丰缘之战能让神兽入队，且一局仅一只）——
+     无尽里随机抽到的丰缘之战（第 10/15/25… 层）只放演出、不给奖励。 */
+  if (e.type === 'rayquaza') {
+    if (wave === 20) {
+      if (!endlessMode()) wave20Clear();   // 普通模式：第 20 关里程碑（战场堕入黑暗 + 血量再乘一档）
+      if (!p.lab && hoennReward()) {
+        dbgHoennReward++;
+        addText(p.x, p.y - 78, '🌟 丰缘之战 讨伐成功 · 任选一只神兽入队!', 26, '#ffe08a', '#3a2a00');
+      } else if (p.legendGot) {
+        addText(p.x, p.y - 78, '🌟 丰缘之战 讨伐 · 这一局已经收过一只神兽了', 22, '#ffe08a', '#3a2a00');
+      }
+    }
+  }
   /* ♾ 无尽模式：**任何 Boss 被讨伐都只是「继续」** —— 没有通关结算，血量档位由层数决定（见 startWave），
      所以这里统一走一条「无尽讨伐」横幅，不再落进下面那些「第 10 / 20 / 30 关里程碑」分支。
      ⚠️ 双子魔眼要**两只都倒下**、超级史莱姆要**最后一只小史莱姆倒下**才算讨伐（与普通模式同判据）；
@@ -15244,6 +15731,7 @@ function saveGame(nextWave, artDueWv) {
     petKind: p.petKind || '', petOwned: (p.petOwned || []).slice(), trainLv: p.trainLv || 0,
     petEgg: p.petEgg ? 1 : 0,     // 🥚 宝可梦蛋（第 1 波后到手 · 第 5 波后孵化）
     petCatchWv: (p.petCatchWv || []).slice(),   // 🐾 已经捕捉过的波次（面板不会重弹）
+    legendGot: p.legendGot ? 1 : 0,             // 🌟 丰缘之战奖励：本局是否已经收过一只神兽（一局只能有一只）
     petWv: Object.assign({}, p.petWv || {}),    // 🐉 大器晚成两条线的波次进化段位
     petEvoPick: Object.assign({}, p.petEvoPick || {}),   // 🔮 道具进化选定的形态（随存档走）
     petItemBuy: p.petItemBuy || '',                      // 🔮 本局买过的进化道具（整局只能买一件）
@@ -15345,15 +15833,20 @@ function loadGame() {
   if (isTrainer()) { p.art.novrain = 0; p.art.rainkeep = 0; }
   /* 🧢 训练家：御三家 / 宝可梦 / 技能选择一起读回来（读档后照样有输出；技能 id 不认识就回默认） */
   p.petKind = (s.petKind && PET_SUMMON[s.petKind]) ? s.petKind : (Array.isArray(s.petOwned) && PET_SUMMON[s.petOwned[0]] ? s.petOwned[0] : '');
-  /* 🌟 神兽（#382/#383/#384）**只在开发者版**存在：正式版读档时把存档里混进来的它们就地摘掉
-     （和 `roleBanArts()` 摘掉训练家的十一月雨同一个套路） */
+  /* 🌟 神兽（#382/#383/#384）**平时只在开发者版**存在：正式版读档时把存档里混进来的它们就地摘掉
+     （和 `roleBanArts()` 摘掉训练家的十一月雨同一个套路）。
+     ⚠️ **例外**：通过「丰缘之战」第 20 波奖励拿到的那只（存档里带 `legendGot`）必须保留 —— 那是正式版
+     玩家唯一的神兽来源，摘掉就等于白打一场 Boss。 */
+  p.legendGot = s.legendGot ? 1 : 0;
+  p.legendPend = 0;
   p.petOwned = (Array.isArray(s.petOwned) ? s.petOwned : [])
-    .filter(id => !!PET_SUMMON[id] && (PET_LEGEND.indexOf(id) < 0 || legendOn())).slice(0, PET_MAX);
+    .filter(id => !!PET_SUMMON[id] && (PET_LEGEND.indexOf(id) < 0 || legendOn() || p.legendGot)).slice(0, PET_MAX);
   if (!p.petOwned.length && p.petKind) p.petOwned = [p.petKind];
   p.trainLv = Math.max(0, s.trainLv | 0);
   p.petEgg = s.petEgg ? 1 : 0;    // 🥚 宝可梦蛋也一起读回来
   p.petCatchWv = (Array.isArray(s.petCatchWv) ? s.petCatchWv : []).filter(w => typeof w === 'number');   // 🐾 已捕捉过的波次
   p.catchPend = 0;
+  p.legendPend = 0;                               // 🌟 丰缘之战的奖励面板不跨存档（读档后从 legendGot 推）
   p.petWv = Object.assign({}, s.petWv || {});      // 🐉 波次进化段位
   /* 🔮 道具进化：形态 key 必须是**真存在的分支形态**（老存档/手改存档里塞了奇怪的值就当没进化） */
   p.petEvoPick = {};
@@ -15470,6 +15963,8 @@ function resetRun() {
   p.petKind = ''; p.petOwned = []; p.trainLv = 0; p.starterPend = 0;   // 🧢 训练家：御三家与宝可梦随新局重选
   p.petEgg = 0;                                                        // 🥚 宝可梦蛋也随新局收回
   p.petCatchWv = []; p.catchPend = 0; petCatchCfg = null;              // 🐾 两档捕捉机会也重置
+  p.legendPend = 0; p.legendGot = 0;                                   // 🌟 丰缘之战的奖励（一局一只神兽）随新局清零
+  hoennSpikes = []; hoennBeams = [];                                   // 🌟 场上的地刺 / 光柱也一起收走
   p.petWv = {};                                                        // 🐉 大器晚成的波次进化从 0 段开始
   p.petEvoPick = {}; p.petItemBuy = '';                                // 🔮 道具进化也清空（新的一局重新买）
   petHelpClear();                                                      // 🤝 帮助的蓄力不留到下一局
@@ -16007,7 +16502,9 @@ const LAB_BOSSES = [
   { id: 'commander', icon: '🎖️', name: '指挥官（新）', desc: '光环 Boss —— 它在场时<b>其他敌人移速 ×1.5 / 血量 ×2 / 攻击频率 ×1.5</b>；本体不追玩家、只在地图上乱跑，每 5 秒一轮攻击：随机方位召唤 <b>3 → 5 → 8</b> 个一次性骑兵（各波隔 1 秒，蓄力 0.5 秒后冲锋，撞完消散）' },
   { id: 'slimeKing', icon: '🟢', name: '超级史莱姆（新）', desc: '第 10 关 Boss 三选一 —— 在场时<b>整张图变黏糊糊场地（玩家移速 −50%）</b>；蓄力 <b>0.5 秒</b>后高高跳起砸向玩家（落点有预警圈）；<b>半血炸开 → 分裂成三只各 1/4 最大生命的小史莱姆</b>（本体退场，黏场地仍在）' },
   { id: 'plunder', icon: '💡', name: '光明掠夺者（新）', desc: '第 30 关 Boss 二选一 —— 在场时<b>玩家致盲</b>（视野渐渐变黑、看不远）；<b>不攻击时完全不可见且不受伤害</b>，隐身期间随机在地图上移动；三套技能：① 瞬移到你旁边蓄力 1 秒 → 直线紫色激光 3 秒（每 0.5 秒 10 伤 · 离开范围会缓慢追踪）② 蓄力 1 秒 → 三连扇形爪击（每次间隔 0.3 秒 + 短位移）③ 原地蓄力 2 秒 → 地上三个法阵各召一只骷髅头（轻骑贼最速，接触自爆）；<b>每被打掉 1/5 最大生命 → 原地瘫痪 8 秒</b>（取消致盲 · 受到伤害 +30%），起来后重新计算进度' },
-  { id: 'sprinter', icon: '🏃', name: '超级跑者（新）', desc: '第 20 关 Boss 三选一 —— 血条下面写着「<b>你跑不过我你信吗？</b>」。它<b>贴着地图最外圈绕跑道狂奔</b>（速度 = 铁骑冲锋 <b>×1.5</b> = 1200px/s）；<b>每 2~5 秒随机</b>冲出赛道、锁定你的方向直冲，跑回跑道后继续绕圈，<b>全程没有任何预警线</b>，且<b>只会造成冲撞伤害</b>。两种击败方式：<b>① 直接打空血条</b>（基础血量略高于其他 Boss）<b>② 撑满 120 秒</b>它自己体力耗尽自杀。战斗第 <b>60 秒</b>它会喝雪碧<b>回 50% 最大生命</b>，第 <b>90 秒</b>吃巧乐兹<b>再回 30% 并提速 20%</b>' }
+  { id: 'sprinter', icon: '🏃', name: '超级跑者（新）', desc: '第 20 关 Boss 三选一 —— 血条下面写着「<b>你跑不过我你信吗？</b>」。它<b>贴着地图最外圈绕跑道狂奔</b>（速度 = 铁骑冲锋 <b>×1.5</b> = 1200px/s）；<b>每 2~5 秒随机</b>冲出赛道、锁定你的方向直冲，跑回跑道后继续绕圈，<b>全程没有任何预警线</b>，且<b>只会造成冲撞伤害</b>。两种击败方式：<b>① 直接打空血条</b>（基础血量略高于其他 Boss）<b>② 撑满 120 秒</b>它自己体力耗尽自杀。战斗第 <b>60 秒</b>它会喝雪碧<b>回 50% 最大生命</b>，第 <b>90 秒</b>吃巧乐兹<b>再回 30% 并提速 20%</b>' },
+  /* 🌟 丰缘之战（训练家的第 20 波固定 Boss · 也是无尽随机池的一员）：点一次 = 固拉多 + 盖欧卡一起上场 */
+  { id: 'groudon', icon: '🌟', name: '丰缘之战（新）', desc: '训练家第 20 波固定 Boss —— <b>固拉多 + 盖欧卡同时出现</b>（各 <b>2000</b> 基础血量）：固拉多每 <b>5 秒</b>一次「🗡️ 断崖之剑」（5 个落点预警圈 → 地刺破土 · 每根 <b>150</b> 判定半径 / 26 伤）；盖欧卡每 <b>5 秒</b>一次「🌊 根源波动」（<b>预警线 → 方向锁定 0.5 秒后</b>发射 200px 宽蓝色光柱 · 长 380 · 24 伤）。<b>两只都被击败 → 烈空坐登场</b>（<b>3000</b> 血 · 每 <b>3 秒</b>一次「🐉 画龙点睛」：<b>落点预警线</b> → 俯冲 472px → 落点 200 半径 / 30 伤）。讨伐后训练家可<b>任选一只神兽入队</b>（只有第 20 波给 · 一局仅一只）' }
 ];
 /* 试验场可选的全部敌人 = Boss 11 个 + 小怪 6 种（开发者版本才会一起列出来）
    🐸🔥💧 宝可梦**不在试验场**：它们是训练家的召唤物（见 PET_SUMMON / petSummonSync） */
@@ -16061,6 +16558,16 @@ function labSpawnBoss(type) {
   dbgPlunderSkills = 0; dbgPlunderLaserHits = 0; dbgPlunderClaws = 0; dbgPlunderDowns = 0; dbgBlindMax = 0;
   blindK = 0; plunderRunes = [];
   if (type === 'final5') { makeTwins(); return true; }
+  /* 🌟 丰缘之战：试验场里也让**两只一起上场**（固拉多在右、盖欧卡在左），
+     打掉两只之后烈空坐照常登场 —— 想直接看二阶段就再点一次「🌟 丰缘之战」的击杀钩子 */
+  if (type === 'groudon') {
+    const g = spawnEnemy('groudon', false, true);
+    const k = spawnEnemy('kyogre', false, true);
+    for (const b of [g, k]) { b.shiny = false; b.aff = null; b.hp = b.maxhp; }
+    g.x = Math.max(120, Math.min(W - 120, p.x + 380)); g.y = Math.max(120, Math.min(H - 120, p.y));
+    k.x = Math.max(120, Math.min(W - 120, p.x - 380)); k.y = Math.max(120, Math.min(H - 120, p.y));
+    return true;
+  }
   if (!ETYPES[type]) return false;
   const e = spawnEnemy(type, false, true);      // noShiny：别让「闪光 5 倍血」干扰观察
   e.shiny = false; e.aff = null;
@@ -17025,6 +17532,19 @@ function drawEnemy(e, col) {
     ctx.fillText('∞', 0, -56);
     ctx.textAlign = 'left';
     ctx.restore();
+    ctx.restore();
+    return;
+  }
+  /* ===== 🌟 丰缘之战：三只神兽 Boss —— 直接复用宝可梦那套逐帧贴图（8 方向 + 5 动作） =====
+     `e.petForm / e.pet / e.petScale / e.petA / e.petDir / e.petF` 在 hoennInit 里都备好了，
+     所以这里直接 `drawPet(e)`（它自己会画影子以外的部分；影子按 Boss 体型补一圈）。 */
+  if (e.hoenn) {
+    ctx.save();
+    ctx.globalAlpha = 0.42;
+    ctx.fillStyle = '#000';
+    ctx.beginPath(); ctx.ellipse(0, e.r * 0.78, e.r * 1.25, e.r * 0.44, 0, 0, TAU); ctx.fill();
+    ctx.restore();
+    drawPet(e);
     ctx.restore();
     return;
   }
@@ -21717,6 +22237,8 @@ function updateGame(dt, rawDt) {
     if (e.type === 'plunder') { tickPlunderAI(e, dt, tg); continue; }              // 💡 光明掠夺者：隐身游走 / 三套技能 / 瘫痪
     if (e.type === 'skull') { tickSkullAI(e, dt, tg); continue; }                  // 💀 骷髅头：直线冲玩家，接触自爆
     if (e.type === 'sprinter') { tickSprinterAI(e, dt, tg); continue; }            // 🏃 超级跑者：绕跑道 + 冲出赛道撞人（无预警线）
+    /* 🌟 丰缘之战：固拉多 / 盖欧卡 / 烈空坐 —— 走位与两套「预警线」技能全在 tickHoennAI 里 */
+    if (e.type === 'groudon' || e.type === 'kyogre' || e.type === 'rayquaza') { tickHoennAI(e, dt, tg); continue; }
 
     /* 无双光环灼烧（随强化成长）；法师/弓箭手的无双不吸引敌人（远程定位，不被拉近身）
        —— 放在战技分发之前：蓄力/腾空中的敌人照样吃光环伤害
@@ -21794,6 +22316,7 @@ function updateGame(dt, rawDt) {
   enemies = enemies.filter(e => !e.dead);
   tickHexes(dt);   // 终焉齿轮场地魔法阵倒计时/爆发
   tickPlanteraVines(dt);   // 世纪之花·藤蔓（预警 → 绽放 → 每 0.5s 结算）
+  tickHoennFields(dt);     // 🌟 丰缘之战：断崖之剑的落点地刺 / 根源波动的预警线与光柱（施法者死了也要把在场的打完）
   tickBlackHoles(dt);   // 哈姆黑洞：吸附/灼烧/Boss 追踪
 
   /* ---- 箭矢 ---- */
@@ -22146,6 +22669,7 @@ function drawGame() {
   drawGooField();          // 🟢 超级史莱姆：黏糊糊场地（整张图糊一层黏液）
   drawPlunderRunes();      // 💡 光明掠夺者技能 3：地面法阵（蓄力 2 秒 → 召骷髅头）
   drawSprinterTrack();     // 🏃 超级跑者的跑道（贴着地图最外圈的赛道）
+  drawHoennFields();       // 🌟 丰缘之战：地刺落点预警 / 蓝色光柱 / 画龙点睛的落点预警线
 
   /* 妖法师火焰阵法预警圈 / 终焉齿轮·蓝色魔法阵 / 战将·总大将跃击落点 */
   for (const w of warnFx) {
@@ -22607,16 +23131,29 @@ function drawGame() {
       const isSlime = e.type === 'slimeKing';
       const isPlunder = e.type === 'plunder';
       const isSprint = e.type === 'sprinter';
-      const big = isF || isWorm || isPlant || isVoid || isSlime || isPlunder || isSprint;
+      /* 🌟 丰缘之战：三只各有配色；固拉多 / 盖欧卡**同时在场** → 血条像双子魔眼那样一左一右排开，别叠一起 */
+      const isGro = e.type === 'groudon', isKyo = e.type === 'kyogre', isRay = e.type === 'rayquaza';
+      const big = isF || isWorm || isPlant || isVoid || isSlime || isPlunder || isSprint || isGro || isKyo || isRay;
       const w = big ? 500 : 320, bxc = camX + VW / 2, bx = bxc - w / 2;
-      /* 双子魔眼：两只各有独立血条，一条在左上、一条在右上（避免叠在一起） */
-      const twinOff = isTwin ? (e.twinRole === 'laser' ? -w / 2 - 8 : w / 2 + 8) : 0;
+      /* 双子魔眼：两只各有独立血条，一条在左上、一条在右上（避免叠在一起）
+         🌟 丰缘之战一阶段的两只同理：固拉多在左、盖欧卡在右 */
+      const twinOff = isTwin ? (e.twinRole === 'laser' ? -w / 2 - 8 : w / 2 + 8)
+        : ((isGro || isKyo) ? (isGro ? -w / 2 - 8 : w / 2 + 8) : 0);
       const by = camY + (big ? 40 : (isTwin ? 34 : 64));
       const cx2 = bxc + twinOff, bx2 = cx2 - w / 2;
       ctx.fillStyle = 'rgba(10,10,10,0.75)'; ctx.fillRect(bx2 - 2, by - 2, w + 4, 16);
-      ctx.fillStyle = isVoid ? '#101a33' : (isF2 ? '#123e5e' : (isF ? '#7a1f6e' : (isWorm ? '#3a2450' : (isPlant ? '#5a1030' : (isTwin ? '#4a1418' : (isSlime ? '#1e5a2c' : (isPlunder ? '#3a2a5a' : (isSprint ? '#5a2010' : '#a0312a'))))))));
+      /* Boss 血条配色（查表；原来那串八层嵌套三元太难加新 Boss 了，本轮顺手换成表）
+         🌟 丰缘之战三只排在最前面：固拉多橙红 / 盖欧卡蓝 / 烈空坐绿 */
+      const BOSS_BAR = {
+        groudon: ['#5a1a08', '#ffb066'], kyogre: ['#0c2a52', '#8fd8ff'], rayquaza: ['#12401c', '#8ff0a0'],
+        final6: ['#101a33', '#9ad8ff'], final2: ['#123e5e', '#7fd4ff'], final: ['#7a1f6e', '#ff9d5c'],
+        final3: ['#3a2450', '#c79bff'], final4: ['#5a1030', '#ff9ed2'], final5: ['#4a1418', '#ff6a4a'],
+        slimeKing: ['#1e5a2c', '#8ff0a0'], plunder: ['#3a2a5a', '#e8dcff'], sprinter: ['#5a2010', '#ffb199']
+      };
+      const bar2 = BOSS_BAR[e.type] || ['#a0312a', '#ffd166'];   // 总大将等走默认色
+      ctx.fillStyle = bar2[0];
       ctx.fillRect(bx2, by, w * Math.max(0, e.hp / e.maxhp), 12);
-      ctx.fillStyle = isVoid ? '#9ad8ff' : (isF2 ? '#7fd4ff' : (isF ? '#ff9d5c' : (isWorm ? '#c79bff' : (isPlant ? '#ff9ed2' : (isTwin ? '#ff6a4a' : (isSlime ? '#8ff0a0' : (isPlunder ? '#e8dcff' : (isSprint ? '#ffb199' : '#ffd166'))))))));
+      ctx.fillStyle = bar2[1];
       ctx.font = 'bold 15px "Microsoft YaHei",sans-serif';
       ctx.textAlign = 'center';
       /* 🗡️ 虚空执剑者 / 💡 光明掠夺者：血条上直接标出「现在能不能打」——这个机制必须一眼能读 */
@@ -25121,7 +25658,7 @@ window.__musouMiniMap = () => ({   // 测试钩子：小地图矩形 / 视野框
   foes: enemies.filter(e => !e.dead).map(e => ({ t: e.type, boss: e.boss ? 1 : 0, col: e.boss ? MM_BOSS_COL : MM_FOE_COL, x: Math.round(e.x), y: Math.round(e.y) })),
   ring: arenaRing() ? { w: HELL_RING_W, band: Math.round(HELL_RING_W * MM_W / W), safeW: W - HELL_RING_W * 2, safeH: H - HELL_RING_W * 2, inFire: inHellRing(p.x, p.y) ? 1 : 0, col: MM_RING_COL, gear: gearArena } : null
 });
-window.__musouClearField = (keepOrbs) => { if (state !== 'play') return; enemies = []; shots = []; warnFx = []; roninWalls = []; blades = []; plunderRunes = []; hexes = []; blackHoles = []; homingM = []; catE = null; cardCats = []; charmUnits = []; klLances = []; royalCavs = []; skySpears = []; wmThrusts = []; wmPlanes = []; wmOrbit = {}; wmOrbitOn = {}; wmOrbitHit = {}; wmOrbitDmg = {}; wmAnim = {}; wmDrones = []; wmBottles = []; wmFires = []; wmDashSlashes = []; wmShurikens = []; wmPrisms = []; wmHolySeq = {}; wmBeams = []; wmCharge = {}; wmAuraT = {}; dbgWMShotOrigins = []; swordE = null; drones = []; pBullets = []; bolts = []; if (!keepOrbs) orbs = []; spawnQ = []; meteors = []; firePits = []; thunderClouds = []; arcs = []; lightBeams = []; rainDrops = []; rainHits = []; voidImpacts = []; fxSprites = []; petBeams = []; petPools = []; petTornadoes = []; petMeteors = []; planteraVines = []; nukeFx = null; }; // 测试钩子：清场 + 停出怪 + 移除随行攻击体/火坑/陨石/雷云/光炮/雨幕/哈吉咪/**世纪之花藤蔓/未落地的核弹**（keepOrbs=true 时保留掉落物，测「每波吸取」用）
+window.__musouClearField = (keepOrbs) => { if (state !== 'play') return; enemies = []; shots = []; warnFx = []; roninWalls = []; blades = []; plunderRunes = []; hexes = []; blackHoles = []; homingM = []; catE = null; cardCats = []; charmUnits = []; klLances = []; royalCavs = []; skySpears = []; wmThrusts = []; wmPlanes = []; wmOrbit = {}; wmOrbitOn = {}; wmOrbitHit = {}; wmOrbitDmg = {}; wmAnim = {}; wmDrones = []; wmBottles = []; wmFires = []; wmDashSlashes = []; wmShurikens = []; wmPrisms = []; wmHolySeq = {}; wmBeams = []; wmCharge = {}; wmAuraT = {}; dbgWMShotOrigins = []; swordE = null; drones = []; pBullets = []; bolts = []; if (!keepOrbs) orbs = []; spawnQ = []; meteors = []; firePits = []; thunderClouds = []; arcs = []; lightBeams = []; rainDrops = []; rainHits = []; voidImpacts = []; fxSprites = []; petBeams = []; petPools = []; petTornadoes = []; petMeteors = []; planteraVines = []; hoennSpikes = []; hoennBeams = []; nukeFx = null; }; // 测试钩子：清场 + 停出怪 + 移除随行攻击体/火坑/陨石/雷云/光炮/雨幕/哈吉咪/**世纪之花藤蔓/丰缘之战的地刺与光柱/未落地的核弹**（keepOrbs=true 时保留掉落物，测「每波吸取」用）
 window.__musouClearAllies = () => { allyUnits = []; };   // 测试钩子：清空部署单位（敌人索敌会优先打假人/随从，探针期必须清掉才锁定角色）
 window.__musouDummy = (dx, dy, hp, r, boss) => { // 测试钩子：玩家前方放一只高血「不动靶」兵卒（射程/穿透探针：不移动、不吃击退）；
   /* 可选第 4 参 r：放大判定圈（模拟大体型 / Boss）；第 5 参 boss=1：按 Boss 级目标处理（验证剑气对 Boss 翻倍） */
@@ -25887,6 +26424,68 @@ window.__musouLegendInfo = () => ({
     skill: petSkillOf(id).id, skills: petSkillList(id).map(s => s.id), owned: petOwned().indexOf(id) >= 0 ? 1 : 0
   }))
 });
+/* ============================================================
+   🌟 丰缘之战的测试钩子（训练家第 20 波固定 Boss / 无尽随机池）
+   无头冒烟没法「等 20 波再打三只 Boss」，所以给一组直通钩子：
+   `Spawn` 直接把固拉多 + 盖欧卡摆上场 · `Ray` 强制二阶段 · `Kill` 直接结算掉某一只 ·
+   `LegendChoose` 点奖励面板的第 i 个选项（走真实 `pickChoice` 流程）
+   ============================================================ */
+window.__musouHoennInfo = () => ({
+  ids: HOENN_IDS.slice(),
+  baseHp: { groudon: HOENN.groHp, kyogre: HOENN.kyoHp, rayquaza: HOENN.rayHp },
+  castCd: HOENN.castCd, rayCd: HOENN.rayCd, warn: HOENN.warn,
+  spikeR: HOENN.spikeR, spikeGap: HOENN.spikeGap, spikeWarn: HOENN.spikeWarn, spikeDmg: HOENN.spikeDmg, spikeLife: HOENN.spikeLife,
+  beamLen: HOENN.beamLen, beamW: HOENN.beamW, beamDmg: HOENN.beamDmg,
+  ascentR: HOENN.ascentR, ascentWarn: HOENN.ascentWarn, ascentDist: HOENN.ascentDist, ascentDmg: HOENN.ascentDmg,
+  alive: enemies.filter(e => !e.dead && e.hoenn).map(e => e.type),
+  units: enemies.filter(e => !e.dead && e.hoenn).map(e => ({ t: e.type, hp: e.maxhp, x: Math.round(e.x), y: Math.round(e.y) })),
+  spikeField: hoennSpikes.length, beamField: hoennBeams.length,
+  spikeWarns: hoennSpikes.filter(s => s.ph === 'warn').length,
+  spikeUp: hoennSpikes.filter(s => s.ph === 'up').length,
+  /* 🌊 预警线读数：`beamWarns` = 还没发射的预警线（t 从 0.5 倒数到 0）、`beamAngs` = 它们锁定的方向 */
+  beamWarns: hoennBeams.filter(b => !b.fired).map(b => +b.t.toFixed(3)),
+  beamAngs: hoennBeams.filter(b => !b.fired).map(b => +b.ang.toFixed(4)),
+  beamFired: hoennBeams.filter(b => b.fired).length,
+  /* 🐉 画龙点睛的当前阶段（warn = 落点预警线还在拉 · go = 正在俯冲 · land = 落地僵直） */
+  ascent: (function () {
+    const r = enemies.filter(e => !e.dead && e.type === 'rayquaza')[0];
+    return (r && r.hnA) ? { ph: r.hnA.ph, t: +r.hnA.t.toFixed(3), tx: Math.round(r.hnA.tx), ty: Math.round(r.hnA.ty), warn: HOENN.ascentWarn } : null;
+  })(),
+  spikes: dbgHoennSpike, beamCasts: dbgHoennBeamCast, beamFires: dbgHoennBeamFire, ascents: dbgHoennAscent, hits: dbgHoennHit,
+  rays: dbgHoennRay, rewards: dbgHoennReward,
+  legendGot: p.legendGot ? 1 : 0, legendPend: p.legendPend || 0, legendPool: PET_LEGEND.slice(),
+  wave: wave, endless: endlessMode() ? 1 : 0, trainer: isTrainer() ? 1 : 0, lab: p.lab ? 1 : 0, kind: curKind || ''
+});
+window.__musouHoennSpawn = () => {   // 测试钩子：直接把固拉多 + 盖欧卡摆上场（返回两只的血量读数）
+  if (state !== 'play' || !p.alive) return null;
+  const a = spawnEnemy('groudon', false, true), b = spawnEnemy('kyogre', false, true);
+  return { groudon: { hp: a.hp, maxhp: a.maxhp }, kyogre: { hp: b.hp, maxhp: b.maxhp }, gap: Math.round(Math.hypot(a.x - b.x, a.y - b.y)) };
+};
+window.__musouHoennRay = () => {     // 测试钩子：强制叫出烈空坐（二阶段）
+  if (state !== 'play' || !p.alive) return null;
+  const alive = enemies.filter(e => !e.dead && (e.type === 'groudon' || e.type === 'kyogre'));
+  for (const e of alive) killEnemy(e);
+  const r = enemies.find(e => !e.dead && e.type === 'rayquaza');
+  return r ? { hp: r.hp, maxhp: r.maxhp, at: [Math.round(r.x), Math.round(r.y)] } : null;
+};
+window.__musouHoennKill = (type) => {   // 测试钩子：直接讨伐掉场上的某一只（groudon / kyogre / rayquaza）
+  if (state !== 'play' || !p.alive) return 0;
+  let n = 0;
+  for (const e of enemies) {
+    if (e.dead || !e.hoenn) continue;
+    if (type && e.type !== type) continue;
+    killEnemy(e); n++;
+  }
+  return n;
+};
+window.__musouLegendChoose = (id) => {   // 测试钩子：点「神兽三选一」面板里的某一项（走真实 pickChoice）
+  if (curKind !== 'legend') return false;
+  for (let i = 0; i < curChoices.length; i++) {
+    if (!id || curChoices[i].id === id) { pickChoice(i); return true; }
+  }
+  return false;
+};
+window.__musouLegendPanel = () => ({ kind: curKind || '', open: choosing ? 1 : 0, choices: curChoices.map(c => c.id || c.name || ''), head: ($('wp-lv') || {}).textContent || '' });
 window.__musouPetAttack = () => {                        // 测试钩子：立刻让所有宝可梦出手一次
   let n = 0;
   for (const u of allyUnits) {
@@ -25964,9 +26563,11 @@ window.__musouHitType = (type, dmg) => {   // 测试钩子：对某类型的第�
 };
 window.__musouBossHpAt = (type, k, noShiny) => {   // 测试钩子：某波下某 Boss 的基础血量（只建一只读了血就移除，不污染场景）；noShiny=true 时强制非闪光
   if (state !== 'play') return null;
+  /* 🌟 「hoenn」是丰缘之战的哨兵名（不是 ETYPES 类型）→ 这里按它的第一形态「固拉多」建探针 */
+  const t0 = type === 'hoenn' ? 'groudon' : type;
   const keep = wave;
   wave = clampWave(k);
-  const e = spawnEnemy(type, false, !!noShiny, true);   // probe=true：只读血量的探针，不吞猫 / 不占场地
+  const e = spawnEnemy(t0, false, !!noShiny, true);   // probe=true：只读血量的探针，不吞猫 / 不占场地
   const out = { type, wave: wave, hp: e.maxhp, dmg: Math.round(e.dmg) };
   e.dead = true;
   enemies = enemies.filter(x => !x.dead);
