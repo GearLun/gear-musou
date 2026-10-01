@@ -1080,6 +1080,7 @@ let dbgFires = 0, dbgBlasts = 0, dbgMeteor = 0, dbgManapool = 0, dbgLavaTicks = 
 let dbgLunges = 0, dbgJumps = 0, dbgSlams = 0, dbgGenShots = 0;   // 诊断：兵卒突刺 / 跃击起跳 / 落地 / 总大将落地弹幕
 let dbgBH = 0;   // 诊断：哈姆黑洞生成次数
 let dbgWaterTicks = 0, dbgWaterBursts = 0, dbgWaterHits = 0, dbgWaterLaneN = 0;   // 诊断：水法师 水柱周期结算 / 水爆 / 命中即伤 / 水柱命中总数（含多柱叠加）
+let dbgWaterVacuum = 0, dbgWaterExtra = 0;   // 🌊 水法师重做：自动吸取的法术球总数 / 额外两道激光水柱的发射次数
 let thunderClouds = [];                                       // 雷法师无双：雷云（可同时存在多朵）
 let arcs = [];                                                // 闪电链折线特效
 let dbgBolts = 0, dbgChainN = 0, dbgThunHits = 0, dbgThunExec = 0, dbgThunExecWait = 0, dbgClouds = 0, dbgCloudBolts = 0;   // 诊断：雷法师（ExecWait = 因 0.5s 冷却被推迟的 Boss 雷罚次数）
@@ -1146,6 +1147,9 @@ const p = {
   role: 'warrior', bowT: 0, mageT: 0,   // 角色：warrior 战士 / archer 弓箭手 / mage 法师；bowT 拉弓、mageT 咏唱后坐动画
   job: '', jobPend: 0,                  // 法师魔法转职：'' 未专精（=火法师）/ 'fire' / 'water'
   jetOn: 0, jetTick: 0, waterBurstT: 0, jetPrev: null,  // 水法师：水柱喷射状态 / 结算计时 / 无双水爆计时 / 上一帧被命中的敌人
+  waterRampT: 0, waterOrbN: 0, waterExtraT: 0,          // 🌊 水法师重做：本波累计的**喷射秒数**（每满 1 秒伤害 +8%）
+                                                        //   · 累计**吸取的蓝球数**（每满 10 颗 → 朝鼠标额外两道激光水柱）
+                                                        //   · 无双期间「每 2 秒额外两道水柱」的倒计时
   lightJetOn: 0, lightJetTick: 0, lightJetPrev: null,  // 光法师：无双持续光波状态 / 结算计时 / 上一帧被命中的敌人
   mem: 200, memT: 0,                    // 法师法术条：当前值 / 剩余回复时间（8 发起；见底后 2 秒回满，期间停止普攻；无双即刻回满且期间不消耗）
   alive: true
@@ -1550,6 +1554,8 @@ function hellDarkOn() { return hellBonusOn() && !!hellEv && hellEv.id === 'dark'
 function eqDmgMul() { return hellDarkOn() ? HELL_DARK_MUL : 1; }   // 本波伤害倍率（双向）
 function startWave(k) {
   wave = k;
+  /* 🌊 水法师：水柱伤害的「每持续喷 1 秒 +8%」加成**每波开始清空**（用户要求） */
+  p.waterRampT = 0;
   /* ♾ 无尽模式：血量档位**按层数**走（每 10 层一档、最多 2 档 = ×2/×4），
      与「打死的是哪一位随机 Boss」解耦 —— 否则无尽第 5 层抽到双子魔眼就会白送 ×2 档。 */
   if (endlessMode()) hpBoost = Math.min(2, Math.floor(k / 10));
@@ -12182,8 +12188,8 @@ const MUTS = [
   { id:'lava',     icon:'🌋', name:'熔岩结界', desc:'身周火焰圈，圈内敌人持续灼烧（范围与伤害随层数提升）', cap:5, apply(){ p.mut.lava = Math.min(5, (p.mut.lava || 0) + 1); } },
   { id:'manapool', icon:'🔷', name:'无穷法力', desc:'法术条见底直接补满：冷却 20 秒，-3.75 秒/层（满层 5 秒）', cap:5, apply(){ p.mut.manapool = Math.min(5, (p.mut.manapool || 0) + 1); } },
   { id:'rage',     icon:'💢', name:'狂暴增幅', desc:'无双后伤害 +8 持续 10 秒，+10/层（满层 +48）', cap:5, apply(){ p.mut.rage = Math.min(5, (p.mut.rage || 0) + 1); } },
-  { id:'multicast', icon:'🎇', name:'多重施法', desc:'普攻弹道 +1/层（至多 3 条）', cap:2, apply(){ p.mut.multicast = Math.min(2, (p.mut.multicast || 0) + 1); } },
-  { id:'mastery',  icon:'🔥', name:'术有专攻', desc:'按元素强化本系：火——爆炸范围 +35%/层、命中留 2 秒火坑；水——水柱宽度 +14px/层、蓝球掉率 +1/3 基础；雷——命中定身 0.5 秒，6 次雷击触发雷罚（满层 3 次）、普通敌人秒杀而 Boss 扣 3% 最大生命（**对 Boss 冷却 0.5 秒**），**且无双雷云的攻击范围 +1/6 半径/层（满 3 层 = ×1.5）**；光——回蓝更快（1 秒 → 满层 0.5 秒）、光炮更宽（满层 200px）', cap:3, apply(){ p.mut.mastery = Math.min(3, (p.mut.mastery || 0) + 1); } },
+  { id:'multicast', icon:'🎇', name:'多重施法', desc:'水法师：**水柱宽度 +30px/层**，且**水柱不再分裂**（永远一条粗水柱）；其它元素：普攻弹道 +1/层（至多 3 条）', cap:2, apply(){ p.mut.multicast = Math.min(2, (p.mut.multicast || 0) + 1); } },
+  { id:'mastery',  icon:'🔥', name:'术有专攻', desc:'按元素强化本系：火——爆炸范围 +35%/层、命中留 2 秒火坑；水——**蓝球（法术球）掉率 1/2 → 满级必定掉落**（法术球回复 30 点法术条）；雷——命中定身 0.5 秒，6 次雷击触发雷罚（满层 3 次）、普通敌人秒杀而 Boss 扣 3% 最大生命（**对 Boss 冷却 0.5 秒**），**且无双雷云的攻击范围 +1/6 半径/层（满 3 层 = ×1.5）**；光——回蓝更快（1 秒 → 满层 0.5 秒）、光炮更宽（满层 200px）', cap:3, apply(){ p.mut.mastery = Math.min(3, (p.mut.mastery || 0) + 1); } },
   /* —— 士兵专属质变（选现代枪械后才出现；传统弓/战士/法师候选池自动剔除）—— */
   { id:'mag',      icon:'🧲', name:'扩容弹夹', desc:'弹夹容量 +15/层（30 → 满 4 层 90 发）', cap:4, apply(){ p.mut.mag = Math.min(4, (p.mut.mag || 0) + 1); p.mag = Math.min(gunMagMax(), p.mag + 15); } },
   { id:'grenade',  icon:'💣', name:'榴弹装填', desc:'每 30 发子弹额外打出一发榴弹（范围伤害 + 灼伤）；每层减少所需弹数（30/20/10），并提高伤害与爆炸范围', cap:3, apply(){ p.mut.grenade = Math.min(3, (p.mut.grenade || 0) + 1); } },
@@ -14905,7 +14911,7 @@ function takeOrb(o, quiet) {
   if (o.kind === 'hp') {
     healOverflow(14);   // 绿球只回血：溢出的部分**不再**转护盾（只有夺命质变能转）
   } else if (o.kind === 'mp') {
-    p.mem = Math.min(memMax(), p.mem + 60);   // 蓝球：回法术条（水法师击杀掉落）
+    p.mem = Math.min(memMax(), p.mem + WATER_ORB_MEM);   // 蓝球（法术球）：回法术条（水法师击杀掉落 · 用户本轮：60 → 30）
     p.memT = 0;
   } else if (o.kind === 'chest') {
     openGoldChest(null, quiet);   // 挖金矿咯：开宝箱（全图吸取时静音，金币总额由汇总提示给出）
@@ -15491,21 +15497,39 @@ function updateThunderClouds(dt) {
   thunderClouds = thunderClouds.filter(c => !c.dead);
 }
 function waterLen() { return mageRange(false) * 0.9; }                 // 水柱长度
-function waterWidth() { return 26 + 14 * (p.mut.mastery || 0); }      // 水柱宽度（术有专攻 +14/层）
-function waterLanes() { return 1 + (p.mut.multicast || 0); }          // 水柱数量（多重施法 +1/层）
-function waterTickDmg() { return Math.max(2, Math.round(mageAtkDmg() * 1.2)); }   // 💧 单道水柱每跳伤害（用户本轮要求：**基础伤害翻倍** → 0.6 → 1.2；多柱各自独立结算，见 updateWaterJet）
-/* 水柱耗蓝速率：以"满魔能（450 = 200 + 25×10）恰好连喷 6 秒"反推 → 75/秒；
-   初始法术条 200 → 自动得到 200/75 ≈ 2.67 秒（无魔能词条时的持续时间） */
-const JET_FULL_MEM = 450, JET_FULL_SECS = 6;
-function waterDrainRate() { return JET_FULL_MEM / JET_FULL_SECS; }   // 75/秒
+/* ============================================================
+   🌊 水法师重做（用户逐条点名，本轮）—— 数值都在下面这几个常量/函数里，改就改这里
+   ============================================================ */
+const WATER_W_MUL = 30;           // 多重施法：**水柱宽度 +30px/层**（水柱**不再分裂**，永远 1 条）
+const WATER_RAMP_PER_SEC = 0.08;  // 每**持续喷满 1 秒**水柱 → 水柱伤害 +8%（本波内累计，**每波开始清空**）
+const WATER_ORB_MEM = 30;         // 蓝球（法术球）回复的法术条（60 → 30）
+const WATER_ORB_PER_VOLLEY = 10;  // 累计吸取 10 颗法术球 → 朝鼠标额外射出**两道激光水柱**
+const WATER_VACUUM_MAX = 10;      // 法力见底时，一次最多吸取的蓝球数
+const WATER_BEAM_LEN = 760;       // 额外激光水柱的攻击距离 = **根源波动（380）的两倍**
+const WATER_BEAM_OFF = 26;        // 两道水柱的枪口左右偏移（参照根源波动☆的 triOff 40）
+const WATER_MUSOU_EXTRA_T = 2;    // 无双期间**每 2 秒**也额外射出两道水柱
+function waterWidth() { return 26 + WATER_W_MUL * (p.mut.multicast || 0); }   // 水柱宽度（多重施法 +30/层）
+function waterLanes() { return 1; }                                          // ⚠️ 多重施法**不再分裂**水柱（用户要求）
+function waterRampSec() { return Math.floor(p.waterRampT || 0); }            // 本波已累计的**整秒**喷射时间
+function waterRampMul() { return 1 + WATER_RAMP_PER_SEC * waterRampSec(); }  // 伤害倍率（1.00 → 每秒 +0.08）
+/* 💧 单道水柱每跳伤害 = 法师普攻 × 1.2 × 本波喷射加成（多柱已不存在，见 waterLanes） */
+function waterTickDmg() { return Math.max(2, Math.round(mageAtkDmg() * 1.2 * waterRampMul())); }
+/* 水柱耗蓝速率：用户本轮要求 **150/秒** → 「满魔能 450 恰好连喷 3 秒」；
+   初始法术条 200 → 200/150 ≈ 1.33 秒（无魔能词条时的持续时间） */
+const JET_FULL_MEM = 450, JET_FULL_SECS = 3;
+function waterDrainRate() { return JET_FULL_MEM / JET_FULL_SECS; }   // 150/秒
 function jetSecs() { return memMax() / waterDrainRate(); }           // 当前法术条可连喷秒数
 /* 水柱起点 = 法杖顶端的法球（而不是角色头部/身体中心） */
 function waterMuzzle() {
   const off = 36;   // 法杖球局部 (22,0) + 杖身偏移 14
   return { x: p.x + Math.cos(p.face) * off, y: p.y + Math.sin(p.face) * off - 2 };
 }
-/* 蓝球掉率：初始与黄球（无双球 5%）相同；术有专攻每层 +1/3 基础，满 3 层 = 2 倍（10%） */
-function mpDropRate() { return 0.05 * (1 + (p.mut.mastery || 0) / 3); }
+/* 蓝球（法术球）掉率：**由「术有专攻」决定**（用户要求）——
+   0 层不掉 · 1 层 1/2 · 2 层 3/4 · 满级（3 层）**必定掉落**；闪光敌人仍然必掉（见 killEnemy） */
+function mpDropRate() {
+  const m = Math.min(3, p.mut.mastery || 0);
+  return m <= 0 ? 0 : Math.min(1, 0.5 + 0.25 * (m - 1));
+}
 /* 点到线段的距离（水柱命中判定） */
 function segDist(px2, py2, x1, y1, x2, y2) {
   const dx = x2 - x1, dy = y2 - y1;
@@ -15525,21 +15549,27 @@ function updateWaterJet(dt) {
   const canJet = p.memT <= 0 && p.mem > 0;
   if (!canJet) { p.jetOn = 0; p.jetPrev = null; return; }
   if (!p.jetOn) { p.jetOn = 1; p.jetTick = 0.3; }   // 起喷：首次周期结算在 0.3s 后（起喷瞬间由"命中即伤"补上）
-  /* 持续消耗法术条：75/秒（满魔能 450 恰好连喷 6 秒；初始 200 自动为 ≈2.67 秒） */
+  /* 持续消耗法术条：150/秒（满魔能 450 恰好连喷 3 秒；初始 200 自动为 ≈1.33 秒） */
   p.mem = Math.max(0, p.mem - waterDrainRate() * dt);
+  /* 🌊 本波喷射时长累计：**每持续喷满 1 秒，水柱伤害 +8%**（`waterRampMul()`，每波开始由 startWave 清空） */
+  p.waterRampT = (p.waterRampT || 0) + dt;
   if (p.mem <= 0) {
-    /* 见底：无穷法力优先，否则进入 2 秒回复（水柱中断） */
+    /* 见底：无穷法力优先，否则**自动吸取全图蓝球**（一次最多 10 颗；每累计 10 颗 → 额外两道激光水柱） */
     if (p.mut.manapool > 0 && p.manapoolT <= 0) {
       p.manapoolT = manapoolCd();
       refillMana(false);
       dbgManapool++;
       addRing(p.x, p.y, '#8fd8ff', 8);
     } else {
-      p.memT = memFullT();
-      tone(180, 90, 'square', 0.10, 0.07);
+      const got = waterVacuumOrbs(WATER_VACUUM_MAX);
+      if (p.mem <= 0) {                       // 一颗都没有（或吸完仍是 0）→ 进 2 秒回复、水柱中断
+        p.memT = memFullT();
+        p.jetOn = 0; p.jetPrev = null;
+        tone(180, 90, 'square', 0.10, 0.07);
+        return;
+      }
+      if (got > 0) tone(880, 1320, 'sine', 0.08, 0.05);   // 吸到球：条子被补上，**水柱不断**（继续往下结算）
     }
-    p.jetOn = 0; p.jetPrev = null;
-    return;
   }
   const lanes = waterLanes(), Wd = waterWidth(), L = waterLen();
   const mz = waterMuzzle();
@@ -15587,6 +15617,65 @@ function updateWaterJet(dt) {
     const a = p.face + rnd(-0.18, 0.18), rr2 = rnd(40, L);
     addPart(mz.x + Math.cos(a) * rr2, mz.y + Math.sin(a) * rr2, rnd(-20, 20), rnd(-40, 10), rnd(0.2, 0.4), rnd(2, 4), Math.random() < 0.5 ? '#8fd8ff' : '#d8f4ff', 0);
   }
+}
+/* ============================================================
+   🌊 法术球吸取 ＋ 额外激光水柱（水法师重做 · 用户逐条点名）
+   ① `waterVacuumOrbs(max)`：法术条见底时**自动吸取全图蓝球**（一次至多 max 颗，就近吸）；
+      **每累计 10 颗** → `waterExtraBeams()` 朝鼠标方向额外射出两道激光水柱
+   ② `waterExtraBeams()`：实现方式照**根源波动☆**那套「两个枪口 → 同一个落点」，但
+      **攻击距离 = 根源波动（380）的两倍 = 760**；两道共用一个 `hitSet`（同一只敌人只吃一次），
+      伤害 = 当前水柱每跳伤害（含本波喷射加成）；视觉复用光炮那套线段数组（染色成水蓝）
+   ============================================================ */
+function waterVacuumOrbs(max) {
+  const list = orbs.filter(o => !o.dead && o.kind === 'mp');
+  if (!list.length) return 0;
+  list.sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y));   // 就近吸
+  const n = Math.min(max, list.length);
+  for (let i = 0; i < n; i++) {
+    rings.push({ x: list[i].x, y: list[i].y, r: 5, vr: 460, life: 0.3, max: 0.3, color: '#8fd8ff', width: 3 });
+    takeOrb(list[i], true);
+  }
+  dbgWaterVacuum += n;
+  addText(p.x, p.y - 56, '💧 吸取 ' + n + ' 颗法术球', 17, '#8fd8ff', '#04203a');
+  /* 每累计 10 颗 → 额外两道激光水柱（跨多次吸取累计；见 p.waterOrbN） */
+  p.waterOrbN = (p.waterOrbN || 0) + n;
+  while (p.waterOrbN >= WATER_ORB_PER_VOLLEY) {
+    p.waterOrbN -= WATER_ORB_PER_VOLLEY;
+    waterExtraBeams();
+  }
+  return n;
+}
+function waterExtraBeams() {
+  if (!isWater() || !p.alive) return 0;
+  const L = WATER_BEAM_LEN, Wd = waterWidth(), dmg = waterTickDmg();
+  const mz = waterMuzzle();
+  /* 落点 = 鼠标所在的那个世界点；比 760 还远就落在最远处（和根源波动☆一样「朝指针方向」打） */
+  let tx = Math.max(26, Math.min(W - 26, mouse.x));
+  let ty = Math.max(26, Math.min(H - 26, mouse.y));
+  let dx = tx - mz.x, dy = ty - mz.y, dd = Math.hypot(dx, dy) || 1;
+  if (dd > L) { dx = dx / dd * L; dy = dy / dd * L; tx = mz.x + dx; ty = mz.y + dy; dd = L; }
+  const ux = dx / dd, uy = dy / dd, px = -uy, py = ux;
+  const hitSet = new Set(), segs = [];
+  for (const off of [-WATER_BEAM_OFF, WATER_BEAM_OFF]) {   // 两个枪口 → 同一个落点
+    const sx = mz.x + px * off, sy = mz.y + py * off;
+    segs.push({ x1: sx, y1: sy, x2: tx, y2: ty, bounce: false });
+    for (const e of enemies) {
+      if (e.dead || hitSet.has(e)) continue;
+      if (segDist(e.x, e.y, sx, sy, tx, ty) <= Wd / 2 + e.r) {
+        hitSet.add(e);
+        const ex = e.x - sx, ey = e.y - sy, ed = Math.hypot(ex, ey) || 1;
+        hitEnemy(e, ex / ed, ey / ed, 320, dmg);
+        burst(e.x, e.y, 8, '#8fd8ff', 320);
+      }
+    }
+  }
+  lightBeams.push({ segs, w: Wd, t: 0, life: 0.22, musou: false, water: 1 });
+  rings.push({ x: tx, y: ty, r: 12, vr: 620, life: 0.3, max: 0.3, color: '#8fd8ff', width: 6 });
+  burst(tx, ty, 20, '#bfe9ff', 420);
+  dbgWaterExtra++;
+  shake = Math.max(shake, 4);
+  tone(880, 1320, 'sine', 0.10, 0.06);
+  return hitSet.size;
 }
 /* 水法师无双：以**屏幕中心**爆发、**覆盖全屏**的水爆（全场持续击退 + 伤害） */
 function castWaterBurst() {
@@ -16395,6 +16484,7 @@ function resetRun() {
   thunderClouds = []; arcs = [];
   p.rageT = 0; p.rageBonus = 0; p.manapoolT = 0; p.lavaTick = 0; p.lastBlink = 0;
   p.jobPend = 0; p.jetOn = 0; p.jetTick = 0; p.waterBurstT = 0;   // 转职状态跨局保留（不重置 p.job）
+  p.waterRampT = 0; p.waterOrbN = 0; p.waterExtraT = 0;           // 🌊 水法师重做：喷射加成 / 吸取计数 / 无双额外水柱计时
   p.lightJetOn = 0; p.lightJetTick = 0; p.lightJetPrev = null; lightBeams = [];
   p.mag = gunMagMax(); p.reloadT = 0; p.nadeN = 0; p.deployCd = 0;
   allyUnits = []; gunNades = []; gunRockets = []; sidekickCd = 0;
@@ -16402,6 +16492,7 @@ function resetRun() {
   dbgCarShots = 0; dbgCarRockets = 0; dbgCarHeal = 0;
   dbgHellEv = 0; dbgHellPits = 0; dbgHellRing = 0; dbgGreenBrute = 0; dbgHellChest = 0; dbgHellPitsHit = 0;
   dbgWaterTicks = 0; dbgWaterBursts = 0; dbgWaterHits = 0; dbgWaterLaneN = 0; p.jetPrev = null;
+  dbgWaterVacuum = 0; dbgWaterExtra = 0;
   dbgBolts = 0; dbgChainN = 0; dbgThunHits = 0; dbgThunExec = 0; dbgThunExecWait = 0; dbgClouds = 0; dbgCloudBolts = 0; dbgStrikeN = 0; dbgStrikeHits = 0; thunderClouds = []; arcs = []; thunBossCd = 0;
   dbgBlinkShocks = 0;
   dbgLunges = 0; dbgJumps = 0; dbgSlams = 0; dbgGenShots = 0;
@@ -21665,6 +21756,7 @@ function updateGame(dt, rawDt) {
           castWaterBurst();
           p.musouT = musouMaxT();
           p.waterBurstT = 0.18;
+          p.waterExtraT = WATER_MUSOU_EXTRA_T;   // 🌊 无双期间**每 2 秒**额外两道激光水柱（用户要求）
         } else if (isLight()) {
           /* 光法师无双：持续光波（正常无双时间；光波由 updateLightWave 每帧结算，且不可反射） */
           p.musouT = musouMaxT();
@@ -21746,6 +21838,9 @@ function updateGame(dt, rawDt) {
         if (n) { dbgWaterBursts++; tone(420, 240, 'sine', 0.08, 0.04); }
         rings.push({ x: cx, y: cy, r: 24, vr: 1900, life: 0.34, max: 0.34, color: '#8fd8ff', width: 6 });
       }
+      /* 🌊 无双期间**每 2 秒**额外射出两道激光水柱（朝鼠标方向 · 见 waterExtraBeams） */
+      p.waterExtraT = (p.waterExtraT || 0) - dt;
+      if (p.waterExtraT <= 0) { p.waterExtraT = WATER_MUSOU_EXTRA_T; waterExtraBeams(); }
     }
     if (p.musouT <= 0) { flashG = 0.2; addRing(p.x, p.y, '#fff', 8); }
   }
@@ -24487,20 +24582,24 @@ function drawGame() {
     }
     for (const b of lightBeams) {
       const k = 1 - b.t / b.life;   // 尾段淡出
+      /* 🌊 水法师的额外激光水柱：同一个 segs 结构，只换配色（水蓝） */
+      const wcol = b.water ? 'rgba(110,190,255,0.9)' : 'rgba(255,236,150,0.9)';
+      const wcore = b.water ? 'rgba(240,252,255,1)' : 'rgba(255,255,245,1)';
+      const wtip = b.water ? 'rgba(200,240,255,0.9)' : 'rgba(255,246,200,0.9)';
       ctx.save();
       ctx.lineCap = 'round';
       for (const s of b.segs) {
         ctx.globalAlpha = 0.45 * k;
-        ctx.strokeStyle = 'rgba(255,236,150,0.9)';
+        ctx.strokeStyle = wcol;
         ctx.lineWidth = b.w * (0.75 + 0.25 * k);
         ctx.beginPath(); ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2); ctx.stroke();
         ctx.globalAlpha = 0.95 * k;
-        ctx.strokeStyle = 'rgba(255,255,245,1)';
+        ctx.strokeStyle = wcore;
         ctx.lineWidth = Math.max(3, b.w * 0.34) * (0.6 + 0.4 * k);
         ctx.beginPath(); ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2); ctx.stroke();
         if (s.bounce) {   // 反射起点标记
           ctx.globalAlpha = 0.8 * k;
-          ctx.fillStyle = 'rgba(255,246,200,0.9)';
+          ctx.fillStyle = wtip;
           ctx.beginPath(); ctx.arc(s.x1, s.y1, 9 * k + 3, 0, TAU); ctx.fill();
         }
       }
@@ -25385,6 +25484,10 @@ window.__musouDebug = () => ({ kills, score, coins, wave, state, alive: p.alive,
   allies: allyUnits.filter(u => !u.dead).map(u => ({ k: u.kind, hp: Math.round(u.hp), maxhp: u.maxhp, x: Math.round(u.x), y: Math.round(u.y), invT: +(u.invT || 0).toFixed(2) })),
   rockets: gunRockets.length, nadeLive: gunNades.length,
   waterTicks: dbgWaterTicks, waterHits: dbgWaterHits, waterLaneN: dbgWaterLaneN, waterBursts: dbgWaterBursts, waterW: waterWidth(), waterL: Math.round(waterLen()), waterLanes: waterLanes(), waterDmg: waterTickDmg(), mpRate: +mpDropRate().toFixed(4),
+  /* 🌊 水法师重做读数：喷射时长累计 / 伤害加成倍率 / 蓝球回复量 / 吸取与额外水柱计数 / 额外水柱长度 */
+  waterRampT: +(p.waterRampT || 0).toFixed(2), waterRampSec: waterRampSec(), waterMul: +waterRampMul().toFixed(3),
+  waterOrbMem: WATER_ORB_MEM, waterOrbN: p.waterOrbN || 0, waterVacuum: dbgWaterVacuum, waterExtra: dbgWaterExtra,
+  waterBeamLen: WATER_BEAM_LEN, waterExtraT: +(p.waterExtraT || 0).toFixed(2), waterBeams: lightBeams.filter(b => b.water).length,
   light: isLight() ? 1 : 0, lightShots: dbgLightShots, lightHits: dbgLightHits, lightW: lightWidth(), lightFanN: lightFanN(), lightFanDeg: lightFanDeg(),
   lightFullT: +lightMemFullT().toFixed(2), lightBeamN: lightBeams.length, lightSegN: lightBeams.length ? lightBeams[lightBeams.length - 1].segs.length : 0,
   lightBounces: dbgLightBounces, lightAngles: dbgLightAngles.slice(),
@@ -27059,6 +27162,10 @@ window.__musouSetHp = (v) => { if (state === 'play' && p.alive) p.hp = Math.max(
 window.__musouMaxHp = (v) => { if (state === 'play') { p.maxhp = Math.max(1, v | 0); p.hp = Math.min(p.hp, p.maxhp); } }; // 测试钩子：设定生命上限（血量体系缩放测试用）
 window.__musouLeechK = (v) => { if (state === 'play') p.leechK = Math.max(0, v | 0); }; // 测试钩子：设定夺命累计击杀进度（隔离历史残值）
 window.__musouMana = (v, t) => { if (state === 'play') { p.mem = Math.max(0, Math.min(memMax(), v | 0)); p.memT = t > 0 ? t : 0; return p.mem; } return -1; }; // 测试钩子：设定法师法术条（第二参数为剩余回复秒数）
+window.__musouWaterRamp = (v) => { p.waterRampT = Math.max(0, +v || 0); return waterRampSec(); };   // 🌊 测试钩子：直接设「本波已喷射秒数」（水柱伤害加成 = 1 + 0.08×整秒数）
+window.__musouWaterOrb = (v) => { p.waterOrbN = Math.max(0, v | 0); return p.waterOrbN; };           // 🌊 测试钩子：设「已累计吸取的法术球数」（每 10 颗 → 额外两道激光水柱）
+window.__musouWaterTimer = (v) => { p.waterExtraT = Math.max(0, +v || 0); return p.waterExtraT; };   // 🌊 测试钩子：设「无双期间额外水柱」的倒计时（不靠帧数等 2 秒，钉住节拍）
+window.__musouWaterBeams = () => lightBeams.filter(b => b.water).map(b => ({ w: b.w, segs: b.segs.map(s => ({ x1: Math.round(s.x1), y1: Math.round(s.y1), x2: Math.round(s.x2), y2: Math.round(s.y2), len: Math.round(Math.hypot(s.x2 - s.x1, s.y2 - s.y1)) })) }));   // 🌊 测试钩子：当前在场的「额外两道激光水柱」（段长用来钉「距离 = 根源波动×2 = 760」）
 window.__musouDropOrb = (kind) => { if (state === 'play') { orbs.push({ x: p.x, y: p.y, kind: kind || 'hp', vx: 0, vy: 0, dead: false }); return true; } return false; }; // 测试钩子：在玩家脚下掉一个球（默认绿球/回血球）
 window.__musouDropOrbAt = (kind, x, y) => { if (state === 'play') { orbs.push({ x: x, y: y, kind: kind || 'hp', vx: 0, vy: 0, dead: false }); return orbs.length - 1; } return -1; }; // 测试钩子：在指定世界坐标掉一个球（验证「每波结束全图吸取」）
 window.__musouOrbList = () => orbs.map(o => ({ kind: o.kind, x: Math.round(o.x), y: Math.round(o.y) }));   // 测试钩子：场上掉落物清单
