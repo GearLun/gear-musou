@@ -1079,6 +1079,7 @@ let meteors = [];              // 法师：陨石（无双·陨石风暴）
 let firePits = [];             // 法师：陨石留下的火坑（持续灼烧 + 持续伤害）
 let dbgFires = 0, dbgBlasts = 0, dbgMeteor = 0, dbgManapool = 0, dbgLavaTicks = 0, dbgPitTicks = 0, dbgMasteryPits = 0;   // 诊断
 let dbgMasteryMeteors = 0;   // 🌋 火法师·术有专攻：灼烧触发的「就地陨石」次数（用户本轮改口径后的新效果）
+let dbgFireBurn = 0;         // 🔥 火法师火球「命中即点燃」的次数
 let dbgLunges = 0, dbgJumps = 0, dbgSlams = 0, dbgGenShots = 0;   // 诊断：兵卒突刺 / 跃击起跳 / 落地 / 总大将落地弹幕
 let dbgBH = 0;   // 诊断：哈姆黑洞生成次数
 let dbgWaterTicks = 0, dbgWaterBursts = 0, dbgWaterHits = 0, dbgWaterLaneN = 0;   // 诊断：水法师 水柱周期结算 / 水爆 / 命中即伤 / 水柱命中总数（含多柱叠加）
@@ -5307,9 +5308,10 @@ function tickPrimalAbilities(dt) {
   }
 }
 /* 按最大生命的百分比直接扣血（**不吃任何加成** —— 用户明确要求）：杂兵全额、Boss ÷div
-   🧱 试验场的 10 亿血假人**也算在内**（用户报过「德尔塔气流的伤害对靶子无效，是不是对所有敌人都没伤害」）：
-   它血量每帧回满、扣不动，所以直接走「记账」通道（`devDummyAdd`）让秒伤看得见 ——
-   和其它百分比类伤害（雷法师的雷罚 / 骑士的撞击）在假人身上的口径一致。 */
+   🧱 试验场的 10 亿血假人：**照旧会被打到（有受击闪光 / 计入 `hit` 次数），但不计入秒伤统计**
+   —— 用户本轮明确要求「假人受到的所有百分比伤害都不计入伤害统计」（2% 最大生命在 10 亿血假人身上
+   一跳就是 2000 万，会把 `devDmg` 的秒伤读数彻底带偏）。
+   ⚠️ 所以这里**不能**调 `devDummyAdd()`；绝对值的技能伤害照旧由 `hitEnemy` 记账。 */
 function primalPctBurst(pct, div) {
   for (const e of enemies) {
     if (e.dead) continue;
@@ -5317,7 +5319,7 @@ function primalPctBurst(pct, div) {
     const d = Math.max(1, Math.round(e.maxhp * pct / (e.boss ? div : 1)));
     dbgPrimalHit++;
     e.flash = Math.max(e.flash || 0, 0.07);
-    if (e.devDummy) { devDummyAdd(d); continue; }
+    if (e.devDummy) continue;   // 🧱 假人：只给受击反馈，不记账（见上）
     e.hp -= d;
     if (e.hp <= 0) killEnemy(e);
   }
@@ -9880,7 +9882,7 @@ function fillChoices() {
   const nmL = levelNames();
   $('up-lv').textContent = (hamuOn() ? '哈姆杀所有 · ' : '') + classLabel() + ' · 等级 Lv' + p.lvl + ' · 选择一项强化';
   const dmgLabel = isGunner() ? '子弹伤害' : isArcher() ? '箭矢伤害' : isKnight() ? '撞击伤害' : isRonin() ? '圆弧斩伤害' : isMage() ? '法术伤害' : '挥砍伤害';
-  $('up-stats').innerHTML = '当前战力：' + dmgLabel + ' <b>' + (isArcher() ? archerAtkDmg() : isKnight() ? knightRamDmg() : isMage() ? mageAtkDmg() : dmgNow()) + '</b> · 范围 <b>' + Math.round(effRangeMul() * 100) + '%</b>' +
+  $('up-stats').innerHTML = '当前战力：' + dmgLabel + ' <b>' + (isArcher() ? archerAtkDmg() : isKnight() ? knightRamHitDmg() : isMage() ? mageAtkDmg() : dmgNow()) + '</b> · 范围 <b>' + Math.round(effRangeMul() * 100) + '%</b>' +
     (isMage() ? ' · 法术条 <b>' + memShots() + '/' + memShotsMax() + ' 发</b>' : (isRonin() || isGunner() ? '' : ' · 攻速 <b>' + Math.round(100 * (1 - effSpdRed()) / effSpdMul()) + '%</b>')) +
     ' · 移速 <b>' + Math.round(100 * (1 + p.bonus.move)) + '%</b>' +
     (hamuOn()
@@ -10103,9 +10105,20 @@ const ROYAL_CD_PER = 0.6;        // 每层 −0.6 秒
 const ROYAL_CD_MIN = 2.0;
 const ROYAL_R = 110;             // 骑兵的碰撞/攻击半径（每层 −12）
 const ROYAL_R_PER = 12;
+/* 🐎 骑兵的冲刺速度：本体 720，用户本轮「移动速度再加快 50%」→ ×1.5 = **1080px/s** */
+const ROYAL_SPD = 720;
+const ROYAL_SPD_BUFF = 1.5;
+function royalCavSpd() { return ROYAL_SPD * ROYAL_SPD_BUFF; }
 const ROYAL_DMG_PER = -0.10;     // 骑兵伤害每层 −10%（叠层换来更频繁的出场）
 const RAM_R_PER = 14;            // 横冲直撞：撞击判定半径 +14/层
 const RAM_DMG_PER = 0.15;        // 横冲直撞：撞击伤害 +15%/层
+/* ⚔️ 用户本轮：「旋转长枪 / 长枪回收后的横扫 / 天降长矛 / 冲撞伤害 全部提升 50%」——
+   统一走 `knightBuffDmg()`（一个常量管四处）。⚠️ **皇家骑士团的骑兵撞击没有跟着涨**（用户没点名，
+   而且它的伤害本来就设计成「叠层递减」）；要一起涨就把 `royalDmg()` 也套一层。 */
+const KNIGHT_DMG_BUFF = 1.5;
+function knightBuffDmg(v) { return Math.max(1, Math.round(v * KNIGHT_DMG_BUFF)); }
+/* 真正打到人身上的「冲撞伤害」= 基础冲撞 ×1.5（英雄面板与钩子都读这一份，免得显示与实际不符） */
+function knightRamHitDmg() { return knightBuffDmg(knightRamDmg()); }
 const SKY_CD_L1 = 10.0;          // ☄️ 天降长矛：1 层的触发间隔（秒）
 const SKY_CD_PER = 1.25;         // 每层 −1.25 秒（满 5 层 = 5 秒一根）
 const SKY_R_L1 = 120;            // 落点范围伤害的基准半径
@@ -10121,7 +10134,7 @@ function klSpinLife() { return Math.min(KL_SPIN_LIFE_MAX, KL_SPIN_LIFE + KL_SPIN
 function klSpinR() { return (KL_SPIN_R + KL_SPIN_R_PER * Math.max(0, (p.mut.spin || 0) - 1)) * effRangeShopMul(); }
 function klFlyTime(dist) { return Math.max(KL_FLY_T_MIN, Math.min(KL_FLY_T_MAX, dist / KL_FLY_SPD)); }
 function krSweepR() { return (KR_SWEEP_R + KR_SWEEP_R_PER * Math.max(0, (p.mut.recall || 0) - 1)) * effRangeShopMul(); }
-function krSweepDmg() { return Math.max(1, Math.round(knightRamDmg() * KR_SWEEP_DMG_MUL * (1 + KR_SWEEP_DMG_PER * Math.max(0, (p.mut.recall || 0) - 1)))); }
+function krSweepDmg() { return knightBuffDmg(knightRamDmg() * KR_SWEEP_DMG_MUL * (1 + KR_SWEEP_DMG_PER * Math.max(0, (p.mut.recall || 0) - 1))); }   // ⚔️ 横扫：本轮 +50%
 function kvHpPer1() { const lv = p.mut.vigor || 0; return Math.max(KV_HP_MIN, KV_HP_L1 - (lv - 1)); }   // 1 层 5 → 叠满 2
 function kvHpGain() { return Math.max(0, p.maxhp - (p.hp0Max || p.maxhp)); }   // 本局生命上限的增量
 function kvSpdPct() { const lv = p.mut.vigor || 0; return lv <= 0 ? 0 : Math.floor(kvHpGain() / kvHpPer1()); }
@@ -10133,7 +10146,7 @@ function ramDmgBonus() { return 1 + RAM_DMG_PER * (p.mut.rampage || 0); }
 /* ☄️ 天降长矛：间隔 / 范围 / 伤害都随层数成长（满 5 层 = 每 5 秒一根·216px·伤害 ×2.4） */
 function skyCd() { return Math.max(5.0, SKY_CD_L1 - SKY_CD_PER * Math.max(0, (p.mut.skyfall || 0) - 1)); }
 function skyR() { return (SKY_R_L1 + SKY_R_PER * Math.max(0, (p.mut.skyfall || 0) - 1)) * effRangeShopMul(); }
-function skyDmg() { return Math.max(1, Math.round(knightRamDmg() * (1 + SKY_DMG_PER * Math.max(0, (p.mut.skyfall || 0) - 1)))); }
+function skyDmg() { return knightBuffDmg(knightRamDmg() * (1 + SKY_DMG_PER * Math.max(0, (p.mut.skyfall || 0) - 1))); }   // ☄️ 天降长矛：本轮 +50%
 /* ============================================================
    🗡️ 战士分支·武器大师
    升级改成「武器商店 + 背包」。武器有**品质**（稀有度）与**星级**（属性）。
@@ -11091,7 +11104,7 @@ function knightRecallLance(idx) {
 }
 /* ☄️ 天降长矛：挑一只活敌人当锚点，再把落点挪到附近敌群的「重心」（砸得越准越值），
    然后插一根预警圈 —— SKY_WARN 秒后长矛从天而降，落点范围伤害 + 留下一根可回收的长矛 */
-function spawnSkySpear() {
+function spawnSkySpear(minCap) {
   const alive = enemies.filter(e => !e.dead && !e.fly);
   if (!alive.length) return null;
   const anchor = alive[Math.floor(Math.random() * alive.length)];
@@ -11102,11 +11115,23 @@ function spawnSkySpear() {
   }
   const x = Math.max(60, Math.min(W - 60, n ? sx / n : anchor.x));
   const y = Math.max(60, Math.min(H - 60, n ? sy / n : anchor.y));
-  if (skySpears.length >= SKY_MAX) skySpears.shift();
+  /* 上限保护：平时 SKY_MAX 根；无双开场那 5 根要一起在天上（`minCap` 抬到 5），别把先出现的挤掉 */
+  const cap = Math.max(SKY_MAX, minCap || 0);
+  if (skySpears.length >= cap) skySpears.shift();
   skySpears.push({ x, y, t: 0, r: skyR(), dmg: skyDmg(), dead: false });
   dbgSkySpawns++;
   tone(180, 900, 'sawtooth', 0.22, 0.05);   // 远雷似的起手音
   return { x, y, r: skyR(), dmg: skyDmg() };
+}
+/* 🛡️ 骑士无双开场：**一次性天降 5 根长矛**（用户本轮点名）——
+   每根都照常「先亮落点预警圈 → 从天扎下 → 落点范围伤害 → 留下可回收的长矛」；
+   场上没有敌人时一根都不放（`spawnSkySpear` 自带这个口径） */
+const KNIGHT_MUSOU_SPEARS = 5;
+function knightMusouSpears() {
+  let n = 0;
+  for (let i = 0; i < KNIGHT_MUSOU_SPEARS; i++) if (spawnSkySpear(KNIGHT_MUSOU_SPEARS)) n++;
+  dbgKnightMusouSpears += n;
+  return n;
 }
 /* 天降长矛落地：范围伤害（每根只结算一次）+ 落点留下一根插地的长矛（可被「长枪回收」捡回） */
 function skySpearImpact(sp) {
@@ -11149,17 +11174,32 @@ function updateSkySpears(dt) {
     if (sp.dead) skySpears.splice(i, 1);
   }
 }
-/* 🐎 皇家骑士团：从场地一侧召出一名骑兵，笔直横穿战场，沿途撞伤敌人 */
+/* 🐎 皇家骑士团（用户本轮改口径）：**自动索敌** —— 不再「从随机一边横穿、往没敌人的地方冲」。
+   做法：挑一只敌人（优先**离地图中心最远**的那只，保证有足够的冲刺距离），
+   然后从「它背后、地图外 80px」的位置入场，笔直**穿过它**继续冲。
+   场上一个敌人都没有 → **不放**（和「天降长矛」同款口径，绝不空放）。 */
 function spawnRoyalCav() {
-  const edge = Math.floor(rnd(0, 4));
-  const spd = 720;
-  let x, y, vx, vy;
-  if (edge === 0) { x = -40; y = rnd(120, H - 120); vx = spd; vy = 0; }
-  else if (edge === 1) { x = W + 40; y = rnd(120, H - 120); vx = -spd; vy = 0; }
-  else if (edge === 2) { x = rnd(120, W - 120); y = -40; vx = 0; vy = spd; }
-  else { x = rnd(120, W - 120); y = H + 40; vx = 0; vy = -spd; }
+  const alive = enemies.filter(e => !e.dead && !e.fly);
+  if (!alive.length) return null;
+  const cx = W / 2, cy = H / 2;
+  let tgt = alive[0], bd = -1;
+  for (const e of alive) { const d = Math.hypot(e.x - cx, e.y - cy); if (d > bd) { bd = d; tgt = e; } }
+  let ax = tgt.x - cx, ay = tgt.y - cy;
+  const L0 = Math.hypot(ax, ay);
+  if (L0 < 1) { const a = rnd(0, TAU); ax = Math.cos(a); ay = Math.sin(a); }   // 目标正好在中心：随机取一个方向
+  else { ax /= L0; ay /= L0; }
+  /* 从目标沿 -dir 一路退到地图外（+80px 余量）当出生点 */
+  let back = Infinity;
+  if (-ax > 1e-6) back = Math.min(back, (W - tgt.x) / -ax);
+  else if (-ax < -1e-6) back = Math.min(back, (0 - tgt.x) / -ax);
+  if (-ay > 1e-6) back = Math.min(back, (H - tgt.y) / -ay);
+  else if (-ay < -1e-6) back = Math.min(back, (0 - tgt.y) / -ay);
+  if (!isFinite(back)) back = 400;
+  const spd = royalCavSpd(), D = Math.max(40, back) + 80;
+  const x = tgt.x - ax * D, y = tgt.y - ay * D, vx = ax * spd, vy = ay * spd;
   royalCavs.push({ x, y, vx, vy, r: royalR(), dmg: royalDmg(), life: 6.0, dead: false, hitSet: new Set(), ang: Math.atan2(vy, vx) });
   dbgKLCavs++;
+  return { x, y, tx: tgt.x, ty: tgt.y };
 }
 /* 每帧：长枪飞行/旋转结算 + 捡枪回收 + 皇家骑士团计时与骑兵推进 */
 function updateKnightExtras(dt) {
@@ -11176,7 +11216,7 @@ function updateKnightExtras(dt) {
       L.x = L.fx + (L.tx - L.fx) * e;
       L.y = L.fy + (L.ty - L.fy) * e;
       L.ang += dt * 26;
-      const dmg = knightRamDmg();
+      const dmg = knightRamHitDmg();   // 🌀 旋转长枪：路径枪刃（本轮 +50%）
       for (const en of enemies) {
         if (en.dead || L.hitSet.has(en)) continue;
         if (segDist(en.x, en.y, px, py, L.x, L.y) > KL_PATH_REACH + en.r) continue;
@@ -11208,7 +11248,7 @@ function updateKnightExtras(dt) {
     L.tick -= dt;
     if (L.tick <= 0) {
       L.tick = KL_SPIN_TICK;
-      const R = klSpinR(), dmg = knightRamDmg();
+      const R = klSpinR(), dmg = knightRamHitDmg();   // 🌀 旋转长枪每跳（本轮 +50%）
       let n = 0;
       for (const e of enemies) {
         if (e.dead) continue;
@@ -11230,10 +11270,10 @@ function updateKnightExtras(dt) {
   }
   /* ☄️ 天降长矛：计时 + 预警 + 落地结算 */
   updateSkySpears(dt);
-  /* 🐎 皇家骑士团 */
+  /* 🐎 皇家骑士团（自动索敌版）：到点先看场上有没有敌人，没有就把计时器压在 0（不空放） */
   if ((p.mut.royal || 0) > 0) {
     p.royalT = (p.royalT || 0) - dt;
-    if (p.royalT <= 0) { p.royalT = royalCd(); spawnRoyalCav(); }
+    if (p.royalT <= 0) { if (spawnRoyalCav()) p.royalT = royalCd(); else p.royalT = 0; }
   }
   for (let i = royalCavs.length - 1; i >= 0; i--) {
     const c = royalCavs[i];
@@ -11497,7 +11537,7 @@ function knightParaCav(e) {
 function knightRam(dt) {
   if (!isKnight() || !p.alive) return;
   const musou = knightMusouOn();
-  const dmg = knightRamDmg();
+  const dmg = knightRamHitDmg();   // ⚔️ 冲撞伤害：本轮 +50%（`knightRamHitDmg()`）
   const reach = musou ? KNIGHT_MUSOU_R : (p.r + 10 + ramRadiusBonus());   // 💥 横冲直撞：判定半径更大
   const spd = Math.hypot(p.vx, p.vy) || 1;
   for (const e of enemies) {
@@ -11530,7 +11570,7 @@ function knightRam(dt) {
 /* 骑士闪避 = 旋枪：原地转枪一圈，对身周敌人造成撞击伤害（不位移） */
 function knightSpin() {
   const R = knightSpinR();
-  const dmg = knightRamDmg();
+  const dmg = knightRamHitDmg();   // 旋枪（= 没拿「旋转长枪」时的闪避）：本轮同样 +50%
   let n = 0;
   for (const e of enemies) {
     if (e.dead) continue;
@@ -11551,6 +11591,7 @@ function knightSpin() {
   return n;
 }
 let dbgKnightRams = 0, dbgKnightSpins = 0, dbgKnightBlocks = 0, dbgKnightBossRams = 0, dbgKnightCavBreaks = 0;
+let dbgKnightMusouSpears = 0;   // 🛡️ 骑士无双开场「天降 5 根长矛」累计放出几根（诊断/测试）
 let dbgWMThrusts = 0, dbgWMMerges = 0, dbgWMPlaneHits = 0, dbgWMCornerN = 0, dbgWMCornerFace = 0, dbgWMCornerDrawN = 0, dbgWMMusouHeadDrawN = 0, dbgWMMusouHeadFace = 0, dbgWMOrbitDraw = 0;   // 🗡️ 武器大师：累计出手 / 合成 / 飞机撞击 / 四角应有武器数 / 四角朝向 / 本帧画出的四角数 / 本帧头顶武器数 / 头顶朝向 / **本帧画出的绕圈武器（木槌·齿轮组·齿轮领域）头数**（诊断/测试）
 let dbgWMMelee = 0, dbgWMRanged = 0, dbgWMShotOx = 0, dbgWMShotOy = 0, dbgWMShotX = 0, dbgWMShotY = 0, dbgWMShotA = 0;   // 🗡️ 近战出手数 / 远程出手数 / 最近一次射弹的发射点（武器角位 + 枪口）与角度
 let dbgWMBottles = 0, dbgWMFires = 0, dbgWMFireTicks = 0, dbgWMBlasts = 0, dbgWMStuns = 0, dbgWMKunai = 0;   // 🔥⚡ 投掷瓶 / 火海 / 火海结算跳数 / 电爆 / 定身次数 / 苦无
@@ -14850,11 +14891,18 @@ const FIRE_M_BURN_T = 2;                                  // 达标需要的连�
 const FIRE_M_CD = [5, 3.5, 2];                            // 达标之后，每层再砸一颗的间隔（秒；满级 2 秒）
 const FIRE_M_DMG = [1.0, 1.5, 2.0];                       // 每层：伤害 = 法师普攻 × 这个系数
 const FIRE_M_R = (150 * 1.5) / 2;                         // 半径 = 流星群 225 的一半 = 112.5
+const FIRE_M_FX_LIFE = 0.34;                              // 🌋 陨石落地**动画**时长（伤害仍是瞬间结算，动画只是表现）
+const FIRE_BALL_BURN_T = 4;                               // 🔥 火球命中即点燃：给敌人挂上的灼烧秒数（同「燃烧刀」的 4 秒）
+let mMeteorFx = [];                                       // 🌋 火法师·术有专攻：就地陨石的落地动画（纯视觉，不参与伤害）
 function fireMasteryCd() { return FIRE_M_CD[Math.max(0, Math.min(2, (p.mut.mastery || 1) - 1))]; }
 function fireMasteryDmgMul() { return FIRE_M_DMG[Math.max(0, Math.min(2, (p.mut.mastery || 1) - 1))]; }
-/* 就地砸一颗（无延迟）：范围伤害 + 冲击特效（不留下火坑 —— 用户没要求，别自作主张加） */
+/* 就地砸一颗（无延迟）：范围伤害 + 冲击特效（不留下火坑 —— 用户没要求，别自作主张加）
+   ⚠️ 伤害**瞬间结算**（用户要求「落地没有延迟=必中」），所以动画只做「刚砸过」的余像：
+   往下收回的尾迹 + 扩散冲击环 + 残光，全部塞进 `mMeteorFx`，由 `tickFireMastery` 推进 */
 function fireMasteryMeteor(x, y) {
   const R = FIRE_M_R, dmg = Math.max(2, Math.round(mageAtkDmg() * fireMasteryDmgMul()));
+  mMeteorFx.push({ x, y, t: 0, life: FIRE_M_FX_LIFE });
+  if (mMeteorFx.length > 12) mMeteorFx.shift();
   rings.push({ x, y, r: 14, vr: 780, life: 0.32, max: 0.32, color: '#ffb066', width: 8 });
   rings.push({ x, y, r: 6, vr: 420, life: 0.2, max: 0.2, color: '#fff3c4', width: 4 });
   burst(x, y, 18, '#ff9d5c', 380);
@@ -14871,8 +14919,13 @@ function fireMasteryMeteor(x, y) {
   return dmg;
 }
 /* 每帧：给「正在灼烧」的敌人累计时间；满 2 秒砸一颗，之后按层数间隔继续砸
-   （灼烧一断就清零重来 —— 口径是「被灼烧两秒时间」） */
+   （灼烧一断就清零重来 —— 口径是「被灼烧两秒时间」）
+   ⚠️ 陨石动画 `mMeteorFx` **在函数最前面推进**：即使职业/质变中途变了，已经在播的动画也要播完 */
 function tickFireMastery(dt) {
+  if (mMeteorFx.length) {
+    for (const q of mMeteorFx) q.t += dt;
+    mMeteorFx = mMeteorFx.filter(q => q.t < q.life);
+  }
   if ((p.mut.mastery || 0) <= 0 || !fireMageOn()) return;
   const cd = fireMasteryCd();
   for (const e of enemies) {
@@ -16531,7 +16584,7 @@ function resetRun() {
   dbgCardMulti = 0; dbgCharmN = 0; dbgCharmHits = 0; dbgCharmOut = 0; dbgCharmShots = 0; dbgCharmCasts = 0;
   enemyFreezeT = 0; roars = 0; catAtkN = 0;
   dbgBurnTicks = 0; dbgExec = 0; dbgStuns = 0; dbgSpin = 0; dbgSpinC = 0;
-  meteors = []; firePits = []; p.mageT = 0; p.memT = 0; p.mem = memMax();   // 法师：法术条重置为满
+  meteors = []; firePits = []; p.mageT = 0; p.memT = 0; p.mem = memMax(); mMeteorFx = [];   // 法师：法术条重置为满（+ 清掉就地陨石的落地动画）
   thunderClouds = []; arcs = [];
   p.rageT = 0; p.rageBonus = 0; p.manapoolT = 0; p.lavaTick = 0; p.lastBlink = 0;
   p.jobPend = 0; p.jetOn = 0; p.jetTick = 0; p.waterBurstT = 0;   // 转职状态跨局保留（不重置 p.job）
@@ -16549,7 +16602,7 @@ function resetRun() {
   dbgLunges = 0; dbgJumps = 0; dbgSlams = 0; dbgGenShots = 0;
   dbgArrows = 0;
   lightBeams = []; dbgLightShots = 0; dbgLightHits = 0; dbgLightWaveTicks = 0; dbgLightWaveHits = 0; dbgLightBounces = 0; dbgLightAngles = []; dbgLightDoubles = 0;
-  dbgFires = 0; dbgBlasts = 0; dbgMeteor = 0; dbgManaDraw = 0; dbgManapool = 0; dbgLavaTicks = 0; dbgPitTicks = 0; dbgMasteryPits = 0; dbgMasteryMeteors = 0;
+  dbgFires = 0; dbgBlasts = 0; dbgMeteor = 0; dbgManaDraw = 0; dbgManapool = 0; dbgLavaTicks = 0; dbgPitTicks = 0; dbgMasteryPits = 0; dbgMasteryMeteors = 0; dbgFireBurn = 0;
   dbgBH = 0;
   $('sc-level').classList.remove('show');
   $('sc-mut').classList.remove('show');
@@ -17000,7 +17053,7 @@ function syncLabTools() {
   }
   h += '<div class="dev-row dev-stat">🧱 假人：' + (devDummyE
     ? ('总伤 <b>' + Math.round(devDmg.total) + '</b> · 秒伤(近 5 秒) <b>' + Math.round(dps) + '</b> · 峰值秒伤 <b>' + Math.round(devDmg.bestDps)
-      + '</b> · 命中 <b>' + devDmg.hits + '</b> 次 · 单次最高 <b>' + Math.round(devDmg.best) + '</b>（统计**所有伤害来源**：命中/技能 + 灼伤/百分比类）')
+      + '</b> · 命中 <b>' + devDmg.hits + '</b> 次 · 单次最高 <b>' + Math.round(devDmg.best) + '</b>（只统计**绝对值伤害**：命中/技能；灼伤、百分比类伤害不计入 —— 会把秒伤带偏）')
     : '（未放出 · 点上面「放出无限血量假人」）') + '</div>';
   if (h !== devToolsTxt) { devToolsTxt = h; box.innerHTML = h; }
 }
@@ -21460,6 +21513,9 @@ function updateGame(dt, rawDt) {
   /* 🧪🛠 试验场：**金币无限**（每帧补满，买东西/刷货架不心疼）
      —— 只补「手上金币」，`coinsTotal`（本局总金币）一分不加，所以**不影响传承 1% 带出** */
   if (p.lab === 1) coins = Math.max(coins, LAB_COIN_INF);
+  /* 🧪🛠 试验场：**无双槽时刻保持最大**（用户本轮要求）——这样随时能按 U / 点奥义键
+     试各职业的无双；补的是「当前无双值」，`p.musouT`（无双持续时间）不碰 */
+  if (p.lab === 1) p.musou = musouCap();
   /* 升级/质变/奇物面板期间：世界冻结（闪避摇杆的待发请求一并丢弃） */
   if (choosing) { banner.age += rawDt; dashCancelReq(); return; }
   /* 商店开放期间：世界冻结 */
@@ -21681,8 +21737,10 @@ function updateGame(dt, rawDt) {
     p.dashStreak++;
     p.dashGap = 0;
     /* 闪避疲劳阈值：基础 3 次；瞬步每层 +1（可多连续闪避一次）
-       浪客完全不吃疲劳（它的输出就靠闪避，冷却固定 1 秒） */
-    if (!isRonin() && p.dashStreak >= 3 + (p.mut.blink || 0)) {
+       浪客完全不吃疲劳（它的输出就靠闪避，冷却固定 1 秒）
+       🛡️ 骑士也不吃疲劳（用户本轮：「旋转长枪固定为一秒可发射一次，不再会有闪避疲劳的效果」）——
+       骑士的闪避就是旋枪/旋转长枪，冷却 `KNIGHT_SPIN_CD = 1` 秒已经是硬上限，再加 2 秒硬直等于废掉这套玩法 */
+    if (!isRonin() && !isKnight() && p.dashStreak >= 3 + (p.mut.blink || 0)) {
       p.dashStreak = 0;
       p.dashCd = Math.max(p.dashCd, 2.0);   // 硬直：2 秒无法闪避
       addText(p.x, p.y - 46, '闪避疲劳! 2 秒硬直', 16, '#9adcff', '#0a2a3a');
@@ -21717,7 +21775,9 @@ function updateGame(dt, rawDt) {
   const canPayHP = hamuBH && p.musou < 100 && p.hp > 20;
   const canRestack = isThunder();   // 雷法师：无双可连续发动（每朵雷云独立计时，像哈姆黑洞一样并存）
   const wantMusou = musouPress; musouPress = false;   // 消费本次按键（无论成败）
-  if (wantMusou && !p.lab && (p.musouT <= 0 || canRestack) && artCutT <= 0 && novRainT <= 0 && (p.musou >= 100 || canPayHP)) {   // 哈姆黑洞/雷云可同时存在多个（一次一键一个）
+  /* ⚠️ 这里**不能**再写 `!p.lab`：用户本轮报「开发者模式的 Boss 试验场里放不出无双」——
+     以前那条 `!p.lab` 是故意把试验场的无双关掉的，现在改成「试验场也能放」（无双槽每帧补满，见 updateGame 顶部） */
+  if (wantMusou && (p.musouT <= 0 || canRestack) && artCutT <= 0 && novRainT <= 0 && (p.musou >= 100 || canPayHP)) {   // 哈姆黑洞/雷云可同时存在多个（一次一键一个）
     casts++;   // 每次奥义消耗 100（无双存储超蓄部分可连续多次释放）
     hotDrinkMusou();   // ☕ 香飘飘热饮：无双一发动就回满生命（10 秒冷却，冷却期间不回）
     if (hamuBH) {
@@ -21769,14 +21829,16 @@ function updateGame(dt, rawDt) {
         addRing(p.x, p.y, '#ffd166', 14);
         addRing(p.x, p.y, '#fff3c4', 10);
       } else {
-      /* 🛡️ 骑士无双：**一直旋转长枪**（判定半径变大、移速 +50%），持续整个无双时间 */
+      /* 🛡️ 骑士无双：**一直旋转长枪**（判定半径变大、移速 +50%），持续整个无双时间
+         + 用户本轮新增：**开启瞬间额外天降 5 根长矛**砸向敌人（落点照旧留枪，可被「长枪回收」捡回） */
       if (isKnight()) {
         p.musouT = musouMaxT();
         slowT = 0.25; flashG = 0.5; shake += 18;
         sfx.musou();
-        bigBanner('无 双 · 旋 枪 突 进 !', '长枪横扫 · 攻击范围拉大 · 移速 +50%');
+        bigBanner('无 双 · 旋 枪 突 进 !', '长枪横扫 · 攻击范围拉大 · 移速 +50% · 天降 5 根长矛');
         addRing(p.x, p.y, '#ffd166', 14);
         addRing(p.x, p.y, '#fff3c4', 10);
+        knightMusouSpears();
       } else {
       p.musouT = musouMaxT();   // 无双不息：每层乱舞时长上限 +1 秒
       slowT = 0.25; flashG = 0.5; shake += 18;
@@ -22520,9 +22582,9 @@ function updateGame(dt, rawDt) {
     e.flash -= rawDt; e.bob += dt * 9;
     /* 灼伤持续伤害（每 0.3s 2% 最大生命；Boss 仅 1/4）与离子晕眩计时
        腾空中的战将/总大将无敌：灼伤读条与结算一并冻结（落地后继续烧）
-       🛠 开发者假人：血 10 亿、每帧回满，所以**不扣血、只记账**（`devDummyAdd`）——
-       口径与雷法师的雷罚 / 原始回归的百分比伤害一致：**假人统计所有伤害来源**（用户要求，
-       以前这里把假人整个跳过，导致「德尔塔气流对靶子无效」这类误判）。 */
+       🧱 试验场的 10 亿血假人：**不吃灼伤、也不计入秒伤统计**（用户本轮：「假人受到的所有百分比伤害
+       都不计入伤害统计」）—— 2% 最大生命在 10 亿血身上一跳就是 2000 万，`devDmg` 会直接被带飞；
+       所以**只给受击闪光、不调 `devDummyAdd()`**（绝对值的技能伤害照旧由 `hitEnemy` 记账）。 */
     if (e.stun > 0) e.stun -= dt;
     if (e.burnT > 0 && !enemyInvuln(e)) {
       e.burnT -= dt;
@@ -22531,7 +22593,7 @@ function updateGame(dt, rawDt) {
         e.burnI -= 0.3;
         dbgBurnTicks++;
         const bdmg = Math.max(1, e.maxhp * (e.boss ? 0.005 : 0.02));
-        if (e.devDummy) { devDummyAdd(bdmg); e.flash = Math.max(e.flash || 0, 0.07); continue; }
+        if (e.devDummy) { e.flash = Math.max(e.flash || 0, 0.07); continue; }
         e.hp -= bdmg;
         if (Math.random() < 0.5) {
           addPart(e.x + rnd(-9, 9), e.y - e.r * 0.5 + rnd(-7, 7), rnd(-20, 20), -rnd(40, 95), 0.4, rnd(2, 4.5),
@@ -22996,11 +23058,18 @@ function updateGame(dt, rawDt) {
       const rr = e.r + (b.hitR || (b.chi ? 16 : b.arrow ? 10 : b.fire ? 12 : b.bolt ? 12 : b.wmRocket ? 14 : 3));   // hitR = 大弹体自带的判定半径（绿色光球）
       if (dx * dx + dy * dy < rr * rr) {
         /* 🔥 火法师火球：**穿透**（同「能量球 / 战术目镜子弹」）—— 记下已命中，继续直线飞；
-           同一只敌人只吃一次满伤，**没有爆炸、没有溅射**（用户本轮改口径） */
+           同一只敌人只吃一次满伤，**没有爆炸、没有溅射**（用户本轮改口径）
+           ＋ 用户本轮追加：**命中即点燃**（挂 `FIRE_BALL_BURN_T` 秒灼烧）——
+           这正好喂饱「术有专攻：被灼烧满 2 秒 → 就地陨石」那条链路（不点燃陨石几乎触发不了） */
         if (b.fire) {
           if (!b.hitSet) b.hitSet = new Set();
           b.hitSet.add(e);
           hitEnemy(e, dx / (Math.hypot(dx, dy) || 1), dy / (Math.hypot(dx, dy) || 1), 220, b.dmg);
+          if (!e.dead) {
+            if (e.burnT === undefined) { e.burnT = 0; e.burnI = 0; }
+            e.burnT = Math.max(e.burnT, FIRE_BALL_BURN_T);
+            dbgFireBurn++;
+          }
           burst(b.x, b.y, 5, '#ffb066', 190);
           continue;
         }
@@ -24682,6 +24751,42 @@ function drawGame() {
     ctx.globalAlpha = 1;
   }
 
+  /* 🌋 火法师·术有专攻的「就地陨石」：落地动画（**伤害是瞬间结算的，这里只是补一段看得见的表现**）
+     —— 一道从天上收回的流星尾迹 + 扩散的冲击环 + 往上迸的火星 */
+  for (const q of mMeteorFx) {
+    const k = Math.max(0, Math.min(1, q.t / q.life));       // 0 → 1 播完
+    const R = FIRE_M_R;
+    ctx.save();
+    /* ① 尾迹：从上往下收回（落点已经在结算那一刻砸完了，所以画的是「刚砸过」的余像） */
+    const tail = 320 * (1 - k);
+    if (tail > 4) {
+      const tg = ctx.createLinearGradient(q.x, q.y - tail, q.x, q.y);
+      tg.addColorStop(0, 'rgba(255,150,60,0)');
+      tg.addColorStop(0.65, 'rgba(255,170,80,' + (0.55 * (1 - k)).toFixed(2) + ')');
+      tg.addColorStop(1, 'rgba(255,240,200,' + (0.9 * (1 - k)).toFixed(2) + ')');
+      ctx.strokeStyle = tg;
+      ctx.lineWidth = 14 * (1 - k) + 3;
+      ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(q.x, q.y - tail); ctx.lineTo(q.x, q.y); ctx.stroke();
+    }
+    /* ② 冲击环：从落点向外扩到陨石半径 */
+    ctx.globalAlpha = 0.85 * (1 - k);
+    ctx.strokeStyle = '#ffb066'; ctx.lineWidth = 7 * (1 - k) + 1.5;
+    ctx.beginPath(); ctx.ellipse(q.x, q.y, R * (0.25 + 0.75 * k), R * 0.62 * (0.25 + 0.75 * k), 0, 0, TAU); ctx.stroke();
+    ctx.globalAlpha = 0.7 * (1 - k);
+    ctx.strokeStyle = '#fff3c4'; ctx.lineWidth = 3 * (1 - k) + 1;
+    ctx.beginPath(); ctx.ellipse(q.x, q.y, R * 0.5 * (0.3 + 0.7 * k), R * 0.34 * (0.3 + 0.7 * k), 0, 0, TAU); ctx.stroke();
+    /* ③ 落点火球残光 */
+    ctx.globalAlpha = 0.55 * (1 - k);
+    const cg = ctx.createRadialGradient(q.x, q.y, 2, q.x, q.y, R * 0.75);
+    cg.addColorStop(0, 'rgba(255,248,220,0.95)');
+    cg.addColorStop(0.5, 'rgba(255,150,60,0.5)');
+    cg.addColorStop(1, 'rgba(120,30,0,0)');
+    ctx.fillStyle = cg;
+    ctx.beginPath(); ctx.ellipse(q.x, q.y, R * 0.75, R * 0.5, 0, 0, TAU); ctx.fill();
+    ctx.restore();
+  }
+
   /* 法师火坑：地面上的熔岩圈（陨石落点残留） */
   for (const f of firePits) {
     const fade = Math.min(1, (f.life - f.t) / 1.2);   // 末段淡出
@@ -25487,8 +25592,10 @@ window.__musouDebug = () => ({ kills, score, coins, wave, state, alive: p.alive,
   manapool: (p.mut.manapool || 0), manapoolT: +p.manapoolT.toFixed(2), manapoolCd: p.mut.manapool > 0 ? manapoolCd() : 0, manapoolN: dbgManapool,
   rage: (p.mut.rage || 0), rageT: +p.rageT.toFixed(2), rageBonus: p.rageBonus, rageNow: rageBonusNow(),
   pits: firePits.length, pitTicks: dbgPitTicks, pickMastery: dbgMasteryPits, pitAges: firePits.map(f => +f.t.toFixed(2)), lastBlink: p.lastBlink || 0,
-  /* 🌋 火法师·术有专攻（新）：就地陨石 —— 次数 / 半径 / 间隔 / 伤害系数 / 达标灼烧秒数 */
+  /* 🌋 火法师·术有专攻（新）：就地陨石 —— 次数 / 半径 / 间隔 / 伤害系数 / 达标灼烧秒数
+     ＋ 🔥 火球命中点燃的次数与时长 / 陨石落地动画的在场数与寿命 */
   mMeteors: dbgMasteryMeteors, mR: FIRE_M_R, mCd: fireMasteryCd(), mDmgMul: fireMasteryDmgMul(), mBurnT: FIRE_M_BURN_T,
+  fireBurnN: dbgFireBurn, fireBurnT: FIRE_BALL_BURN_T, mFxN: mMeteorFx.length, mFxLife: FIRE_M_FX_LIFE,
   multicast: (p.mut.multicast || 0), lanes: 1 + (p.mut.multicast || 0), mastery: (p.mut.mastery || 0),
   job: p.job || '', jobPend: p.jobPend || 0, water: isWater() ? 1 : 0, jetOn: p.jetOn || 0,
   weapon: p.weapon || '', weaponPend: p.weaponPend || 0, gunner: isGunner() ? 1 : 0, cardKing: isCard() ? 1 : 0, arrowN: dbgArrows,
@@ -25504,6 +25611,7 @@ window.__musouDebug = () => ({ kills, score, coins, wave, state, alive: p.alive,
   wmEq: wmEquipped().length, wmBagN: wmStored().length,
   ronin: p.ronin || 0, roninPend: p.roninPend || 0, roninR: Math.round(roninSlashR()), roninSlashes: dbgRoninSlash, roninCloneSlashes: dbgRoninCloneSlash,
   knight: p.knight || 0, knightRams: dbgKnightRams, knightSpins: dbgKnightSpins, knightBlocks: dbgKnightBlocks, knightBossRams: dbgKnightBossRams, knightCavBreaks: dbgKnightCavBreaks,
+  knightMusouSpears: dbgKnightMusouSpears, knightMusouSpearN: KNIGHT_MUSOU_SPEARS,   // 🛡️ 无双开场天降的长矛数
   knightSpdPct: Math.round(knightSpdPct()), knightDmgMul: +knightDmgMul().toFixed(3), knightRamDmg: knightRamDmg(),
   knightHorse: knightHorseOn() ? 1 : 0, knightMusou: knightMusouOn() ? 1 : 0,
   klLances: klLances.length, klSpinning: klLances.filter(L => !L.fly && !L.planted).length, klPlanted: klLances.filter(L => L.planted).length,
@@ -25738,6 +25846,7 @@ window.__musouCavalryClear = () => { // 测试钩子：移除场上铁骑（恢�
   for (const c of cs) hitEnemy(c, 0, 0, 0, 999999);
 };
 window.__musouGauge = (v) => { if (state === 'play') p.musou = Math.max(0, Math.min(musouCap(), v)); }; // 测试钩子：直接设置无双槽（含存储上限）
+window.__musouMusouInfo = () => ({ musou: Math.round(p.musou), cap: musouCap(), t: +p.musouT.toFixed(2), maxT: musouMaxT(), casts: casts, lab: p.lab ? 1 : 0 });   // 测试钩子：无双槽读数（含试验场标记）
 window.__musouRole = (r) => { if (state === 'play') { p.role = (r === 'archer') ? 'archer' : (r === 'mage' ? 'mage' : 'warrior'); p.fangN = 0; p.sharpenT = 0; if (p.role !== 'archer') p.weapon = ''; syncSidekick(); } }; // 测试钩子：切换角色（顺手中和叠伤修饰，隔离探针）
 window.__musouWeapon = (w) => { if (state === 'play') { p.weapon = (w === 'gun') ? 'gun' : (w === 'card' ? 'card' : (w === 'bow' ? 'bow' : '')); p.mag = gunMagMax(); p.reloadT = 0; allyUnits = []; cardCats = []; charmUnits = []; syncSidekick(); } }; // 测试钩子：直接设定武器（'' / 'bow' / 'gun' / 'card'）
 window.__musouMag = (v) => { if (state === 'play') { p.mag = Math.max(0, Math.min(gunMagMax(), v | 0)); return p.mag; } return -1; }; // 测试钩子：设定弹夹余弹
@@ -25985,7 +26094,7 @@ window.__musouKnightInfo = () => ({   // 测试钩子：骑士的实时读数（
   atkMul: KNIGHT_ATK_MUL, bossRamPct: KNIGHT_BOSS_RAM_PCT, bossRams: dbgKnightBossRams,
   paraT: KNIGHT_PARA_T, paraMul: KNIGHT_PARA_DMG_MUL, cavBreaks: dbgKnightCavBreaks,
   klRPer: KL_SPIN_R_PER, krBaseR: KR_SWEEP_R, krDmgMul: KR_SWEEP_DMG_MUL,
-  ramDmg: knightRamDmg(), spinR: Math.round(knightSpinR()), musouR: KNIGHT_MUSOU_R, spd: Math.round(moveSpeed()),
+  ramDmg: knightRamDmg(), ramHit: knightRamHitDmg(), dmgBuff: KNIGHT_DMG_BUFF, krDmgHit: krSweepDmg(), skyDmgHit: skyDmg(), spinR: Math.round(knightSpinR()), musouR: KNIGHT_MUSOU_R, spd: Math.round(moveSpeed()), noFatigue: isKnight() ? 1 : 0,
   horse: knightHorseOn() ? 1 : 0, musou: knightMusouOn() ? 1 : 0, dashCd: +(p.dashCd || 0).toFixed(2),
   rams: dbgKnightRams, spins: dbgKnightSpins, blocks: dbgKnightBlocks, bossRams: dbgKnightBossRams, cavBreaks: dbgKnightCavBreaks,
   klLife: +klSpinLife().toFixed(2), klR: Math.round(klSpinR()), klThrows: dbgKLThrows, klTicks: dbgKLTicks,
@@ -25997,10 +26106,13 @@ window.__musouKnightInfo = () => ({   // 测试钩子：骑士的实时读数（
     planted: L.planted ? 1 : 0, t: +L.t.toFixed(2), maxT: +L.maxT.toFixed(2), sky: L.sky ? 1 : 0
   })),
   krR: Math.round(krSweepR()), krDmg: krSweepDmg(), kvPct: kvSpdPct(), kvPer1: kvHpPer1(), kvHp: Math.round(kvHpGain()),
-  royalCd: +royalCd().toFixed(2), royalR: Math.round(royalR()), royalDmg: royalDmg(), cavs: royalCavs.length, royalMade: dbgKLCavs,
+  royalCd: +royalCd().toFixed(2), royalR: Math.round(royalR()), royalDmg: royalDmg(), royalSpd: Math.round(royalCavSpd()), cavs: royalCavs.length, royalMade: dbgKLCavs,
+  /* 🐎 骑兵明细（测试要验「自动索敌」：出生点必须在目标外侧、速度朝着目标） */
+  cavList: royalCavs.map(c => ({ x: Math.round(c.x), y: Math.round(c.y), vx: Math.round(c.vx), vy: Math.round(c.vy), r: Math.round(c.r), dmg: c.dmg })),
   ramBonusR: ramRadiusBonus(), ramBonusDmg: +ramDmgBonus().toFixed(3), ramReach: Math.round(p.r + 10 + ramRadiusBonus()),
   skyCd: +skyCd().toFixed(2), skyR: Math.round(skyR()), skyDmg: skyDmg(), skyT: +(p.skyT || 0).toFixed(2),
   skyOn: skySpears.length, skySpawns: dbgSkySpawns, skyHits: dbgSkyHits,
+  musouSpears: dbgKnightMusouSpears, musouSpearN: KNIGHT_MUSOU_SPEARS,
   skyDropped: klLances.filter(L => L.sky).length, skyPlanted: klLances.filter(L => L.sky && L.planted).length,
   ban: roleBanMuts()
 });
@@ -26230,7 +26342,7 @@ window.__musouMiniMap = () => ({   // 测试钩子：小地图矩形 / 视野框
   foes: enemies.filter(e => !e.dead).map(e => ({ t: e.type, boss: e.boss ? 1 : 0, col: e.boss ? MM_BOSS_COL : MM_FOE_COL, x: Math.round(e.x), y: Math.round(e.y) })),
   ring: arenaRing() ? { w: HELL_RING_W, band: Math.round(HELL_RING_W * MM_W / W), safeW: W - HELL_RING_W * 2, safeH: H - HELL_RING_W * 2, inFire: inHellRing(p.x, p.y) ? 1 : 0, col: MM_RING_COL, gear: gearArena } : null
 });
-window.__musouClearField = (keepOrbs) => { if (state !== 'play') return; enemies = []; shots = []; warnFx = []; roninWalls = []; blades = []; plunderRunes = []; hexes = []; blackHoles = []; homingM = []; catE = null; cardCats = []; charmUnits = []; klLances = []; royalCavs = []; skySpears = []; wmThrusts = []; wmPlanes = []; wmOrbit = {}; wmOrbitOn = {}; wmOrbitHit = {}; wmOrbitDmg = {}; wmAnim = {}; wmDrones = []; wmBottles = []; wmFires = []; wmDashSlashes = []; wmShurikens = []; wmPrisms = []; wmHolySeq = {}; wmBeams = []; wmCharge = {}; wmAuraT = {}; dbgWMShotOrigins = []; swordE = null; drones = []; pBullets = []; bolts = []; if (!keepOrbs) orbs = []; spawnQ = []; meteors = []; firePits = []; thunderClouds = []; arcs = []; lightBeams = []; rainDrops = []; rainHits = []; voidImpacts = []; fxSprites = []; petBeams = []; petPools = []; petTornadoes = []; petMeteors = []; planteraVines = []; hoennSpikes = []; hoennBeams = []; nukeFx = null; }; // 测试钩子：清场 + 停出怪 + 移除随行攻击体/火坑/陨石/雷云/光炮/雨幕/哈吉咪/**世纪之花藤蔓/丰缘之战的地刺与光柱/未落地的核弹**（keepOrbs=true 时保留掉落物，测「每波吸取」用）
+window.__musouClearField = (keepOrbs) => { if (state !== 'play') return; enemies = []; shots = []; warnFx = []; roninWalls = []; blades = []; plunderRunes = []; hexes = []; blackHoles = []; homingM = []; catE = null; cardCats = []; charmUnits = []; klLances = []; royalCavs = []; skySpears = []; wmThrusts = []; wmPlanes = []; wmOrbit = {}; wmOrbitOn = {}; wmOrbitHit = {}; wmOrbitDmg = {}; wmAnim = {}; wmDrones = []; wmBottles = []; wmFires = []; wmDashSlashes = []; wmShurikens = []; wmPrisms = []; wmHolySeq = {}; wmBeams = []; wmCharge = {}; wmAuraT = {}; dbgWMShotOrigins = []; swordE = null; drones = []; pBullets = []; bolts = []; if (!keepOrbs) orbs = []; spawnQ = []; meteors = []; firePits = []; mMeteorFx = []; thunderClouds = []; arcs = []; lightBeams = []; rainDrops = []; rainHits = []; voidImpacts = []; fxSprites = []; petBeams = []; petPools = []; petTornadoes = []; petMeteors = []; planteraVines = []; hoennSpikes = []; hoennBeams = []; nukeFx = null; }; // 测试钩子：清场 + 停出怪 + 移除随行攻击体/火坑/陨石/雷云/光炮/雨幕/哈吉咪/**世纪之花藤蔓/丰缘之战的地刺与光柱/未落地的核弹**（keepOrbs=true 时保留掉落物，测「每波吸取」用）
 window.__musouClearAllies = () => { allyUnits = []; };   // 测试钩子：清空部署单位（敌人索敌会优先打假人/随从，探针期必须清掉才锁定角色）
 window.__musouDummy = (dx, dy, hp, r, boss) => { // 测试钩子：玩家前方放一只高血「不动靶」兵卒（射程/穿透探针：不移动、不吃击退）；
   /* 可选第 4 参 r：放大判定圈（模拟大体型 / Boss）；第 5 参 boss=1：按 Boss 级目标处理（验证剑气对 Boss 翻倍） */
