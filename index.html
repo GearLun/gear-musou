@@ -1078,6 +1078,7 @@ let blackHoles = [];           // 哈姆杀所有·黑洞（无双技）
 let meteors = [];              // 法师：陨石（无双·陨石风暴）
 let firePits = [];             // 法师：陨石留下的火坑（持续灼烧 + 持续伤害）
 let dbgFires = 0, dbgBlasts = 0, dbgMeteor = 0, dbgManapool = 0, dbgLavaTicks = 0, dbgPitTicks = 0, dbgMasteryPits = 0;   // 诊断
+let dbgMasteryMeteors = 0;   // 🌋 火法师·术有专攻：灼烧触发的「就地陨石」次数（用户本轮改口径后的新效果）
 let dbgLunges = 0, dbgJumps = 0, dbgSlams = 0, dbgGenShots = 0;   // 诊断：兵卒突刺 / 跃击起跳 / 落地 / 总大将落地弹幕
 let dbgBH = 0;   // 诊断：哈姆黑洞生成次数
 let dbgWaterTicks = 0, dbgWaterBursts = 0, dbgWaterHits = 0, dbgWaterLaneN = 0;   // 诊断：水法师 水柱周期结算 / 水爆 / 命中即伤 / 水柱命中总数（含多柱叠加）
@@ -9574,7 +9575,7 @@ function buildPetPanel() {
   }
 }
 /* ---- 魔法转职（第 JOB_WAVE 波奇物选完后，法师专属） ---- */
-const JOB_WAVE = 10;   // 转职触发波次：第 10 波奇物选完后弹出（改这里即可调整）
+const JOB_WAVE = 5;   // 转职触发波次：**第 5 波**奇物选完后弹出（用户本轮：由第 10 波提前到第 5 波 · 改这里即可调整）
 const JOBS = [
   { id: 'water', icon: '💧', name: '水法师', desc: '水柱：法杖射出、跟随指针持续喷射（命中即伤 + 每 0.3 秒结算，多柱叠加；耗法术条 75/秒，初始 200 ≈ 2.67 秒、满魔能 450 = 6 秒）；无双为全屏击退水爆；多重施法 = 水柱数量，术有专攻 = 水柱宽度；击杀掉蓝球' },
   { id: 'thunder', icon: '⚡', name: '雷法师', desc: '闪电球**自动追踪敌人**（会拐弯锁定最近的敌人），命中不爆炸，触发闪电链（至多 3 名，伤害相同）；无双为雷云（飘移落雷，**术有专攻每层把雷云范围 +1/6，满 3 层 = 半径 ×1.5**）；术有专攻：定身 0.5 秒（Boss 免疫），6 次雷击触发雷罚（满层 3 次）——普通敌人秒杀、Boss 扣 3% 最大生命（**对 Boss 有 0.5 秒冷却，冷却内最多触发一次**）' },
@@ -13412,7 +13413,7 @@ function pickChoice(i) {
   if (kind0 === 'mut') mutPending--;
   else if (kind0 === 'art') {
     p.artPend--;
-    /* 第 JOB_WAVE 波（第 10 波）的奇物选完后：法师额外开启「魔法转职」页面 */
+    /* 第 JOB_WAVE 波（**第 5 波**）的奇物选完后：法师额外开启「魔法转职」页面 */
     if (artWv === JOB_WAVE && isMage() && !p.job) p.jobPend = 1;
   }
   else if (kind0 === 'job') p.jobPend--;
@@ -14840,6 +14841,52 @@ function rageBonusNow() { return (p.rageT > 0 && isMage()) ? (p.rageBonus || 0) 
 function lavaRadius() { return 80 + 45 * (p.mut.lava || 0); }   // 熔岩结界半径（1 层 125 … 5 层 305）
 function lavaTickDmg() { return 3 + 2 * (p.mut.lava || 0); }    // 熔岩结界每 0.5s 伤害（1 层 5 … 5 层 13）
 function manapoolCd() { return 20 - 3.75 * ((p.mut.manapool || 0) - 1); }   // 无穷法力冷却（1 层 20s … 5 层 5s）
+/* 🌋 火法师·术有专攻（用户本轮改口径）：**灼烧 → 就地召唤陨石**
+   · 敌人**连续灼烧满 2 秒** → 立刻在它的位置砸下一颗陨石（**没有落地延迟 = 必中**）
+   · 陨石范围 = **流星群（`PET_SKILL_METEOR.meteor.r = 150*1.5`）的一半** = 112.5
+   · 砸完只要它还在烧就按层数继续：**每 5 / 3.5 / 2 秒**（1 / 2 / 3 层）再砸一颗
+   · 伤害 = 法师普攻 ×**1.0 / 1.5 / 2.0**（每层 +50%） */
+const FIRE_M_BURN_T = 2;                                  // 达标需要的连续灼烧秒数
+const FIRE_M_CD = [5, 3.5, 2];                            // 达标之后，每层再砸一颗的间隔（秒；满级 2 秒）
+const FIRE_M_DMG = [1.0, 1.5, 2.0];                       // 每层：伤害 = 法师普攻 × 这个系数
+const FIRE_M_R = (150 * 1.5) / 2;                         // 半径 = 流星群 225 的一半 = 112.5
+function fireMasteryCd() { return FIRE_M_CD[Math.max(0, Math.min(2, (p.mut.mastery || 1) - 1))]; }
+function fireMasteryDmgMul() { return FIRE_M_DMG[Math.max(0, Math.min(2, (p.mut.mastery || 1) - 1))]; }
+/* 就地砸一颗（无延迟）：范围伤害 + 冲击特效（不留下火坑 —— 用户没要求，别自作主张加） */
+function fireMasteryMeteor(x, y) {
+  const R = FIRE_M_R, dmg = Math.max(2, Math.round(mageAtkDmg() * fireMasteryDmgMul()));
+  rings.push({ x, y, r: 14, vr: 780, life: 0.32, max: 0.32, color: '#ffb066', width: 8 });
+  rings.push({ x, y, r: 6, vr: 420, life: 0.2, max: 0.2, color: '#fff3c4', width: 4 });
+  burst(x, y, 18, '#ff9d5c', 380);
+  burst(x, y, 8, '#fff3c4', 240);
+  shake = Math.max(shake, 3);
+  tone(220, 70, 'sawtooth', 0.14, 0.11);
+  for (const e of enemies) {
+    if (e.dead) continue;
+    const dx = e.x - x, dy = e.y - y, dd = Math.hypot(dx, dy);
+    if (dd > R + e.r) continue;
+    hitEnemy(e, dx / (dd || 1), dy / (dd || 1), 320, dmg);
+  }
+  dbgMasteryMeteors++;
+  return dmg;
+}
+/* 每帧：给「正在灼烧」的敌人累计时间；满 2 秒砸一颗，之后按层数间隔继续砸
+   （灼烧一断就清零重来 —— 口径是「被灼烧两秒时间」） */
+function tickFireMastery(dt) {
+  if ((p.mut.mastery || 0) <= 0 || !fireMageOn()) return;
+  const cd = fireMasteryCd();
+  for (const e of enemies) {
+    if (e.dead) continue;
+    if (!(e.burnT > 0)) { e.burnSumT = 0; continue; }
+    e.burnSumT = (e.burnSumT || 0) + dt;
+    if (e.burnSumT < FIRE_M_BURN_T) continue;
+    /* 砸一颗 → 计数器回拨到「2 − 间隔」，于是下一颗正好在 间隔 秒之后（3 / 2 / 1 秒） */
+    e.burnSumT = FIRE_M_BURN_T - cd;
+    fireMasteryMeteor(e.x, e.y);
+  }
+}
+/* 火法师：法师且不是水 / 雷 / 光（初始 `p.job=''`，取消转职后是 `'fire'`） */
+function fireMageOn() { return isMage() && !isWater() && !isThunder() && !isLight(); }
 function fireRadius() { return Math.round(62 * (1 + 0.35 * (p.mut.mastery || 0))); }   // 火球爆炸半径（术有专攻每层 +35%）
 /* 最近的敌人（雷云飘移 / 落点选取等用） */
 function nearestEnemy(x, y, skip) {
@@ -14861,12 +14908,15 @@ function memShotsMax() { return Math.floor(memMax() / memCost()); }
 /* 无双光环对敌人的吸引力度（法师 / 弓箭手为 0：远程定位的无双不再把敌人吸到脸上；
    弓箭手拿「十一月雨」时无双是箭雨、根本没有光环，所以这里直接按职业返回） */
 function musouPullForce() { return (isMage() || isArcher() || isWM()) ? 0 : 900; }   // 🗡️ 武器大师的无双不吸附敌人
+/* 🔥 火法师普攻 = **穿透火球**（用户本轮：「改成和妙蛙草能量球类似的穿透伤害，而非爆炸」）——
+   打穿敌人继续直线飞，**同一只只吃一次满伤**（`hitSet`），飞满射程就消失（**不再有任何爆炸/溅射**）。 */
 function fireBall(ang, dmg) {
   pBullets.push({
     x: p.x + Math.cos(ang) * 20, y: p.y + Math.sin(ang) * 20,
     vx: Math.cos(ang) * 470, vy: Math.sin(ang) * 470,
-    dmg: Math.round(dmg), splash: Math.max(1, Math.round(dmg / 2)),
-    fire: true, arrow: false, chi: false, pierce: false,
+    dmg: Math.round(dmg), splash: 0,
+    fire: true, arrow: false, chi: false, pierce: true,   // pierce = 打穿（和「能量球 / 战术目镜子弹」同一套）
+    hitSet: null,
     R: fireRadius(),
     trav: 0, maxTrav: mageRange(false), dead: false
   });
@@ -14948,7 +14998,10 @@ function wipeShieldsAtWaveEnd() {
   if (had > 0) dbgShieldWipes++;   // 只计数，不飘字（护盾条本身会归零）
   return had;
 }
-/* 火球爆炸：直击目标满伤 / 范围内的其他敌人半伤；术有专攻：命中敌人留下 2 秒火坑 */
+/* 火球爆炸：直击目标满伤 / 范围内的其他敌人半伤。
+   ⚠️ **火法师普攻本轮改成了穿透火球（不再爆炸）** → 这个函数现在**没有调用点**，
+   保留它是为了：① 以后可能的爆炸弹体直接复用；② 测试读数 `dbg().blastN` 还在（现在是恒定 0）。
+   （原来「术有专攻·直击留火坑」已经挪走了 —— 火系术有专攻现在管的是「灼烧 → 就地陨石」，见 `tickFireMastery`） */
 function fireBlast(x, y, b, direct) {
   const R = b.R || fireRadius();
   dbgBlasts++;
@@ -14962,12 +15015,6 @@ function fireBlast(x, y, b, direct) {
     const dx = e.x - x, dy = e.y - y, dd = Math.hypot(dx, dy);
     if (dd > R + e.r) continue;
     hitEnemy(e, dx / (dd || 1), dy / (dd || 1), 260, e === direct ? b.dmg : b.splash);
-  }
-  /* 术有专攻（火系）：命中敌人时留下与无双陨石同样的火坑，时间固定 2 秒 */
-  if (direct && (p.mut.mastery || 0) > 0) {
-    firePits.push({ x, y, t: 0, tick: 0.25, life: 2, R: 84, dead: false });
-    if (firePits.length > 14) firePits.shift();
-    dbgMasteryPits++;
   }
 }
 function doCast() {
@@ -15028,8 +15075,11 @@ function lightWidth() { const w = 34 + 22 * Math.min(3, p.mut.mastery || 0); ret
 function lightFanN() { return 1 + (p.mut.multicast || 0); }             // 光炮条数
 function lightFanDeg() { return 60 * (p.mut.multicast || 0); }          // 扇形张角：1 层 60° → 满 2 层 120°
 function lightRange() { return Math.hypot(W, H) * 1.35; }               // 单发总射程（保证能打到墙并留下反射余量）
-/* 光炮伤害：随本次倾泻的法术条线性提升（基础条 200 → 4.4 倍普攻；满魔能 450 → 8.9 倍） */
-function lightBeamDmg(spent) { return Math.round(mageAtkDmg() * (0.8 + spent * 0.018)); }
+/* 光炮伤害：随本次倾泻的法术条线性提升（基础条 200 → 5.12 倍普攻；满魔能 450 → 10.52 倍）
+   ⚠️ 用户本轮：「**法术条上限转光炮伤害的幅度增加 20%**」→ 把换算幅度（每点法力的系数）由 0.018 提到 0.018×1.2 = 0.0216
+   （写进 `LIGHT_MANA_DMG_PER`，改这里一处即可；基础系数 0.8 不动） */
+const LIGHT_MANA_DMG_PER = 0.018 * 1.2;
+function lightBeamDmg(spent) { return Math.round(mageAtkDmg() * (0.8 + spent * LIGHT_MANA_DMG_PER)); }
 function lightWaveDmg() { return Math.max(2, Math.round(mageAtkDmg() * 0.9)); }   // 无双光波每 0.3 秒结算（0.6 × 1.5）
 function lightMuzzle() { return waterMuzzle(); }                        // 与法杖法球同一个起点
 /* 单发方向上的光炮：从法杖射出 → 撞墙反射一次 → 命中路径上所有敌人（每名敌人每发只吃一次） */
@@ -16499,7 +16549,7 @@ function resetRun() {
   dbgLunges = 0; dbgJumps = 0; dbgSlams = 0; dbgGenShots = 0;
   dbgArrows = 0;
   lightBeams = []; dbgLightShots = 0; dbgLightHits = 0; dbgLightWaveTicks = 0; dbgLightWaveHits = 0; dbgLightBounces = 0; dbgLightAngles = []; dbgLightDoubles = 0;
-  dbgFires = 0; dbgBlasts = 0; dbgMeteor = 0; dbgManaDraw = 0; dbgManapool = 0; dbgLavaTicks = 0; dbgPitTicks = 0; dbgMasteryPits = 0;
+  dbgFires = 0; dbgBlasts = 0; dbgMeteor = 0; dbgManaDraw = 0; dbgManapool = 0; dbgLavaTicks = 0; dbgPitTicks = 0; dbgMasteryPits = 0; dbgMasteryMeteors = 0;
   dbgBH = 0;
   $('sc-level').classList.remove('show');
   $('sc-mut').classList.remove('show');
@@ -22311,6 +22361,7 @@ function updateGame(dt, rawDt) {
   updateFirePits(dt);                  // 法师：陨石留下的火坑（灼烧 + 持续伤害）
   updateHellHazards(dt);               // 地狱奇遇：法师火坑 / 炽热擂台边缘火海
   updateLavaRing(dt);                  // 法师质变·熔岩结界
+  tickFireMastery(dt);                 // 🌋 火法师·术有专攻：把「灼烧满 2 秒」的敌人就地砸一颗陨石
   updateWaterJet(dt);                  // 水法师：水柱喷射（耗法术条 + 每 0.3s 伤害）
   updateLightAttack();                 // 光法师：法术条一满即倾泻全部法力打出光炮
   updateLightWave(dt);                 // 光法师无双：持续光波（每 0.3s 结算，不可反射）
@@ -22927,8 +22978,7 @@ function updateGame(dt, rawDt) {
       }
     }
     if (b.x < -20 || b.x > W + 20 || b.y < -20 || b.y > H + 20 || b.trav > (b.maxTrav || 1050)) {
-      /* 法师火球：飞完射程/飞出屏幕 → 在终点照常爆炸（法术不该凭空消失） */
-      if (b.fire) { fireBlast(Math.max(20, Math.min(W - 20, b.x)), Math.max(20, Math.min(H - 20, b.y)), b, null); b.dead = true; continue; }
+      /* 🔥 火法师火球：**穿透弹体**，飞完射程直接消失（用户本轮：不再爆炸 —— 法术不再凭空炸一下） */
       /* 🔥 小火龙火球：飞完射程 → 在终点照样炸开 */
       if (b.petBoom) { petBoom(Math.max(20, Math.min(W - 20, b.x)), Math.max(20, Math.min(H - 20, b.y)), b); b.dead = true; continue; }
       /* 🚀 火箭筒：飞完射程 → 在终点爆炸 */
@@ -22945,8 +22995,15 @@ function updateGame(dt, rawDt) {
       const dx = e.x - b.x, dy = e.y - b.y;
       const rr = e.r + (b.hitR || (b.chi ? 16 : b.arrow ? 10 : b.fire ? 12 : b.bolt ? 12 : b.wmRocket ? 14 : 3));   // hitR = 大弹体自带的判定半径（绿色光球）
       if (dx * dx + dy * dy < rr * rr) {
-        /* 火球：命中即炸；闪电球：命中触发闪电链（不爆炸）；🃏卡牌：按牌面结算（爆破/穿透/召唤）；🚀火箭：命中即爆 */
-        if (b.fire) { fireBlast(b.x, b.y, b, e); b.dead = true; break; }
+        /* 🔥 火法师火球：**穿透**（同「能量球 / 战术目镜子弹」）—— 记下已命中，继续直线飞；
+           同一只敌人只吃一次满伤，**没有爆炸、没有溅射**（用户本轮改口径） */
+        if (b.fire) {
+          if (!b.hitSet) b.hitSet = new Set();
+          b.hitSet.add(e);
+          hitEnemy(e, dx / (Math.hypot(dx, dy) || 1), dy / (Math.hypot(dx, dy) || 1), 220, b.dmg);
+          burst(b.x, b.y, 5, '#ffb066', 190);
+          continue;
+        }
         if (b.petPool) { spawnPetPool(b.x, b.y, b); b.dead = true; break; }   // 💦 加农水炮：命中即留下水坑
         if (b.petBoom) { petBoom(b.x, b.y, b, e); b.dead = true; break; }
         if (b.bolt) { thunderHit(e, b.dmg, null, 1, null); b.dead = true; break; }
@@ -25430,6 +25487,8 @@ window.__musouDebug = () => ({ kills, score, coins, wave, state, alive: p.alive,
   manapool: (p.mut.manapool || 0), manapoolT: +p.manapoolT.toFixed(2), manapoolCd: p.mut.manapool > 0 ? manapoolCd() : 0, manapoolN: dbgManapool,
   rage: (p.mut.rage || 0), rageT: +p.rageT.toFixed(2), rageBonus: p.rageBonus, rageNow: rageBonusNow(),
   pits: firePits.length, pitTicks: dbgPitTicks, pickMastery: dbgMasteryPits, pitAges: firePits.map(f => +f.t.toFixed(2)), lastBlink: p.lastBlink || 0,
+  /* 🌋 火法师·术有专攻（新）：就地陨石 —— 次数 / 半径 / 间隔 / 伤害系数 / 达标灼烧秒数 */
+  mMeteors: dbgMasteryMeteors, mR: FIRE_M_R, mCd: fireMasteryCd(), mDmgMul: fireMasteryDmgMul(), mBurnT: FIRE_M_BURN_T,
   multicast: (p.mut.multicast || 0), lanes: 1 + (p.mut.multicast || 0), mastery: (p.mut.mastery || 0),
   job: p.job || '', jobPend: p.jobPend || 0, water: isWater() ? 1 : 0, jetOn: p.jetOn || 0,
   weapon: p.weapon || '', weaponPend: p.weaponPend || 0, gunner: isGunner() ? 1 : 0, cardKing: isCard() ? 1 : 0, arrowN: dbgArrows,
