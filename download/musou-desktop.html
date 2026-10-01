@@ -423,7 +423,7 @@
   <!-- 开始界面 -->
   <div class="screen show" id="sc-start">
    <div class="home-inner">
-    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.2.2</small></div>
+    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.2.3</small></div>
     <div class="keys" id="keys-desk">
       <span><b>WASD</b> / <b>方向键</b></span><span>移动</span>
       <span><b>自动攻击</b></span><span id="kbd-atk-d">自动挥砍，无需按键</span>
@@ -832,7 +832,7 @@
 <script>
 'use strict';
 /* ============================================================
-   草·割无双  MUSOU MOW  —  无双割草 正式版 v1.2.2
+   草·割无双  MUSOU MOW  —  无双割草 正式版 v1.2.3
    纯 Canvas 2D + WebAudio 程序化音效，无任何外部资源
    ============================================================ */
 (() => {
@@ -14889,16 +14889,19 @@ function manapoolCd() { return 20 - 3.75 * ((p.mut.manapool || 0) - 1); }   // �
 const FIRE_M_BURN_T = 2;                                  // 达标需要的连续灼烧秒数
 const FIRE_M_CD = [5, 3.5, 2];                            // 达标之后，每层再砸一颗的间隔（秒；满级 2 秒）
 /* 陨石伤害 = 法师普攻 × 下面这个系数。
-   ③ 用户本轮：「术有专攻的陨石伤害全部翻倍」＋「并且会随着术有专攻的获取次数提升，最高提升至双倍」
-   → **基础档 [1.0, 1.5, 2.0]（1 / 2 / 3 层，本身就是「满级 = 双倍」的成长）整体再 ×2** = [2.0, 3.0, 4.0]。
-   拆成两个常量写，改一处就能单独调「基础成长」或「本次翻倍」。 */
+   ③ 用户上一轮：「术有专攻的陨石伤害全部翻倍」＋「并且会随着术有专攻的获取次数提升，最高提升至双倍」
+   → **基础档 [1.0, 1.5, 2.0]（1 / 2 / 3 层，本身就是「满级 = 双倍」的成长）整体再 ×2**。
+   ④ 用户本轮：「火法师火球 / 陨石的伤害**再提高 80%**」→ 火球与陨石一起再 ×`FIRE_DMG_BUFF`（1.8）。
+   最终：基础档 [1.0, 1.5, 2.0] × 2 × 1.8 = **[3.6, 5.4, 7.2]**（× 法师普攻）。
+   拆成常量写：「本轮 +80%」只动 `FIRE_DMG_BUFF` · 「上一轮翻倍」是 `FIRE_M_DMG_MUL` 里的 2 · 基础成长单独一份。 */
+const FIRE_DMG_BUFF = 1.8;                                // 🔥 用户本轮：火法师火球 / 陨石伤害**再提高 80%**
 const FIRE_M_DMG_BASE = [1.0, 1.5, 2.0];
-const FIRE_M_DMG_MUL = 2;
+const FIRE_M_DMG_MUL = 2 * FIRE_DMG_BUFF;
 const FIRE_M_DMG = FIRE_M_DMG_BASE.map(v => v * FIRE_M_DMG_MUL);
 const FIRE_M_R = (150 * 1.5) / 2;                         // 半径 = 流星群 225 的一半 = 112.5
 const FIRE_M_FX_LIFE = 0.34;                              // 🌋 陨石落地**动画**时长（伤害仍是瞬间结算，动画只是表现）
 const FIRE_BALL_BURN_T = 4;                               // 🔥 火球命中即点燃：给敌人挂上的灼烧秒数（同「燃烧刀」的 4 秒）
-const FIRE_BALL_DMG_MUL = 2;                              // 🔥 用户本轮：火法师火球伤害**翻倍**（在 fireBall 里乘）
+const FIRE_BALL_DMG_MUL = 2 * FIRE_DMG_BUFF;                // 🔥 火球伤害：上一轮翻倍（×2）× 本轮 +80%（×1.8）= ×3.6（在 fireBall 里乘）
 let mMeteorFx = [];                                       // 🌋 火法师·术有专攻：就地陨石的落地动画（纯视觉，不参与伤害）
 function fireMasteryCd() { return FIRE_M_CD[Math.max(0, Math.min(2, (p.mut.mastery || 1) - 1))]; }
 function fireMasteryDmgMul() { return FIRE_M_DMG[Math.max(0, Math.min(2, (p.mut.mastery || 1) - 1))]; }
@@ -14969,7 +14972,8 @@ function memShotsMax() { return Math.floor(memMax() / memCost()); }
 function musouPullForce() { return (isMage() || isArcher() || isWM()) ? 0 : 900; }   // 🗡️ 武器大师的无双不吸附敌人
 /* 🔥 火法师普攻 = **穿透火球**（用户本轮：「改成和妙蛙草能量球类似的穿透伤害，而非爆炸」）——
    打穿敌人继续直线飞，**同一只只吃一次满伤**（`hitSet`），飞满射程就消失（**不再有任何爆炸/溅射**）。
-   ＋ 用户本轮追加：**伤害翻倍**（`FIRE_BALL_DMG_MUL = 2`，乘在这里 → 普攻与无双期间那一发都吃）。 */
+   ＋ 用户追加：**伤害翻倍**（`FIRE_BALL_DMG_MUL = 2`）；本轮再要求**提高 80%** →
+   现在这个常量 = `2 × FIRE_DMG_BUFF(1.8)` = **3.6**，乘在这里 → 普攻与无双期间那一发都吃。 */
 function fireBall(ang, dmg) {
   pBullets.push({
     x: p.x + Math.cos(ang) * 20, y: p.y + Math.sin(ang) * 20,
@@ -25607,7 +25611,7 @@ window.__musouDebug = () => ({ kills, score, coins, wave, state, alive: p.alive,
      ＋ 🔥 火球命中点燃的次数与时长 / 陨石落地动画的在场数与寿命 */
   mMeteors: dbgMasteryMeteors, mR: FIRE_M_R, mCd: fireMasteryCd(), mDmgMul: fireMasteryDmgMul(), mBurnT: FIRE_M_BURN_T,
   fireBurnN: dbgFireBurn, fireBurnT: FIRE_BALL_BURN_T, mFxN: mMeteorFx.length, mFxLife: FIRE_M_FX_LIFE,
-  fireDmgMul: FIRE_BALL_DMG_MUL, mDmgBase: FIRE_M_DMG_BASE.slice(), mDmgMul2: FIRE_M_DMG_MUL,
+  fireDmgMul: FIRE_BALL_DMG_MUL, mDmgBase: FIRE_M_DMG_BASE.slice(), mDmgMul2: FIRE_M_DMG_MUL, fireDmgBuff: FIRE_DMG_BUFF,
   multicast: (p.mut.multicast || 0), lanes: 1 + (p.mut.multicast || 0), mastery: (p.mut.mastery || 0),
   job: p.job || '', jobPend: p.jobPend || 0, water: isWater() ? 1 : 0, jetOn: p.jetOn || 0,
   weapon: p.weapon || '', weaponPend: p.weaponPend || 0, gunner: isGunner() ? 1 : 0, cardKing: isCard() ? 1 : 0, arrowN: dbgArrows,
