@@ -433,7 +433,7 @@
   <!-- 开始界面 -->
   <div class="screen show" id="sc-start">
    <div class="home-inner">
-    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.3.1</small></div>
+    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.3.2</small></div>
     <div class="keys" id="keys-desk">
       <span><b>WASD</b> / <b>方向键</b></span><span>移动</span>
       <span><b>自动攻击</b></span><span id="kbd-atk-d">自动挥砍，无需按键</span>
@@ -853,7 +853,7 @@
 <script>
 'use strict';
 /* ============================================================
-   草·割无双  MUSOU MOW  —  无双割草 正式版 v1.3.1
+   草·割无双  MUSOU MOW  —  无双割草 正式版 v1.3.2
    纯 Canvas 2D + WebAudio 程序化音效，无任何外部资源
    ============================================================ */
 (() => {
@@ -14945,7 +14945,17 @@ const FIRE_M_CD = [5, 3.5, 2];                            // 达标之后，每�
    ⚠️ 紧接着用户又改口：「**提高 80％伤害改为提高 50％，提高的太多了有些太强了**」→ `FIRE_DMG_BUFF = 1.5`。
    最终：基础档 [1.0, 1.5, 2.0] × 2 × 1.5 = **[3.0, 4.5, 6.0]**（× 法师普攻）。
    拆成常量写：「本轮加成」只动 `FIRE_DMG_BUFF` · 「上一轮翻倍」是 `FIRE_M_DMG_MUL` 里的 2 · 基础成长单独一份。 */
-const FIRE_DMG_BUFF = 1.5;                                // 🔥 **陨石**伤害再提高 50%（火球已改口径，不再用它）
+const FIRE_DMG_BUFF = 1.5;                                // 🔥 陨石伤害里「再提高 50%」那一档（火球已改口径，不再用它）
+/* 🌋 术有专攻（火系）陨石口径（**用户 2026-10 最终确认**）：
+   基础式子 = **「角色等级 + 法师普攻 × 3」**，**层数放大的是整个式子**（角色等级也跟着放大）：
+     1 层 = ×1   → 每 **5** 秒一颗
+     2 层 = ×1.5 → 每 **3.5** 秒一颗（中间档，按线性插值）
+     满层 = ×2   → 每 **2** 秒一颗 ← 用户原话「满级时伤害为 2 倍『角色等级 + 法师普攻 × 3』」
+   对 Boss 单位再 ×2（`FIRE_M_BOSS_MUL`）。
+   ⚠️ 所以：`FIRE_M_DMG_BASE` 现在就是**整体倍率 [1, 1.5, 2]**，
+   `FIRE_M_DMG_MUL = 3` 是式子里**普攻项的固定系数**，`FIRE_M_DMG = 基础 × 3 = [3, 4.5, 6]`
+   只是给面板/测试看的「普攻系数」读数（`dbg().mDmgMul`）——
+   **别再把它当成伤害公式里的乘数**（那会把等级漏掉，就是用户这次纠正的误解）。 */
 const FIRE_M_DMG_BASE = [1.0, 1.5, 2.0];
 const FIRE_M_DMG_MUL = 2 * FIRE_DMG_BUFF;
 const FIRE_M_DMG = FIRE_M_DMG_BASE.map(v => v * FIRE_M_DMG_MUL);
@@ -14966,11 +14976,15 @@ function fireMasteryDmgMul() { return FIRE_M_DMG[Math.max(0, Math.min(2, (p.mut.
 /* 就地砸一颗（无延迟）：范围伤害 + 冲击特效（不留下火坑 —— 用户没要求，别自作主张加）
    ⚠️ 伤害**瞬间结算**（用户要求「落地没有延迟=必中」），所以动画只做「刚砸过」的余像：
    往下收回的尾迹 + 扩散冲击环 + 残光，全部塞进 `mMeteorFx`，由 `tickFireMastery` 推进
-   🌋 用户本轮两条口径：
-     ① 每颗陨石 = **角色等级 + 法师普攻 × 档位倍率**（1 级档 = ×3，即 `等级 + 普攻 × 3`；乘法先算 → 等级不吃倍率）
-     ② **对 Boss 单位伤害翻倍**（`FIRE_M_BOSS_MUL = 2`；只对 Boss 乘，普通敌人不变） */
+   🌋 用户本轮确认的口径：
+     ① 每颗陨石 = **层数倍率 ×（角色等级 + 法师普攻 × 3）** —— **等级与普攻一起被放大**
+        （1 层 ×1 = 每 5 秒一颗 · 2 层 ×1.5 = 3.5 秒 · 满层 ×2 = 每 2 秒一颗）
+     ② **对 Boss 单位伤害再翻倍**（`FIRE_M_BOSS_MUL = 2`；只对 Boss 乘，普通敌人不变） */
 const FIRE_M_BOSS_MUL = 2;
-function fireMasteryMeteorDmg() { return Math.max(2, Math.round((p.lvl || 0) + mageAtkDmg() * fireMasteryDmgMul())); }
+/* 整体倍率（1 / 1.5 / 2，按术有专攻层数） */
+function fireMasteryTierMul() { return FIRE_M_DMG_BASE[Math.max(0, Math.min(2, (p.mut.mastery || 1) - 1))]; }
+/* 单颗陨石伤害（未算 Boss 双倍）= `层数倍率 × (角色等级 + 法师普攻 × 3)` */
+function fireMasteryMeteorDmg() { return Math.max(2, Math.round(fireMasteryTierMul() * ((p.lvl || 0) + mageAtkDmg() * FIRE_M_DMG_MUL))); }
 function fireMasteryMeteor(x, y) {
   const R = FIRE_M_R, dmg = fireMasteryMeteorDmg();
   mMeteorFx.push({ x, y, t: 0, life: FIRE_M_FX_LIFE });
@@ -25948,7 +25962,7 @@ window.__musouDebug = () => ({ kills, score, coins, wave, state, alive: p.alive,
   /* 🌋 火法师·术有专攻（新）：就地陨石 —— 次数 / 半径 / 间隔 / 伤害系数 / 达标灼烧秒数
      ＋ 🔥 火球命中点燃的次数与时长 / 陨石落地动画的在场数与寿命 */
   mMeteors: dbgMasteryMeteors, mR: FIRE_M_R, mCd: fireMasteryCd(), mDmgMul: fireMasteryDmgMul(), mBurnT: FIRE_M_BURN_T,
-  mDmgNow: fireMageOn() ? fireMasteryMeteorDmg() : 0, mBossMul: FIRE_M_BOSS_MUL, mLv: p.lvl || 0,
+  mDmgNow: fireMageOn() ? fireMasteryMeteorDmg() : 0, mBossMul: FIRE_M_BOSS_MUL, mLv: p.lvl || 0, mTier: fireMasteryTierMul(),
   fireBurnN: dbgFireBurn, fireBurnT: FIRE_BALL_BURN_T, mFxN: mMeteorFx.length, mFxLife: FIRE_M_FX_LIFE,
   /* 🔥 火球（新口径）：伤害 = 法师普攻 + 玩家等级，无双时再 ×`fireBallMusouMul` */
   fireBallMusouMul: FIRE_BALL_MUSOU_MUL, fireBallLv: p.lvl || 0, fireBallNow: fireBallDmg(mageAtkDmg()),
