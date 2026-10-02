@@ -792,10 +792,13 @@
    </div>
   </div>
 
-  <!-- 弓箭手武器选择（开局 · 选奇物之前） -->
+  <!-- 弓箭手武器选择（开局 · 选奇物之前）—— ⚠️ 这个面板被 4 套「几选一」复用
+       （选武器 / 🧢 御三家三选一 / 🐾 捕捉宝可梦 / 🌟 神兽三选一），
+       所以**标题与底部提示都要按 kind 动态换**（见 game.js 的 pickPanelOpen()），
+       标题和提示各留一个 id，别再写成死的「选择武器」 -->
   <div class="screen" id="sc-weapon">
    <div class="pick-inner">
-    <div class="over-title" style="font-size:44px;color:#9fe08a;">✦ 选 择 武 器 ✦</div>
+    <div class="over-title" id="wp-title" style="font-size:44px;color:#9fe08a;">✦ 选 择 武 器 ✦</div>
     <div id="wp-lv" style="font-size:19px;color:#cfe8b8;"></div>
     <div id="wp-stats" style="font-size:15px;color:#e8e2cd;margin-bottom:4px;"></div>
     <div class="up-list">
@@ -804,7 +807,7 @@
       <button class="up-btn" id="wp-b2"></button>
       <button class="up-btn" id="wp-b3"></button>
     </div>
-    <div class="hint">点击或按 1 / 2 / 3 / 4</div>
+    <div class="hint" id="wp-hint">点击或按 1 / 2 / 3 / 4</div>
    </div>
   </div>
 
@@ -4711,7 +4714,7 @@ const PET_SPECIES = {
     slam: { warn: 0.5, air: 0.44, land: 0.22, r: 0, dmgMul: 0, fxK: 3, name: '摇晃' },
     skillW: [4, 3, 3]
   },
-  /* 🐶 伊布（图鉴 133）· 🔥 炭小侍（图鉴 935）：**第 10 波捕捉**入队，都只有一段（不进化、不当坐骑） */
+  /* 🐶 伊布（图鉴 133）· 🔥 炭小侍（图鉴 935）：**第 15 波**捕捉入队，都只有一段（不进化、不当坐骑） */
   eevee: {
     key: 'eevee', element: 'NORMAL', label: '伊布',
     scale: 1.67, keep: 200, walkSpd: 168,
@@ -4730,7 +4733,7 @@ const PET_SPECIES = {
     slam: { warn: 0.5, air: 0.44, land: 0.22, r: 200, dmgMul: 1.5, fxK: 6, name: '泰山压顶' },
     skillW: [4, 3, 3]
   },
-  /* 🐉 多龙梅西亚（#885，第 10 波捕捉 · 大器晚成）· 迷你龙（#147，同） */
+  /* 🐉 多龙梅西亚（#885，**第 11 波**捕捉 · 大器晚成）· 迷你龙（#147，同） */
   dreepy: {
     key: 'dreepy', element: 'DRAGON', label: '多龙梅西亚',
     scale: 1.67, keep: 200, walkSpd: 172,
@@ -6052,7 +6055,7 @@ const PET_SKILLS_EEVEE = [
     shot: { n: 5, spread: 0.34, spd: 460, mul: 0.5, homing: 1, fxK: 1.5, star: 1 } },
   PET_SKILL_QUICKATTACK
 ];
-/* 🐉 多龙梅西亚（图鉴 885，第 10 波捕捉 · 大器晚成）：**只有电光一闪**（和伊布同一招） */
+/* 🐉 多龙梅西亚（图鉴 885，**第 11 波**捕捉 · 大器晚成）：**只有电光一闪**（和伊布同一招） */
 const PET_SKILLS_DREEPY = [PET_SKILL_QUICKATTACK];
 /* ============================================================
    🌟 **神兽三只的专属招式**（用户逐条点名；数值口径：**「直接引用已有（并已按本轮要求修改过的）技能伤害」**）
@@ -6149,7 +6152,7 @@ const PET_SKILL_DRAGONARROW = {
 };
 const PET_SKILLS_DREEPY_1 = [PET_SKILL_UTURN, PET_SKILL_SHADOWBALL];
 const PET_SKILLS_DREEPY_2 = [PET_SKILL_DRAGONARROW, PET_SKILL_SHADOWBALL_STAR];
-/* 🐉 迷你龙（图鉴 147，第 10 波捕捉 · 大器晚成）：**只有龙卷风**（本轮用户要求伤害翻到 3 倍：5 → 15） */
+/* 🐉 迷你龙（图鉴 147，**第 11 波**捕捉 · 大器晚成）：**只有龙卷风**（本轮用户要求伤害翻到 3 倍：5 → 15） */
 const PET_SKILLS_DRATINI = [
   { id: 'tornado', name: '龙卷风', icon: '🌪️', kind: 'tornado', cd: 2.6, range: 520, def: 1, evo: 'tornadostar',
     desc: '在身前放出一道**持续 3 秒的龙卷风**：一边缓慢向前移动、一边每 0.5 秒对范围内的敌人造成 **15 点**伤害（**本轮翻到 3 倍**）· ' + petCdText(2.6),
@@ -6279,7 +6282,7 @@ const PET_SKILLS = {
   /* 🐶 伊布（#133）· 🔥 炭小侍（#935）：第 15 波捕捉，都只有一段 */
   eevee: [PET_SKILLS_EEVEE, PET_SKILLS_EEVEE, PET_SKILLS_EEVEE],
   charcadet: [PET_SKILLS_CHARCADET, PET_SKILLS_CHARCADET, PET_SKILLS_CHARCADET],
-  /* 🐉 多龙梅西亚（#885）· 迷你龙（#147）：第 10 波捕捉 · **波次进化**（20 / 25 波）——
+  /* 🐉 多龙梅西亚（#885）· 迷你龙（#147）：**第 11 波**捕捉 · **波次进化**（20 / 25 波）——
      三段各有各的表：⚡ 电光一闪 → 急速折返 → 龙箭 · 🌑 暗影球 → 暗影球⭐ ·
      🌀 龙卷风 → 龙卷风⭐ → 流星群 · 🐲 龙之俯冲 → 龙之俯冲⭐ */
   dreepy: [PET_SKILLS_DREEPY, PET_SKILLS_DREEPY_1, PET_SKILLS_DREEPY_2],
@@ -8112,17 +8115,20 @@ function petEggHatch() {
   sfx.musou ? sfx.musou() : sfx.pick();
 }
 /* 🐾 捕捉宝可梦（训练家专属）：**两档**，各弹一次「二选一」画面 ——
-   · 第 10 波清剿后：🐉 **多龙梅西亚（#885）/ 迷你龙（#147）** —— 这一档是「大器晚成」的宝可梦（看**波次**进化）
+   · **第 11 波清剿后**：🐉 **多龙梅西亚（#885）/ 迷你龙（#147）** —— 这一档是「大器晚成」的宝可梦（看**波次**进化）
+     ⚠️ 用户最新要求：这一档**从「第 10 波清剿后」顺延到「第 11 波清剿后」**（第 10 波是 Boss 层，
+     刚打完三选一的 Boss 又立刻弹捕捉面板太挤；顺延一波再选，节奏更舒服）。
+     ⚠️ 改 `wave` 只需要动这张表；但**冒烟 S42 与文档里写死的「10」要一起改**（`catchCfg` 断言 / `trEndWave3(10)`）。
    · 第 15 波清剿后：🐶 **伊布（#133）/ 🔥 炭小侍（#935）**
    每档每局只给一次（`p.petCatchWv` 记已经捕捉过的波次，随存档走）；候选池写死在这张表里，加新可捕捉的只扩这里 */
 const PET_CATCHES = [
-  { wave: 10, pool: ['dreepy', 'dratini'] },
+  { wave: 11, pool: ['dreepy', 'dratini'] },
   { wave: 15, pool: ['eevee', 'charcadet'] }
 ];
 let petCatchCfg = null;      // 当前正在弹的那一档（面板文案用）
 /* ⚠️ 「已捕捉过的波次」只在**玩家真的选了一只之后**才写（`petCatchMark()`）——
    以前是弹面板前就写：`p.catchPend` 不进存档，而切后台/锁屏会自动弹暂停面板（可以「💾 保存并回主页」），
-   于是「存档里已经记着第 10 波捕捉过了、面板却没了」→ 这一档捕捉机会**永久丢失**（读档后
+   于是「存档里已经记着那一波捕捉过了、面板却没了」→ 这一档捕捉机会**永久丢失**（读档后
    `petCatchWaveEnd` 因为 indexOf 命中而永远跳过）。改成「选完才落账」后，没选就退出还能再弹一次。 */
 function petCatchMark() {
   if (!petCatchCfg) return;
@@ -9294,7 +9300,7 @@ function tryOpen() {
   else if (mutPending > 0) openMutUp();
   else if (p.weaponPend > 0) openWeaponUp();   // 弓箭手：开局先定武器（弓 / 现代枪械 / 牌皇 / 训练家），再选奇物
   else if (p.starterPend > 0 || starterPickDue()) openStarterUp();  // 🧢 训练家：第 5 波清剿后的御三家三选一（另外两只离队）
-  else if (p.catchPend > 0) openCatchUp();      // 🐾 训练家：第 10 波清剿后捕捉宝可梦（二选一）
+  else if (p.catchPend > 0) openCatchUp();      // 🐾 训练家：第 11 / 15 波清剿后捕捉宝可梦（二选一）
   else if (p.legendPend > 0) openLegendUp();    // 🌟 丰缘之战（第 20 波）讨伐后：三只神兽任选一只入队（一局仅一次）
   else if (p.roninPend > 0) openRoninUp();     // 战士：开局先定战法（战士 / 浪客），再选奇物
   else if (p.artPend > 0) openArtUp();
@@ -9402,6 +9408,25 @@ function openRoninUp() {
   paintChoices('ronin');
   $('sc-ronin').classList.add('show');
 }
+/* 🧵 「几选一」面板（`sc-weapon`）被 **4 套流程复用**：选武器 / 🧢 御三家 / 🐾 捕捉宝可梦 / 🌟 神兽。
+   ⚠️⚠️ 用户报过的 bug：**面板最上面那个大标题原来是写死的「✦ 选 择 武 器 ✦」**，
+   所以第 5 波打完总大将弹御三家三选一时，顶上却印着「选择武器」。
+   现在**标题 / 颜色 / 底部按键提示都按 kind 换**（`#wp-title` / `#wp-hint`），
+   新增复用这个壳子的面板时**必须在这里加一行**，别再写死。 */
+const PICK_HEAD = {
+  weapon:  { t: '✦ 选 择 武 器 ✦', c: '#9fe08a', k: '4' },
+  starter: { t: '🧢 御 三 家 · 三 选 一', c: '#ffd166', k: '3' },
+  catch:   { t: '🐾 捕 捉 宝 可 梦', c: '#ffe9a8', k: '2' },
+  legend:  { t: '🌟 神 兽 · 三 选 一', c: '#ffd166', k: '3' },
+};
+function pickPanelOpen(kind) {
+  const h = PICK_HEAD[kind] || PICK_HEAD.weapon;
+  const t = $('wp-title');
+  if (t) { t.textContent = h.t; t.style.color = h.c; }
+  const hi = $('wp-hint');
+  if (hi) hi.textContent = '点击或按 ' + (h.k === '2' ? '1 / 2' : h.k === '3' ? '1 / 2 / 3' : '1 / 2 / 3 / 4');
+  $('sc-weapon').classList.add('show');
+}
 function openWeaponUp() {
   if (p.weaponPend <= 0) return;
   curKind = 'weapon';
@@ -9433,7 +9458,7 @@ function openWeaponUp() {
   const st = $('wp-stats'); if (st) st.innerHTML = '弓箭手专属抉择 · 选择后不可更改';
   rerollLeft = 0;
   paintChoices('weapon');
-  $('sc-weapon').classList.add('show');
+  pickPanelOpen('weapon');
 }
 /* 🧢 训练家：御三家三选一（**第 5 波清剿后**弹出；复用「选武器」面板的三个槽位）
    —— 选谁留下、另外两只当场离队（用户要求：「必须舍弃其他两只，进行三选一然后再继续冒险」） */
@@ -9468,7 +9493,7 @@ function openStarterUp() {
   const st = $('wp-stats'); if (st) st.innerHTML = CLASS_INTRO.trainer;
   rerollLeft = 0;
   paintChoices('starter');
-  $('sc-weapon').classList.add('show');
+  pickPanelOpen('starter');
 }
 /* 🐾 捕捉宝可梦：复用「选武器」那套面板，**两只二选一**，选中的那只直接进队伍（`petGrant`）。
    第 10 波 = 多龙梅西亚 / 迷你龙（大器晚成，看波次进化）· 第 15 波 = 伊布 / 炭小侍 */
@@ -9502,7 +9527,7 @@ function openCatchUp() {
   const st = $('wp-stats'); if (st) st.innerHTML = '它会入队和你并肩作战（自己上前打，场上没敌人时才回到你身边）';
   rerollLeft = 0;
   paintChoices('catch');
-  $('sc-weapon').classList.add('show');
+  pickPanelOpen('catch');
 }
 /* 🌟 丰缘之战 · 讨伐奖励：**从盖欧卡 / 固拉多 / 烈空坐里任选一只入队**（三选一，复用「选武器」面板）
    用户口径：只有**第 20 波**的那一场丰缘之战才给，而且**一局只能有一只神兽**（`p.legendGot`）。
@@ -9538,7 +9563,7 @@ function openLegendUp() {
   const st = $('wp-stats'); if (st) st.innerHTML = '一局游戏只能收下一只神兽';
   rerollLeft = 0;
   paintChoices('legend');
-  $('sc-weapon').classList.add('show');
+  pickPanelOpen('legend');
 }
 /* 🧢 训练家升级：不弹词条面板，直接给所有宝可梦 +0.5 伤害 / +1 生命上限 / +5% 无双充能效率 */
 function trainerSkillUp() {
