@@ -1083,17 +1083,17 @@ const CMD_CAV_DASH = 0.55;      // 冲锋时长（800px/s ≈ 440px），冲完�
 const CMD_CAV_R0 = 300, CMD_CAV_R1 = 700;   // 召唤位置：以玩家为中心的**随机方位 + 随机距离**（再夹进地图内）
 const CMD_CAV_HP = 40, CMD_CAV_DMG = 30;    // 一次性骑兵的血量 / 撞击伤害
 const HELL_EVENTS = [
-  { id:'shiny',  icon:'✨', name:'闪光大量出现！',     desc:'本波**前 5 只敌人必定是闪光个体**（闪光必掉质变宝箱）' },
-  { id:'cav',    icon:'🐎', name:'骑兵乱入！',         desc:'本波**额外混入 5 只「铁骑」**（免疫控制、只会直线冲锋）' },
-  { id:'runner', icon:'🏇', name:'轻骑士大军！',       desc:'本波**只刷「轻骑贼」**（敌人总数不变）——越跑越快、数量极多' },
-  { id:'ring',   icon:'🔥', name:'炽热擂台！',         desc:'战场**四周燃起火焰**：站在地图边缘每 0.5 秒扣 **10 血**（**无视护盾**）、**站在地图中心区域安全**（小地图上的橙色边框就是火海，绿框内安全）' },
-  { id:'dark',   icon:'🌑', name:'黑暗游戏！',         desc:'**敌我双方的攻击伤害全部 ×2**（你打敌人翻倍，敌人打你也翻倍——纯拼手速与走位，别硬吃伤害）' },
-  { id:'brute',  icon:'🟩', name:'绿巨人团建？！',     desc:'本波**战将血量 ×3 且身体变绿**，而且波次开始立刻**同时刷出 5 只战将**' },
-  { id:'mage',   icon:'🕳️', name:'法师的新绝招！',     desc:'妖法师的**法阵变大 1.5 倍**，且攻击**会在地面留下持续 5 秒的火坑**——站火坑里每 0.5 秒扣 **10 血**（**无视护盾**，与炽热擂台火墙同伤）' },
-  { id:'nodrop', icon:'🚫', name:'没有补给品！',       desc:'本波敌人被击杀后**不掉落任何小球**（绿球 / 金球 / 蓝球都掉不出来）' },
-  { id:'chest',  icon:'💰', name:'刚从金矿回来吗？',   desc:'**每个敌人被击杀都会掉落宝箱**（效果与奇物《挖金矿咯》的宝箱相同）' },
-  { id:'art',    icon:'🎁', name:'这个没人要吗？',     desc:'本波清剿结束后**额外获得一次奇物三选一**' },
-  { id:'plain',  icon:'🌤️', name:'平平无奇的一天...',  desc:'没有任何特殊效果（就是普普通通的一波）' }
+  { id:'shiny',  icon:'✨', name:'闪光大量出现！',     desc:'立即出现五个闪光的敌人！' },
+  { id:'cav',    icon:'🐎', name:'骑兵乱入！',         desc:'本波会额外加入五只「铁骑」！' },
+  { id:'runner', icon:'🏇', name:'轻骑士大军！',       desc:'所有敌人都是「轻骑贼」！' },
+  { id:'ring',   icon:'🔥', name:'炽热擂台！',         desc:'小地图上橙色区域燃起火焰，火焰会无视护盾！' },
+  { id:'dark',   icon:'🌑', name:'黑暗游戏！',         desc:'我方与敌方，所受伤害均翻倍！' },
+  { id:'brute',  icon:'🟩', name:'绿巨人团建？！',     desc:'立即出现五只「战将」,且本波的战将拥有三倍血量！' },
+  { id:'mage',   icon:'🕳️', name:'法师的新绝招！',     desc:'法师们的攻击变大，同时会留下火焰持续灼烧！' },
+  { id:'nodrop', icon:'🚫', name:'没有补给品！',       desc:'本波次的敌人不会掉落任何物品！' },
+  { id:'chest',  icon:'💰', name:'刚从金矿回来吗？',   desc:'每个敌人都会掉落宝箱！' },
+  { id:'art',    icon:'🎁', name:'这个没人要吗？',     desc:'本波结束后，可以额外选择一个奇物！' },
+  { id:'plain',  icon:'🌤️', name:'平平无奇的一天...',  desc:'但是什么也没有发生…' }
 ];
 let hellEv = null;              // 本波生效的奇遇（null = 非地狱/无尽 / Boss 波）
 let hellRest = {};              // 本波奇遇的运行时状态（剩余必闪数 / 边缘计时…）
@@ -1616,7 +1616,7 @@ function startWave(k) {
     if (hellEv.id === 'runner') spawnQ = spawnQ.map(() => 'runner');   // 轻骑士大军：全换成轻骑贼（数量不变）
   }
   const types = [];
-  if (spawnQ.includes('groudon')) types.push('🌟 丰缘之战 · 固拉多 & 盖欧卡 同时现身 🌟');
+  if (spawnQ.includes('groudon')) types.push('是扩张陆地，或是海洋？');
   if (spawnQ.includes('final4')) types.push('🌸 世纪之花 绽放 🌸');
   if (spawnQ.includes('final3')) types.push('🪱 世界吞噬者 破土 🪱');
   if (spawnQ.includes('final6')) types.push('🗡️ 虚空执剑者 现世 🗡️');
@@ -1631,10 +1631,10 @@ function startWave(k) {
   const cvN = spawnQ.filter(t => t === 'cavalry').length;
   if (cvN) types.push('铁骑 ×' + cvN);
   if (!endlessMode()) {
-    if (k === 5) types.unshift('⚠ 敌人血量 ×2');
-    if (k === 10) types.unshift('⚠ 敌人血量再 ×2');
-    if (k === 15) types.unshift('⚠ 敌人血量再 ×1.5');
-    if (k === 20) types.unshift('⚠ 20层起 敌人血量再 ×1.5');
+    if (k === 5) types.unshift('敌人血量大幅提高了！');
+    if (k === 10) types.unshift('敌人血量提高了！');
+    if (k === 15) types.unshift('敌人血量提高了！');
+    if (k === 20) types.unshift('敌人血量提高了！');
   } else {
     /* ♾ 无尽：显示「层数 + 本层血量档位 +（Boss 层）随机到的是谁」 */
     types.unshift('♾ 第 ' + k + ' 层' + (hpBoost ? ' · 敌人血量 ×' + hpBoostMul() : ''));
@@ -1872,11 +1872,11 @@ function spawnEnemy(type, forceShiny, noShiny, probe) {
     if (e.type === 'groudon' || e.type === 'kyogre' || e.type === 'rayquaza') { sfx.big(); }
     else if (e.type === 'final4') { sfx.big(); bigBanner('🌸 世纪之花 · 绽放 🌸', '击败它即可通关 30 层!'); }
     else if (e.type === 'final3') { sfx.big(); bigBanner('🪱 世界吞噬者 · 破土 🪱', '讨伐它，征程仍未结束…'); }
-    else if (e.type === 'slimeKing') { sfx.big(); bigBanner('🟢 超级史莱姆 · 降临 🟢', '整张图变成黏糊糊场地（移速 −50%）：小心它高高跳起砸下来'); }
-    else if (e.type === 'plunder') { sfx.big(); bigBanner('💡 光明掠夺者 · 现世 💡', '它会让你渐渐失明 · 不攻击时完全不可见也打不到'); }
+    else if (e.type === 'slimeKing') { sfx.big(); bigBanner('🟢 超级史莱姆 · 降临 🟢', '整张图变成黏糊糊场地,你的移速变慢了！'); }
+    else if (e.type === 'plunder') { sfx.big(); bigBanner('💡 光明掠夺者 · 现世 💡', '它会让你渐渐失明！'); }
     else if (e.type === 'sprinter') { sfx.big(); bigBanner('🏃 超级跑者 · 开跑 🏃', '它绕着地图最外圈跑：「你跑不过我你信吗？」（撑满 120 秒它自己会累倒）'); }
-    else if (e.type === 'final5') { sfx.big(); bigBanner('🌙 双子魔眼 · 睁眼 🌙', '一只远攻 · 一只近战 · 两只都倒下才算赢'); }
-    else if (e.type === 'final6') { sfx.big(); bigBanner('🗡️ 虚空执剑者 · 现世 🗡️', '本体多半隐于虚空 · 只有它显形的那几秒才砍得动'); }
+    else if (e.type === 'final5') { sfx.big(); bigBanner('🌙 双子魔眼 · 睁眼 🌙', '两只都倒下才算赢'); }
+    else if (e.type === 'final6') { sfx.big(); bigBanner('🗡️ 虚空执剑者 · 现世 🗡️', '看来你并没有找到他的本体！'); }
     else if (e.type === 'final2') { sfx.big(); bigBanner('☠ 终焉齿轮 · 苏醒 ☠', '（废案 Boss · 仅测试沙盒可见）'); }
     else if (e.type === 'final') { sfx.big(); bigBanner('☠ 灭世魔君 苏醒 ☠', '（废案 Boss · 仅测试沙盒可见）'); }
     else sfx.wave();
@@ -2819,7 +2819,7 @@ function spawnPlanteraTentacles(flower) {
   }
   sfx.roar();
   flashG = Math.max(flashG, 0.12);
-  bigBanner('🐙 狂怒 · 长出了 ' + V.tentacleN + ' 根触手！', '每根存活都给世纪之花 +' + V.tentacleSpd + 'px/s —— 砍掉触手才能让它慢下来');
+  bigBanner('🐙 狂怒 · 长出了 ' + V.tentacleN + ' 根触手！', '触手会额外提高世纪之花的' + V.tentacleSpd + '速度！');
   return made;
 }
 /* 触手本体没有自主 AI：位置完全由「世纪之花」驱动（摆动 + 呼吸式伸缩），所以判定/绘制都跟着它转 */
@@ -3584,7 +3584,7 @@ function tickSprinterAI(e, dt, tg) {
   if (!e.spDrink && e.spT >= SPRINT.drinkT) {
     e.spDrink = 1; dbgSprintDrinks++;
     e.hp = Math.min(e.maxhp, e.hp + e.maxhp * SPRINT.drinkHeal);
-    addText(e.x, e.y - 62, '🥤 超级跑者喝下雪碧！回复 50% 最大生命', 19, '#8fe08a', '#0d3a14');
+    addText(e.x, e.y - 62, '🥤 超级跑者喝下雪碧！', 19, '#8fe08a', '#0d3a14');
     addRing(e.x, e.y, '#8fe08a', 12);
     burst(e.x, e.y, 26, '#8fe08a', 360);
     for (let i = 0; i < 10; i++) orbs.push({ x: e.x + rnd(-14, 14), y: e.y + rnd(-14, 14), kind: 'hp', vx: 0, vy: 0, dead: false });
@@ -3596,7 +3596,7 @@ function tickSprinterAI(e, dt, tg) {
     e.spSpdMul = SPRINT.iceSpdMul;             // 🍦 巧乐兹：跑速 +50%
     /* 立刻按新频率重排下一次冲刺（本版：吃了巧乐兹改成 0.5~2 秒一次） */
     e.spDashT = Math.min(e.spDashT === undefined ? 99 : e.spDashT, rnd(SPRINT.iceDashGap[0], SPRINT.iceDashGap[1]));
-    addText(e.x, e.y - 62, '🍦 超级跑者吃下巧乐兹！回复 30% 最大生命 · 跑速 +50% · 出动更凶（0.5~2 秒一次）', 19, '#ffd166', '#3a2400');
+    addText(e.x, e.y - 62, '🍦 超级跑者吃下巧乐兹，并且跑的更快了！', 19, '#ffd166', '#3a2400');
     addRing(e.x, e.y, '#ffd166', 12);
     burst(e.x, e.y, 26, '#ffe9a8', 380);
     for (let i = 0; i < 6; i++) orbs.push({ x: e.x + rnd(-14, 14), y: e.y + rnd(-14, 14), kind: 'hp', vx: 0, vy: 0, dead: false });
@@ -3608,7 +3608,7 @@ function tickSprinterAI(e, dt, tg) {
     rings.push({ x: e.x, y: e.y, r: 22, vr: 1400, life: 0.6, max: 0.6, color: '#ff7a52', width: 14 });
     burst(e.x, e.y, 40, '#ffb199', 520);
     shake = Math.max(shake, 10);
-    bigBanner('🏃 超级跑者 认输了 🏃', '「跑不过你……但我本来也不打算跑赢。」（120 秒体力耗尽 · 自己倒下）');
+    bigBanner('🏃 超级跑者 认输了 🏃', '「跑不过你……但我本来也不打算跑赢。」');
     killEnemy(e);
     return;
   }
@@ -3802,7 +3802,7 @@ function slimeSplit(e) {
     addPart(e.x, e.y, Math.cos(aa) * sp, Math.sin(aa) * sp * 0.6 - rnd(40, 200), rnd(0.4, 0.8), rnd(3, 7), '#8ff0a0', 460);
   }
   shake = Math.max(shake, 12); flashG = Math.max(flashG, 0.12);
-  bigBanner('🟢 超级史莱姆 炸开!!', '分裂成三只小史莱姆 —— 黏糊糊场地还在');
+  bigBanner('🟢 超级史莱姆 炸开!!', '分裂成三只小史莱姆');
   /* ⚠️ 先放小史莱姆再 killEnemy：这样第 10 关里程碑的判据（场上已无史莱姆）不会在这一刻成立 */
   for (let i = 0; i < 3; i++) {
     const a = (i / 3) * TAU + rnd(-0.25, 0.25);
@@ -5246,11 +5246,11 @@ const PRIMAL_DMG_MUL = 1.2;          // 「宝可梦本身的攻击会提高 20%
 const PRIMAL_ART_IMG = { kyogre: 'BLUE_ORB', groudon: 'RED_ORB', rayquaza: 'GREEN_ORB' };
 const PRIMAL_ABILITY = {
   kyogre:   { id: 'seasource',    name: '始源之海', icon: '🌧️',
-    desc: '场景内下起大雨：**每 0.5 秒**对场上所有敌人造成其**最大生命 10%** 的伤害（对 Boss 是 **1/40**，即每秒 0.5%）—— 这份伤害**不吃任何加成**' },
+    desc: '场景下起不停歇的雨，大雨将会打击敌人！' },
   groudon:  { id: 'desolateland', name: '终结之地', icon: '☀️',
-    desc: '场景内变成大太阳：**所有敌人直接进入烧伤状态**（持续灼烧 · 每 0.3 秒 2% 最大生命、Boss 1/4），并且它们**所受的伤害提高 10%**' },
+    desc: '场景升起烈日，仿佛可以烧焦一切！' },
   rayquaza: { id: 'deltastream', name: '德尔塔气流', icon: '🌀',
-    desc: '场景内卷起风暴：**每秒**对所有敌人造成其**最大生命 20%** 的伤害（对 Boss 是 **1/40**），并**强制非 Boss 敌人位移** —— 远程（弓兵 / 妖法师）被吹向**地图中心**、近战被吹离中心，每秒约 **300px**' }
+    desc: '场景刮起大暴风，打乱敌人的阵型吧！' }
 };
 const PRIMAL = {
   seaTick: 0.5, seaPct: 0.10, seaBossDiv: 40,        // 🌧️ 始源之海：每 0.5 秒 10%（Boss ÷40）
@@ -5443,7 +5443,7 @@ function hoennSpawnRayquaza() {
   burst(e.x, e.y, 44, '#8ff0a0', 520);
   flashG = Math.max(flashG, 0.3);
   shake = Math.max(shake, 9);
-  bigBanner('🐉 烈空坐 · 降临 🐉', '固拉多与盖欧卡倒下了 —— 天空的霸主现身（每 3 秒一次画龙点睛 · 落点有预警线）');
+  bigBanner('🐉 烈空坐 · 降临 🐉', '天空的霸主！现身！！');
   slowT = Math.max(slowT, 0.5);
 }
 /* 🗡️ 断崖之剑（固拉多）：在玩家脚下 + 前后左右各一个落点埋下 5 根地刺（预警 → 破土 → 范围伤害） */
@@ -6862,7 +6862,7 @@ function petWaveEvoCheck(wave) {
   if (n > 0) {
     const nm = petOwned().filter(id => PET_WAVE_EVO[id]).map(id => petFormName(id) + '（' + petSkillOf(id).name + '）').join(' · ');
     bigBanner('🧬 进 化 !', nm);
-    addText(p.x, p.y - 70, '✨ 大器晚成：生命/伤害 ×1.5（第 20 / 25 波各进化一次）', 20, '#fff3c4', '#3a2a00');
+    addText(p.x, p.y - 70, '学会了新的招式！', 20, '#fff3c4', '#3a2a00');
     flashG = Math.max(flashG, 0.35); shake = Math.max(shake, 6);
     sfx.level ? sfx.level() : sfx.musou();
   }
@@ -6889,7 +6889,7 @@ function petEvoCheck(silent) {
     if (!silent) {
       const nm = petOwned().filter(id => petEvoByLevel(id)).map(id => petFormName(id, st) + '（' + petSkillOf(id).name + '）').join(' · ');
       bigBanner('🧬 进 化 !', nm);
-      addText(p.x, p.y - 70, '✨ 宝可梦进化了：生命/伤害 ×1.5 · 学会新招式!', 20, '#fff3c4', '#3a2a00');
+      addText(p.x, p.y - 70, '学会了新的招式！', 20, '#fff3c4', '#3a2a00');
       flashG = Math.max(flashG, 0.35); shake = Math.max(shake, 6);
       sfx.level ? sfx.level() : sfx.musou();
     }
@@ -8111,7 +8111,7 @@ function petEggHatch() {
   flashG = Math.max(flashG, 0.2);
   shake = Math.max(shake, 4);
   petGrant('toge');                       // 🐣 波克比入队（跟随 · 面板里能换它的两招）
-  bigBanner('🐣 宝 可 梦 蛋 孵 化 了 !', '波克比（No.175）加入了队伍 —— 按 C 看它的招式');
+  bigBanner('🐣 宝 可 梦 蛋 孵 化 了 !', '波克比加入了队伍！');
   sfx.musou ? sfx.musou() : sfx.pick();
 }
 /* 🐾 捕捉宝可梦（训练家专属）：**两档**，各弹一次「二选一」画面 ——
@@ -8735,7 +8735,7 @@ function drawPetList() {
   if (petMusouOn()) {
     const pulse = 0.6 + Math.sin(time * 8) * 0.4;
     ctx.fillStyle = 'rgba(255,233,168,' + (0.55 + pulse * 0.4).toFixed(2) + ')';
-    ctx.fillText('⚡ 无双号令 攻速+50% · 回血20%/秒', x0 + cw, y0 - 24);
+    ctx.fillText('宝可梦们燃起斗志！', x0 + cw, y0 - 24);
   }
   ctx.textAlign = 'left';
   ctx.restore();
@@ -8811,7 +8811,7 @@ function plunderStagger(e) {
   for (const r of plunderRunes) r.dead = true;
   plunderRunes = [];
   dbgPlunderDowns++;
-  addText(e.x, e.y - 64, '💡 光明掠夺者 瘫痪 8 秒! 致盲解除 · 受伤 +30%', 20, '#ffe9a8', '#3a2a00');
+  addText(e.x, e.y - 64, '💡 光明掠夺者 瘫痪！', 20, '#ffe9a8', '#3a2a00');
   rings.push({ x: e.x, y: e.y, r: 20, vr: 1200, life: 0.5, max: 0.5, color: '#ffe9a8', width: 10 });
   burst(e.x, e.y, 30, '#e8dcff', 460);
   shake = Math.max(shake, 9);
@@ -8831,7 +8831,7 @@ function tickPlunderAI(e, dt, tg) {
       e.pDownT = 0; e.pShow = 0;
       e.pPhase = 'hide'; e.pT = PLUNDER.hideGap;
       e.pAcc = 0;                                  // 重新开始计算瘫痪进度条
-      addText(e.x, e.y - 56, '💡 光明掠夺者 重新站起 · 致盲与隐身回归', 19, '#e8dcff', '#241a44');
+      addText(e.x, e.y - 56, '💡 光明掠夺者 重新站起', 19, '#e8dcff', '#241a44');
       rings.push({ x: e.x, y: e.y, r: 26, vr: 0, shrink: 1, life: 0.45, max: 0.45, color: '#6a4aa8', width: 7 });
       burst(e.x, e.y, 20, '#4a3d7a', 340);
     }
@@ -9309,9 +9309,9 @@ function tryOpen() {
 }
 /* ---- 弓箭手武器选择（开局 · 选奇物之前）：传统弓 / 现代枪械 / 牌皇（开发者版本再加「训练家」） ---- */
 const WEAPONS = [
-  { id: 'bow', icon: '🏹', name: '传 统 弓', desc: '保留原有弓箭手全部手感：单发箭矢与弓手专属质变照旧' },
-  { id: 'gun', icon: '🔫', name: '现 代 枪 械', desc: '大人，时代变了！——换上 AK 与全身军用迷彩，成为士兵；不能再拿「十一月雨 / 雨一直下」' },
-  { id: 'card', icon: '🃏', name: '牌 皇', desc: '普攻改为甩出卡牌：**每丢 4 张，第 5 张必是特殊牌**（💥爆破牌 命中爆炸范围伤害 / 🎴穿透牌 穿透敌人且更大 / 🐱召唤牌 召出哈吉咪助战 20 秒）；不能再拿 弹射/分裂/爆炸弩/弹墙，也拿不到「十一月雨 / 雨一直下」等弓专属奇物' }
+  { id: 'bow', icon: '🏹', name: '弓箭手', desc: '火力压制！' },
+  { id: 'gun', icon: '🔫', name: '现 代 枪 械', desc: '大人，时代变了！——换上 AK 与全身军用迷彩，成为士兵！' },
+  { id: 'card', icon: '🃏', name: '牌 皇', desc: '幸运女神在微笑！' }
 ];
 /* 🧢 训练家（**正式版也有**）：自己不攻击，全靠宝可梦；开局三只御三家一起上，第 5 波清剿后三选一。
    ⚠️ 卡片上只显示「职业介绍」那一句（CLASS_INTRO.trainer）—— 别再往这里堆大段说明文案 */
@@ -9524,7 +9524,7 @@ function openCatchUp() {
     };
   });
   const lv = $('wp-lv'); if (lv) lv.textContent = '第 ' + cfg.wave + ' 波清剿完毕 · 捕捉一只宝可梦';
-  const st = $('wp-stats'); if (st) st.innerHTML = '它会入队和你并肩作战（自己上前打，场上没敌人时才回到你身边）';
+  const st = $('wp-stats'); if (st) st.innerHTML = '它会入队和你并肩作战！';
   rerollLeft = 0;
   paintChoices('catch');
   pickPanelOpen('catch');
@@ -9541,7 +9541,7 @@ function openLegendUp() {
   addRing(p.x, p.y, '#ffe08a', 14);
   addRing(p.x, p.y, '#8fd8ff', 9);
   sfx.musou ? sfx.musou() : sfx.mut();
-  bigBanner('🌟 神 兽 · 三 选 一', '丰缘之战 讨伐成功 · 任选一只加入你的队伍（这一局只有这一次）');
+  bigBanner('🌟 神 兽 · 三 选 一', '丰缘之战结束，看来你可以选择其中一只作为伙伴！');
   curChoices = PET_LEGEND.map(id => {
     const S2 = PET_SUMMON[id], sk = petSkillList(id), dex = PET_DEX[petFormKey(id)];
     return {
@@ -12291,68 +12291,68 @@ function openGoldChest(forceWin, quiet) {
 }
 /* ============ 质变被动（击败闪光获得，可叠加） ============ */
 const MUTS = [
-  { id:'bonus',   icon:'🗡️', name:'追加斩', desc:'每第 3 次挥砍追加斩击，+1 连/层（至多 3 连）', cap:3, apply(){ p.mut.bonus = Math.min(3, p.mut.bonus + 1); } },
-  { id:'shield',  icon:'🛡️', name:'守护盾', desc:'5 秒未受伤生成一层护盾，每层挡下一次攻击', cap:3, apply(){ p.mut.shield = Math.min(3, p.mut.shield + 1); p.shieldC = p.mut.shield; } },
-  { id:'drone',   icon:'🚁', name:'无人机', desc:'随行无人机自动索敌射击，伤害等同普攻（至多 5 台）', cap:5, apply(){ p.mut.drone = Math.min(5, p.mut.drone + 1); syncDrones(); } },
-  { id:'chi',     icon:'🌪️', name:'剑气斩', desc:'每第 5 次挥砍射出贯穿剑气，+1 道/层', cap:3, apply(){ p.mut.chi = Math.min(3, p.mut.chi + 1); } },
-  { id:'whirl',   icon:'💫', name:'旋风斩', desc:'普通攻击角度 +90°（满层 360° 环绕斩）——**满级后改名为「哈里路大旋风！」（效果完全不变，只是名字更响）**', cap:3, apply(){ p.mut.whirl = Math.min(3, p.mut.whirl + 1); } },
-  { id:'blink',   icon:'💨', name:'瞬步',   desc:'闪避冷却 ×0.55/层，闪避疲劳阈值 +1/层', cap:5, apply(){ p.mut.blink = Math.min(5, p.mut.blink + 1); } },
-  { id:'dash',    icon:'🌠', name:'瞬身', desc:'战士/弓箭手：闪避斩击路径上的敌人，距离 +50%/层；法师：传送落点冲击波，只击退不伤害，范围 +45px/层（满层 225px）', cap:3, apply(){ p.mut.dash = Math.min(3, p.mut.dash + 1); } },
-  { id:'master',  icon:'🥊', name:'近战大师', desc:'贴身近战对附近敌人伤害 +12%/层', cap:5, apply(){ p.mut.master = Math.min(5, p.mut.master + 1); } },
-  { id:'leech',   icon:'🩸', name:'夺命',   desc:'累计击杀 10/8/6/4/2 名敌人回 1 点生命；**满血时这份回血本身不转护盾**——只有持奇物·过量治疗时，溢出的治疗量才会按 1/5 转成护盾（**也是唯一能转护盾的回血来源**）', cap:5, apply(){ p.mut.leech = Math.min(5, p.mut.leech + 1); } },
-  { id:'thunder', icon:'⚡', name:'落雷',   desc:'累计击杀 **30-2×层数** 名敌人召唤天雷（1 层 28 杀 → 满 10 层 **10 杀一次**，**天雷本身没有冷却**），**每次雷击随机轰击 10 名敌人**，伤害 **= 你的普通攻击伤害**；**天雷自己劈死的敌人不计入这个进度**', cap:10, apply(){ p.mut.thunder = Math.min(10, p.mut.thunder + 1); } },
-  { id:'mstor',   icon:'🔋', name:'无双存储', desc:'无双槽上限 +100/层，可超蓄连放奥义', cap:3, apply(){ p.mut.mstor = Math.min(3, (p.mut.mstor || 0) + 1); } },
-  { id:'mdura',   icon:'⏳', name:'无双不息', desc:'无双时长上限 +1 秒/层；**所有一次性伤害的无双技能伤害 +15%/层**（秘奥义·斩、陨石风暴、狂涛怒潮、箭雨、核弹、无双开场震慑）', cap:5, apply(){ p.mut.mdura = Math.min(5, (p.mut.mdura || 0) + 1); } },
+  { id:'bonus',   icon:'🗡️', name:'追加斩', desc:'每三次斩击后追加额外斩击！', cap:3, apply(){ p.mut.bonus = Math.min(3, p.mut.bonus + 1); } },
+  { id:'shield',  icon:'🛡️', name:'守护盾', desc:'5 秒未受伤生成一层可叠加次数护盾！', cap:3, apply(){ p.mut.shield = Math.min(3, p.mut.shield + 1); p.shieldC = p.mut.shield; } },
+  { id:'drone',   icon:'🚁', name:'无人机', desc:'召唤无人机跟随你一起战斗（至多五台）', cap:5, apply(){ p.mut.drone = Math.min(5, p.mut.drone + 1); syncDrones(); } },
+  { id:'chi',     icon:'🌪️', name:'剑气斩', desc:'每第 5 次挥砍发出贯穿剑气！', cap:3, apply(){ p.mut.chi = Math.min(3, p.mut.chi + 1); } },
+  { id:'whirl',   icon:'💫', name:'旋风斩', desc:'普通攻击角度 +90°！', cap:3, apply(){ p.mut.whirl = Math.min(3, p.mut.whirl + 1); } },
+  { id:'blink',   icon:'💨', name:'瞬步',   desc:'闪避的频率变快了！', cap:5, apply(){ p.mut.blink = Math.min(5, p.mut.blink + 1); } },
+  { id:'dash',    icon:'🌠', name:'瞬身', desc:'闪避距离提升！并且斩击路径范围内的敌人！法师们造成击退效果！', cap:3, apply(){ p.mut.dash = Math.min(3, p.mut.dash + 1); } },
+  { id:'master',  icon:'🥊', name:'近战大师', desc:'对近距离的敌人造成更高的伤害！', cap:5, apply(){ p.mut.master = Math.min(5, p.mut.master + 1); } },
+  { id:'leech',   icon:'🩸', name:'夺命',   desc:'累计击杀敌人，即可回复生命值！', cap:5, apply(){ p.mut.leech = Math.min(5, p.mut.leech + 1); } },
+  { id:'thunder', icon:'⚡', name:'落雷',   desc:'累计击杀敌人，会召唤天雷攻击其他敌人！', cap:10, apply(){ p.mut.thunder = Math.min(10, p.mut.thunder + 1); } },
+  { id:'mstor',   icon:'🔋', name:'无双存储', desc:'提高无双槽的上限，并且可以连续多次使用无双技能！', cap:3, apply(){ p.mut.mstor = Math.min(3, (p.mut.mstor || 0) + 1); } },
+  { id:'mdura',   icon:'⏳', name:'无双不息', desc:'无双技能持续时间增加！或者是提高无双技能的伤害！', cap:5, apply(){ p.mut.mdura = Math.min(5, (p.mut.mdura || 0) + 1); } },
   { id:'giant',   icon:'🗿', name:'巨人杀手', desc:'对 Boss 级敌人伤害 +15%/层', cap:5, apply(){ p.mut.giant = Math.min(5, (p.mut.giant || 0) + 1); } },
   /* —— 通用条件质变：需先持指定奇物才会出现在质变池 —— */
-  { id:'shieldbash', icon:'💢', name:'护盾猛击', desc:'**只要身上有护盾**，造成的伤害 +10%/层（满 5 层 = **1.5 倍**）；护盾被打光即失效、补上护盾立刻恢复（**无需任何奇物，随时可拿**）', cap:5, apply(){ p.mut.shieldbash = Math.min(5, (p.mut.shieldbash || 0) + 1); } },
-  { id:'forge', icon:'🔨', name:'即时铸盾', desc:'**每秒自动铸出 1 点护盾值**（每层 +1/秒，满 5 层 = **每秒 5 点**），但**必须 3 秒内不受到任何伤害**才会铸（受伤就重新计时）；受护盾上限限制（50，持超级护盾 200）', cap:FORGE_CAP, apply(){ p.mut.forge = Math.min(FORGE_CAP, (p.mut.forge || 0) + 1); } },
+  { id:'shieldbash', icon:'💢', name:'护盾猛击', desc:'只要身上有护盾，就会提高造成的伤害！', cap:5, apply(){ p.mut.shieldbash = Math.min(5, (p.mut.shieldbash || 0) + 1); } },
+  { id:'forge', icon:'🔨', name:'即时铸盾', desc:'三秒内不受到伤害，会持续增加护盾值！', cap:FORGE_CAP, apply(){ p.mut.forge = Math.min(FORGE_CAP, (p.mut.forge || 0) + 1); } },
   /* —— 战士专属质变（弓箭手候选池自动剔除）—— */
-  { id:'clone',   icon:'👥', name:'影分身十字斩', desc:'大地图正中心的镜像分身同步普攻，伤害 = 本体 20%/层。**只在「地图正中心那块幕布」（中央 1280×720 视区 ×1.3 = 1664×936）内生效**——本体走出范围，分身立即消失（小地图紫点同步消失）；浪客持有时分身会同步「闪避路径斩 + 落点圆弧斩」', cap:5, apply(){ p.mut.clone = Math.min(5, (p.mut.clone || 0) + 1); } },
+  { id:'clone',   icon:'👥', name:'影分身十字斩', desc:'在地图中心区会出现分身，分身会和你一样使用普通攻击！', cap:5, apply(){ p.mut.clone = Math.min(5, (p.mut.clone || 0) + 1); } },
   /* —— 浪客专属质变（只有战士选了「浪客」才会出现）—— */
-  { id:'blade',   icon:'🗡', name:'祖传宝刀', desc:'每 **5 秒**天降一把宝刀，落点范围伤害 **30 + 等级×2**（每多一层 +20）；宝刀**留在地上 10 秒**，浪客**捡起后武器变金**、伤害 **×2**（每多一层 +0.75，满 5 层 = **×5**）持续 **8 秒**', cap:5, apply(){ p.mut.blade = Math.min(5, (p.mut.blade || 0) + 1); if (!(p.bladeT > 0)) p.bladeT = BLADE_CD; } },
-  { id:'firestep',icon:'🔥', name:'烈焰步', desc:'闪避路径留下一道火墙，贴上的敌人持续**灼伤**；+1 秒/层（满 5 层 = **火墙存在 5 秒**）', cap:5, apply(){ p.mut.firestep = Math.min(5, (p.mut.firestep || 0) + 1); } },
-  { id:'cold',    icon:'❄️', name:'寒气蓄力', desc:'**2 秒不闪避**即蓄满寒气：下一次圆弧斩伤害再提高，+0.8 倍/层（满 5 层 = **5 倍**），**并且只有蓄满寒气时圆弧斩半径才 +0.24 倍/层**（满 5 层 = 额外 1.2 倍范围，不蓄满就没有范围加成）；**蓄满的那一刀还会把圆弧斩范围内的敌方射弹一并斩灭**', cap:5, apply(){ p.mut.cold = Math.min(5, (p.mut.cold || 0) + 1); } },
+  { id:'blade',   icon:'🗡', name:'祖传宝刀', desc:'从天降一把宝刀攻击，并且拾起宝刀会在一定时间内提高你的攻击！', cap:5, apply(){ p.mut.blade = Math.min(5, (p.mut.blade || 0) + 1); if (!(p.bladeT > 0)) p.bladeT = BLADE_CD; } },
+  { id:'firestep',icon:'🔥', name:'烈焰步', desc:'闪避路径留下一道火墙！', cap:5, apply(){ p.mut.firestep = Math.min(5, (p.mut.firestep || 0) + 1); } },
+  { id:'cold',    icon:'❄️', name:'寒气蓄力', desc:'两秒未出鞘，下一刀将会提高范围以及伤害！', cap:5, apply(){ p.mut.cold = Math.min(5, (p.mut.cold || 0) + 1); } },
   /* —— 弓箭手专属质变（战士候选池自动剔除）—— */
-  { id:'bounce',  icon:'🏹', name:'弹射',   desc:'箭矢命中后弹向另一名敌人，+1 次/层（至多 2 次）', cap:2, apply(){ p.mut.bounce = Math.min(2, (p.mut.bounce || 0) + 1); } },
-  { id:'split',   icon:'🎯', name:'分裂',   desc:'普攻箭矢 +1/层（至多 5 支齐射）', cap:4, apply(){ p.mut.split = Math.min(4, (p.mut.split || 0) + 1); } },
-  { id:'xbow',    icon:'💥', name:'爆炸弩', desc:'箭矢最后一击处爆炸：范围 70+30×层，溅射 = 普攻 1/3', cap:5, apply(){ p.mut.xbow = Math.min(5, (p.mut.xbow || 0) + 1); } },
-  { id:'wallb',   icon:'🪞', name:'弹墙',   desc:'箭矢撞墙反弹一次，+1 次/层（至多 2 次）', cap:2, apply(){ p.mut.wallb = Math.min(2, (p.mut.wallb || 0) + 1); } },
+  { id:'bounce',  icon:'🏹', name:'弹射',   desc:'箭矢命中后弹向另一名敌人！', cap:2, apply(){ p.mut.bounce = Math.min(2, (p.mut.bounce || 0) + 1); } },
+  { id:'split',   icon:'🎯', name:'分裂',   desc:'同时射出更多的箭矢！', cap:4, apply(){ p.mut.split = Math.min(4, (p.mut.split || 0) + 1); } },
+  { id:'xbow',    icon:'💥', name:'爆炸弩', desc:'箭矢消失的时候会发生爆炸！', cap:5, apply(){ p.mut.xbow = Math.min(5, (p.mut.xbow || 0) + 1); } },
+  { id:'wallb',   icon:'🪞', name:'弹墙',   desc:'箭矢触碰墙壁后将会反弹！', cap:2, apply(){ p.mut.wallb = Math.min(2, (p.mut.wallb || 0) + 1); } },
   /* —— 法师专属质变（战士/弓箭手候选池自动剔除）—— */
-  { id:'lava',     icon:'🌋', name:'熔岩结界', desc:'身周火焰圈，圈内敌人持续灼烧（范围与伤害随层数提升）', cap:5, apply(){ p.mut.lava = Math.min(5, (p.mut.lava || 0) + 1); } },
-  { id:'manapool', icon:'🔷', name:'无穷法力', desc:'法术条见底直接补满：冷却 20 秒，-3.75 秒/层（满层 5 秒）', cap:5, apply(){ p.mut.manapool = Math.min(5, (p.mut.manapool || 0) + 1); } },
-  { id:'rage',     icon:'💢', name:'狂暴增幅', desc:'无双后伤害 +8 持续 10 秒，+10/层（满层 +48）', cap:5, apply(){ p.mut.rage = Math.min(5, (p.mut.rage || 0) + 1); } },
-  { id:'multicast', icon:'🎇', name:'多重施法', desc:'水法师：**水柱宽度 +30px/层**，且**水柱不再分裂**（永远一条粗水柱）；其它元素：普攻弹道 +1/层（至多 3 条）', cap:2, apply(){ p.mut.multicast = Math.min(2, (p.mut.multicast || 0) + 1); } },
-  { id:'mastery',  icon:'🔥', name:'术有专攻', desc:'按元素强化本系：火——爆炸范围 +35%/层、命中留 2 秒火坑；水——**蓝球（法术球）掉率 1/2 → 满级必定掉落**（法术球回复 30 点法术条）；雷——命中定身 0.5 秒，6 次雷击触发雷罚（满层 3 次）、普通敌人秒杀而 Boss 扣 3% 最大生命（**对 Boss 冷却 0.5 秒**），**且无双雷云的攻击范围 +1/6 半径/层（满 3 层 = ×1.5）**；光——回蓝更快（1 秒 → 满层 0.5 秒）、光炮更宽（满层 200px）', cap:3, apply(){ p.mut.mastery = Math.min(3, (p.mut.mastery || 0) + 1); } },
+  { id:'lava',     icon:'🌋', name:'熔岩结界', desc:'身周火焰圈，圈内敌人持续灼烧', cap:5, apply(){ p.mut.lava = Math.min(5, (p.mut.lava || 0) + 1); } },
+  { id:'manapool', icon:'🔷', name:'无穷法力', desc:'法术条见底直接补满，多次拿取可减少触发间隔！', cap:5, apply(){ p.mut.manapool = Math.min(5, (p.mut.manapool || 0) + 1); } },
+  { id:'rage',     icon:'💢', name:'狂暴增幅', desc:'使用无双技能后增加你的攻击力！', cap:5, apply(){ p.mut.rage = Math.min(5, (p.mut.rage || 0) + 1); } },
+  { id:'multicast', icon:'🎇', name:'多重施法', desc:'增加弹道，或者是增加宽度！', cap:2, apply(){ p.mut.multicast = Math.min(2, (p.mut.multicast || 0) + 1); } },
+  { id:'mastery',  icon:'🔥', name:'术有专攻', desc:'每个法师都有专属的增强效果！', cap:3, apply(){ p.mut.mastery = Math.min(3, (p.mut.mastery || 0) + 1); } },
   /* —— 士兵专属质变（选现代枪械后才出现；传统弓/战士/法师候选池自动剔除）—— */
-  { id:'mag',      icon:'🧲', name:'扩容弹夹', desc:'弹夹容量 +15/层（30 → 满 4 层 90 发）', cap:4, apply(){ p.mut.mag = Math.min(4, (p.mut.mag || 0) + 1); p.mag = Math.min(gunMagMax(), p.mag + 15); } },
-  { id:'grenade',  icon:'💣', name:'榴弹装填', desc:'每 30 发子弹额外打出一发榴弹（范围伤害 + 灼伤）；每层减少所需弹数（30/20/10），并提高伤害与爆炸范围', cap:3, apply(){ p.mut.grenade = Math.min(3, (p.mut.grenade || 0) + 1); } },
-  { id:'decoy',    icon:'🎯', name:'假人部署', desc:'闪避时在原地留下假人（30 血，敌人优先攻击它）；每层部署冷却 −5 秒（20 → 满 4 层 5 秒）', cap:4, apply(){ p.mut.decoy = Math.min(4, (p.mut.decoy || 0) + 1); } },
-  { id:'sidekick', icon:'🧑‍🤝‍🧑', name:'小跟班', desc:'跟随你行动、自动索敌射击，伤害为你的 1/2（满 3 层 = 100%），它的射击同样会触发榴弹装填', cap:3, apply(){ p.mut.sidekick = Math.min(3, (p.mut.sidekick || 0) + 1); syncSidekick(); } },
+  { id:'mag',      icon:'🧲', name:'扩容弹夹', desc:'弹夹容量增加！', cap:4, apply(){ p.mut.mag = Math.min(4, (p.mut.mag || 0) + 1); p.mag = Math.min(gunMagMax(), p.mag + 15); } },
+  { id:'grenade',  icon:'💣', name:'榴弹装填', desc:'攻击时会额外丢出榴弹！', cap:3, apply(){ p.mut.grenade = Math.min(3, (p.mut.grenade || 0) + 1); } },
+  { id:'decoy',    icon:'🎯', name:'假人部署', desc:'闪避后，会留下吸引敌人的假人！', cap:4, apply(){ p.mut.decoy = Math.min(4, (p.mut.decoy || 0) + 1); } },
+  { id:'sidekick', icon:'🧑‍🤝‍🧑', name:'小跟班', desc:'你的小跟班，他也会和你一样丢出榴弹！', cap:3, apply(){ p.mut.sidekick = Math.min(3, (p.mut.sidekick || 0) + 1); syncSidekick(); } },
   /* —— 🃏 牌皇专属质变（选「扑克牌」才出现；传统弓/士兵/战士/法师候选池自动剔除）—— */
-  { id:'deck',      icon:'🎴', name:'筛选牌库', desc:'特殊牌出现得更勤：每 **5 张**普通牌出 1 张特殊牌 → 每层 −1 张（满 3 层 = **一普通一特殊交替**）', cap:DECK_CAP, apply(){ p.mut.deck = Math.min(DECK_CAP, (p.mut.deck || 0) + 1); } },
-  { id:'wild',      icon:'🛸', name:'万能牌', desc:'**所有特殊牌**全面强化：伤害 +20%/层（满 5 层 = **2 倍**）、爆破半径 +12%/层、穿透牌尺寸 +16%/层、哈吉咪伤害同步提高且**寿命 +2 秒/层（10 → 20 秒）**', cap:WILD_CAP, apply(){ p.mut.wild = Math.min(WILD_CAP, (p.mut.wild || 0) + 1); } },
-  { id:'possess',   icon:'👻', name:'夺舍牌', desc:'被**牌**击杀的敌人有 **2%/层** 概率当场倒戈成友军（满 5 层 = **10%**）：满血复活、追着最近的敌人打，**伤害 = 你的普攻伤害**，存在 **20 秒**；Boss 免疫（倒戈不计击杀、不掉落、不给分）', cap:CHARM_CAP, apply(){ p.mut.possess = Math.min(CHARM_CAP, (p.mut.possess || 0) + 1); } },
-  { id:'multishot', icon:'🀄', name:'连发牌', desc:'投牌时有 **12%/层** 概率一次甩出 **3 张**（满 5 层 = **60%**）：额外 2 张会自动追踪最近的敌人（抽到特殊牌则效果照常生效）', cap:MULTI_CAP, apply(){ p.mut.multishot = Math.min(MULTI_CAP, (p.mut.multishot || 0) + 1); } },
+  { id:'deck',      icon:'🎴', name:'筛选牌库', desc:'特殊牌出现的频率更高了！', cap:DECK_CAP, apply(){ p.mut.deck = Math.min(DECK_CAP, (p.mut.deck || 0) + 1); } },
+  { id:'wild',      icon:'🛸', name:'万能牌', desc:'特殊牌的效果强化！', cap:WILD_CAP, apply(){ p.mut.wild = Math.min(WILD_CAP, (p.mut.wild || 0) + 1); } },
+  { id:'possess',   icon:'👻', name:'夺舍牌', desc:'击败敌人后，有概率将其变为友军为你所用！', cap:CHARM_CAP, apply(){ p.mut.possess = Math.min(CHARM_CAP, (p.mut.possess || 0) + 1); } },
+  { id:'multishot', icon:'🀄', name:'连发牌', desc:'攻击时，有概率额外丢出追踪的特殊牌攻击敌人！', cap:MULTI_CAP, apply(){ p.mut.multishot = Math.min(MULTI_CAP, (p.mut.multishot || 0) + 1); } },
   /* —— 🛡️ 骑士专属质变（选「骑士」才出现；其它职业候选池自动剔除）—— */
-  { id:'spin',    icon:'🌀', name:'旋转长枪', desc:'闪避改为**把长枪丢向指定位置**：长枪在原地**旋转**，每 **0.5 秒**对圈内敌人造成撞击伤害；每层延长存在时间 +0.5 秒（满 5 层 = **3 秒**），停止旋转后**插在地上**（可被「长枪回收」捡回）', cap:5, apply(){ p.mut.spin = Math.min(5, (p.mut.spin || 0) + 1); } },
-  { id:'recall',  icon:'⚔️', name:'长枪回收', desc:'**需先有「旋转长枪」**：骑士走进插在地上的长枪即**回收**，并打出一记**长枪横扫**；每层横扫半径 **+30px**、伤害 **+35%**', cap:5, apply(){ p.mut.recall = Math.min(5, (p.mut.recall || 0) + 1); } },
-  { id:'vigor',   icon:'💪', name:'骑士体魄', desc:'**每 5 点生命上限加成 → 移动速度 +1%**；每层把换算比例收紧 1 点（满 5 层 = **每 2 点生命上限 → +1% 移速**，同时也会抬高撞击伤害与骑马阈值）', cap:5, apply(){ p.mut.vigor = Math.min(5, (p.mut.vigor || 0) + 1); } },
-  { id:'royal',   icon:'🐎', name:'皇家骑士团', desc:'**每 5 秒**召唤一名骑兵**横穿整个战场**（沿途撞伤敌人）；每层触发间隔 **−0.6 秒**（最少 2 秒），骑兵的攻击半径 **−12px**、伤害 **−10%**（换来更频繁的冲锋）', cap:5, apply(){ p.mut.royal = Math.min(5, (p.mut.royal || 0) + 1); if (!(p.royalT > 0)) p.royalT = royalCd(); } },
-  { id:'rampage', icon:'💥', name:'横冲直撞', desc:'骑士撞击的**判定范围 +14px/层**、**撞击伤害 +15%/层**（也吃移速加成）', cap:5, apply(){ p.mut.rampage = Math.min(5, (p.mut.rampage || 0) + 1); } },
+  { id:'spin',    icon:'🌀', name:'旋转长枪', desc:'闪避会丢出长枪，造成持续伤害后留下长枪在原地！', cap:5, apply(){ p.mut.spin = Math.min(5, (p.mut.spin || 0) + 1); } },
+  { id:'recall',  icon:'⚔️', name:'长枪回收', desc:'拾取地上的长枪后，会对周围进行一次横扫攻击！', cap:5, apply(){ p.mut.recall = Math.min(5, (p.mut.recall || 0) + 1); } },
+  { id:'vigor',   icon:'💪', name:'骑士体魄', desc:'每提升5点生命值，会提高1％的移动速度！', cap:5, apply(){ p.mut.vigor = Math.min(5, (p.mut.vigor || 0) + 1); } },
+  { id:'royal',   icon:'🐎', name:'皇家骑士团', desc:'召唤一名骑兵横穿整个战场！', cap:5, apply(){ p.mut.royal = Math.min(5, (p.mut.royal || 0) + 1); if (!(p.royalT > 0)) p.royalT = royalCd(); } },
+  { id:'rampage', icon:'💥', name:'横冲直撞', desc:'骑士冲撞的判定范围变大！', cap:5, apply(){ p.mut.rampage = Math.min(5, (p.mut.rampage || 0) + 1); } },
   /* —— 🗡️ 武器大师专属质变（选「武器大师」才出现）—— */
-  { id:'mom',    icon:'🦾', name:'母怪力？！', desc:'**同时装备的武器数 +1/层**（最多同时装备 **4 件**）：多把武器各自按自己的间隔出手', cap:3, apply(){ p.mut.mom = Math.min(3, (p.mut.mom || 0) + 1); } },
-  { id:'favor',  icon:'💗', name:'专属偏爱', desc:'**只装备 1 件武器时**，视为**全部装备格都装着这把武器**（每个槽位各出手一次）；武器伤害 **+10%/层**（满 3 层 = **+30%**）', cap:3, apply(){ p.mut.favor = Math.min(3, (p.mut.favor || 0) + 1); } },
-  { id:'pack',   icon:'🎒', name:'扩容背包', desc:'武器背包存储上限 **+1/层**（基础 4 → 最多 **6 件**；已装备的不占背包格）', cap:2, apply(){ p.mut.pack = Math.min(2, (p.mut.pack || 0) + 1); } },
-  { id:'shopq',  icon:'🛍️', name:'高端购物', desc:'商店刷出的武器品质更好：**劣等刷新率 −4%/层**（满 5 层 −20%），减掉的份额**均分给该等级段其他品质**；某些等级段劣等会被彻底挤掉', cap:5, apply(){ p.mut.shopq = Math.min(5, (p.mut.shopq || 0) + 1); } },
-  { id:'sale',   icon:'🏷️', name:'打折促销', desc:'商店里**买武器**便宜 **10%/层**（满 **3 层 = 打 7 折**，即 70% 价格）；**只砍买价，卖价照旧**（不影响出售能拿多少钱）', cap:3, apply(){ p.mut.sale = Math.min(3, (p.mut.sale || 0) + 1); } },
-  { id:'skyfall', icon:'☄️', name:'天降长矛', desc:'**每 10 秒**天降一根长矛砸向敌群：落点 **120px** 范围内的敌人吃一记范围伤害，**落点会留下长矛**供给「长枪回收」捡回；每层**间隔 −1.25 秒**（满 5 层 = **5 秒**）、**伤害 +35%**、**范围 +24px**', cap:5, apply(){ p.mut.skyfall = Math.min(5, (p.mut.skyfall || 0) + 1); if (!(p.skyT > 0)) p.skyT = skyCd(); } },
+  { id:'mom',    icon:'🦾', name:'母怪力？！', desc:'同时可装备的武器数量提升！', cap:3, apply(){ p.mut.mom = Math.min(3, (p.mut.mom || 0) + 1); } },
+  { id:'favor',  icon:'💗', name:'专属偏爱', desc:'只装备一件武器时,视为全装备同时装备了这件武器,并且伤害提高！', cap:3, apply(){ p.mut.favor = Math.min(3, (p.mut.favor || 0) + 1); } },
+  { id:'pack',   icon:'🎒', name:'扩容背包', desc:'武器背包的储存上限提升。', cap:2, apply(){ p.mut.pack = Math.min(2, (p.mut.pack || 0) + 1); } },
+  { id:'shopq',  icon:'🛍️', name:'高端购物', desc:'商店里刷新的武器品质更好了，劣等武器变少。', cap:5, apply(){ p.mut.shopq = Math.min(5, (p.mut.shopq || 0) + 1); } },
+  { id:'sale',   icon:'🏷️', name:'打折促销', desc:'商店购买武器价格下降，但是出售价格不变。', cap:3, apply(){ p.mut.sale = Math.min(3, (p.mut.sale || 0) + 1); } },
+  { id:'skyfall', icon:'☄️', name:'天降长矛', desc:'从天而降一根长矛攻击敌人，并留在原地！', cap:5, apply(){ p.mut.skyfall = Math.min(5, (p.mut.skyfall || 0) + 1); if (!(p.skyT > 0)) p.skyT = skyCd(); } },
   /* —— 🧢 **训练家专属质变**（用户逐条点名；只有选「训练家」才出现，见 TRAINER_ONLY_MUTS）—— */
-  { id:'trainsoul', icon:'🧢', name:'训练家之魂', desc:'**所有宝可梦造成的伤害 +10%/层**（满 5 层 = **+50%**）', cap:TRAINER_SOUL_CAP, apply(){ p.mut.trainsoul = Math.min(TRAINER_SOUL_CAP, (p.mut.trainsoul || 0) + 1); } },
-  { id:'starhelp', icon:'⭐', name:'星之助战', desc:'宝可梦队列里加入一只 **基拉祈（No.385）**：它的**等级只跟这条质变走**（1 层 = 10 级 → 满 5 层 = **50 级的面板数据**），**50 级解锁「破灭之愿」**', cap:STARHELP_CAP, apply(){ p.mut.starhelp = Math.min(STARHELP_CAP, (p.mut.starhelp || 0) + 1); starAidSync(); } },
-  { id:'miracle', icon:'💖', name:'羁绊奇迹', desc:'宝可梦**该昏厥时保留 1 滴血并无敌 3 秒**；每层缩短这条保命的间隔：**一级 20 秒 → 满 4 层 5 秒一次**（20/15/10/5）', cap:MIRACLE_CAP, apply(){ p.mut.miracle = Math.min(MIRACLE_CAP, (p.mut.miracle || 0) + 1); } },
+  { id:'trainsoul', icon:'🧢', name:'训练家之魂', desc:'提高所有宝可梦们造成的伤害！', cap:TRAINER_SOUL_CAP, apply(){ p.mut.trainsoul = Math.min(TRAINER_SOUL_CAP, (p.mut.trainsoul || 0) + 1); } },
+  { id:'starhelp', icon:'⭐', name:'星之助战', desc:'队伍加入一只基拉祈！并在50级时学会破灭之愿！', cap:STARHELP_CAP, apply(){ p.mut.starhelp = Math.min(STARHELP_CAP, (p.mut.starhelp || 0) + 1); starAidSync(); } },
+  { id:'miracle', icon:'💖', name:'羁绊奇迹', desc:'宝可梦昏厥时会保留一滴血并且无敌！', cap:MIRACLE_CAP, apply(){ p.mut.miracle = Math.min(MIRACLE_CAP, (p.mut.miracle || 0) + 1); } },
   /* ✨ 刷闪！（用户本轮点名）：每波清剿后一只**基础宝可梦**来访 —— 送金币、**不进队伍**；小概率是闪光 */
-  { id:'shinymut', icon:'✨', name:'刷闪！', desc:'**每波清剿后**会有一只基础宝可梦（妙蛙种子/小火龙/杰尼龟/伊布/炭小侍/多龙梅西亚/迷你龙/基拉祈/波克比）**来到训练家身边送出 ' + SHINY_GOLD_PER + ' 金币**（它不会进入队伍）；并有 **' + Math.round(SHINY_CHANCE_BASE * 100) + '% 概率遇到闪光版本** —— 遇到即**永久收录**进主页养成的「训练家闪光图鉴」，可随时启用它的闪光外观（闪光版会多陪你一会儿，并飘出巨大的「出闪啦！」）。每层：金币 **+' + SHINY_GOLD_PER + '**（满 ' + SHINY_MUT_CAP + ' 层 = ' + (SHINY_GOLD_PER * SHINY_MUT_CAP) + '）、闪光概率 **+' + (SHINY_CHANCE_PER * 100).toFixed(1) + '%**（满层 = ' + Math.round((SHINY_CHANCE_BASE + SHINY_CHANCE_PER * (SHINY_MUT_CAP - 1)) * 100) + '%）', cap:SHINY_MUT_CAP, apply(){ p.mut.shinymut = Math.min(SHINY_MUT_CAP, (p.mut.shinymut || 0) + 1); } }
+  { id:'shinymut', icon:'✨', name:'刷闪！', desc:'每波结束后，会有宝可梦赶来给你送出' + SHINY_GOLD_PER + '金币,（但它不会进入队伍）；并有' + Math.round(SHINY_CHANCE_BASE * 100) + '概率遇到闪光版本 —— 遇到即永久收录进「训练家闪光图鉴」，可启用它的闪光外观！' + SHINY_GOLD_PER + '**（满 ' + SHINY_MUT_CAP + ' 层 = ' + (SHINY_GOLD_PER * SHINY_MUT_CAP) + '）、闪光概率 **+' + (SHINY_CHANCE_PER * 100).toFixed(1) + '%**（满层 = ' + Math.round((SHINY_CHANCE_BASE + SHINY_CHANCE_PER * (SHINY_MUT_CAP - 1)) * 100) + '%）', cap:SHINY_MUT_CAP, apply(){ p.mut.shinymut = Math.min(SHINY_MUT_CAP, (p.mut.shinymut || 0) + 1); } }
 ];
 /* 当前能抽到的质变全集（角色禁选 + 专属互斥 + 已满级剔除）
    —— 判据抽成 mutBanSet()，这样「一键满质变」用的是**完全同一套**「本职业拿不到什么」的清单 */
@@ -12470,34 +12470,34 @@ let dbgSpin = 0, dbgSpinC = 0;                    // 诊断：满级旋风斩旋
 const ART_DEFS = {
   missile:   { name:'弹射导弹', icon:'🚀', desc:'闪避后飞出 3 枚自动追踪导弹', start:0, w15:0 },
   amplifier: { name:'奇物增幅', icon:'✨', desc:'第 5/10/15 波奇物奖励各可多选一件', start:1, w15:0 },
-  scroll:    { name:'无双秘籍', icon:'📖', desc:'无双变为「秘奥义·斩」：冻结 0.6 秒后全屏一击（与《哈姆杀所有》互斥）', start:0, w15:0 },
-  cat:       { name:'一只猫咪？', icon:'🐱', desc:'橘猫：1-5 波跟随撒娇，6-10 波成年出击，11 波起觉醒', start:1, w15:0 },
-  hagen:     { name:'哈根', icon:'🐈', desc:'橘猫觉醒为猛虎驻守战场中央：每 3 秒**哈气**（全屏「哈！！！」）对全场敌人造成**按最大生命的百分比伤害**——杂兵 **50%**、战将/铁骑 **20%**、Boss **3%**，并震慑敌人 0.5 秒；同时增幅主人攻击与攻速', start:0, w15:1 },
-  talisman:  { name:'飞剑符箓', icon:'🗡️', desc:'永恒飞剑：自动索敌、无限穿透，伤害随等级成长', start:0, w15:0 },
+  scroll:    { name:'无双秘籍', icon:'📖', desc:'无双变为「秘奥义·斩」：无双会使出全屏一击！', start:0, w15:0 },
+  cat:       { name:'一只猫咪？', icon:'🐱', desc:'老吴！阿你个你个你个你个！', start:1, w15:0 },
+  hagen:     { name:'哈根', icon:'🐈', desc:'哈气大王！！！', start:0, w15:1 },
+  talisman:  { name:'飞剑符箓', icon:'🗡️', desc:'召唤一柄自动索敌的飞剑战斗！', start:0, w15:0 },
   turtle:    { name:'好男人也没的身手', icon:'⚙️', desc:'受击时 25% 概率完全免伤并弹开身边敌人', start:0, w15:0 },
-  fang:      { name:'贪狼之牙', icon:'🦷', desc:'每次击杀伤害 **+1%**（上限 **+100%**）——但这是**限时怒气**：**10 秒内**没有新击杀就清零（每次击杀都会把 10 秒重新续满）', start:0, w15:0 },
+  fang:      { name:'贪狼之牙', icon:'🦷', desc:'每次击杀敌人都会提高自身伤害，若10秒没有新击杀则清空加成', start:0, w15:0 },
   crane:     { name:'云中鹤', icon:'🕊️', desc:'移速 +12%，闪避后 1.1 秒内再 +40%', start:0, w15:0 },
-  burns:     { name:'一刀一刀燃烧刀', icon:'🔥', desc:'命中使敌人灼伤（每 0.3 秒损失 2% 最大生命，Boss 减为 1/4），对灼伤目标伤害 +20%', start:0, w15:0 },
+  burns:     { name:'一刀一刀燃烧刀', icon:'🔥', desc:'攻击使人灼伤，并对灼伤的目标造成更高的伤害', start:0, w15:0 },
   killhand:  { name:'欧内死手', icon:'☠️', desc:'攻击 5% 概率直接秒杀（每波 +1%，上限 15%，Boss 免疫）', start:0, w15:0 },
   grind:     { name:'磨刀我杀他去', icon:'🔪', desc:'每波开局 30 秒内伤害 +50%', start:0, w15:0 },
   ion:       { name:'岚刀离子切', icon:'🌩️', desc:'被击中的敌人停滞 0.5 秒', start:0, w15:0 },
-  sari:      { name:'舍利子回魂', icon:'📿', desc:'一次性：阵亡时原地复活、秒杀全场并附赠一次无双。**触发后从奇物槽里删掉**（腾出槽位、它也重新回到奇物库）—— 后面**再获得就能再次触发**', start:0, w15:0 },
-  coinpow:   { name:'金币的力量', icon:'💰', desc:'每累计 1000 金币，伤害 **+6%**', start:0, w15:0 },
-  goldmine:  { name:'挖金矿咯', icon:'⛏️', desc:'击杀 5% 掉宝箱（1-10 金币）；1% 撞大运：+999 金币并秒杀全屏', start:0, w15:0 },
+  sari:      { name:'舍利子回魂', icon:'📿', desc:'阵亡时原地复活，并删除此奇物', start:0, w15:0 },
+  coinpow:   { name:'金币的力量', icon:'💰', desc:'每拥有1000金币，你的伤害提高6％', start:0, w15:0 },
+  goldmine:  { name:'挖金矿咯', icon:'⛏️', desc:'击杀敌人有5％的概率掉落宝箱', start:0, w15:0 },
   novrain:   { name:'十一月雨', icon:'🌧️', desc:'弓箭手专属：无双变为「十一月雨」——全屏箭雨 5 秒，每 0.5 秒造成普攻 1/3 的伤害', start:0, w15:0 },
-  rainkeep:  { name:'雨一直下', icon:'☔', desc:'需先有十一月雨（第 20 波必刷）：气足时雨停自动续放，雨附带灼伤、每持续 1 秒伤害 +2%，断气重置', start:0, w15:0 },
-  overheal:  { name:'过量治疗', icon:'💚', desc:'**只有质变·夺命的回血**在满血时溢出的部分按 1/5 转为护盾（最低 1 点，**上限 50**），受击优先扣除；**绿球 / 士兵召唤物治疗等其它回血来源不再产生护盾**', start:0, w15:0 },
-  supershield:{ name:'超级护盾', icon:'🛡', desc:'**每波清剿完毕获得 30 点护盾**，并且**护盾值上限 50 → 200**（护盾受击优先扣除）', start:0, w15:0 },
-  hamu:      { name:'哈姆杀所有', icon:'🐹', desc:'**只在开局第一波能拿到**（第 5/10/15/20/25 波奇物奖励与商店都不再出售）。攻击范围固定 400%、取消攻速加成；升级只出移速/生命上限/无双充能，商店不售攻速范围；每 20 生命上限 +8 伤害；无双变为黑洞（4 秒、可多个）：吸附敌军，旁敌每 0.5 秒 3 伤并灼烧，Boss 战时自动追击，命中 Boss 或期满爆炸巨伤（与《无双秘籍》互斥）', start:1, w15:0 },
-  tactical:  { name:'战术目镜', icon:'🥽', desc:'士兵专属：步枪子弹**自动瞄准最近的敌人**，并且**无限穿透**（打穿一排敌人继续飞）——注意子弹仍是直线飞行，**不会拐弯追踪**', start:0, w15:0 },
-  support:   { name:'支援部队', icon:'🚙', desc:'士兵专属：无双召唤物**额外多一支「特种部队车」**——机枪 + 火箭炮自动开火，沿**地图正中心的固定圆**巡视全场（移速 = 角色初始移速 ×1.3）；**100 血 + 登场无敌 5 秒**，车上维修员**每秒自修 10 点**；四支部队齐备后按无双 = 核弹', start:0, w15:0 },
-  carddeck:  { name:'额外的召唤卡组', icon:'🂡', desc:'**牌皇专属**：召唤牌的出现概率 **3% → 5%**（爆破/穿透仍平分剩下的概率）——哈吉咪来得更勤', start:0, w15:0 },
-  charm:     { name:'闪耀护符', icon:'✨', desc:'本局闪光敌人出现概率**翻倍**（困难 0.25% → 0.5%；简单 0.375% → 0.75%）', start:0, w15:0 },
-  hotdrink:  { name:'香飘飘热饮', icon:'☕', desc:'**每次使用无双技能后立刻回满自己的生命值**（热饮要现泡：同一杯 **10 秒内只喝一次**，冷却期间发动无双不回血）', start:0, w15:0 },
-  buy1get1:  { name:'买一送一', icon:'🛍️', desc:'**武器大师专属**：**每次升级额外再免费拿一把武器**（免费次数翻倍）', start:0, w15:0 },
-  nohand:    { name:'骑士不徒手而亡', icon:'🗡', desc:'**武器大师专属 · 只在开局第一波能拿到**：把**木棍**当成**圣剑**用（三刀一轮的攻击方式，基础伤害 30）；**拿到真圣剑时，圣剑额外 +20% 伤害**', start:1, w15:0 },
+  rainkeep:  { name:'雨一直下', icon:'☔', desc:'需先有十一月雨,若无双槽允许，则会自动释放无双技能，每持续1秒,无双技能的伤害提高2％', start:0, w15:0 },
+  overheal:  { name:'过量治疗', icon:'💚', desc:'通过夺命获得的生命值会额外变成护盾值。', start:0, w15:0 },
+  supershield:{ name:'超级护盾', icon:'🛡', desc:'每波开始时，获得30护盾，并提高护盾值的上限为200', start:0, w15:0 },
+  hamu:      { name:'哈姆杀所有', icon:'🐹', desc:'固定攻速与攻击范围，每 20 生命上限 +8 伤害，将无双技能改为黑洞吞噬万物灭！', start:1, w15:0 },
+  tactical:  { name:'战术目镜', icon:'🥽', desc:'士兵专属,子弹可以穿透敌人并且自动索敌！', start:0, w15:0 },
+  support:   { name:'支援部队', icon:'🚙', desc:'士兵专属,无双召唤物额外多一支「特种部队车」，他会在地图中巡视并自动攻击敌人！', start:0, w15:0 },
+  carddeck:  { name:'额外的召唤卡组', icon:'🂡', desc:'牌皇专属,召唤牌的出现概率额外提升！', start:0, w15:0 },
+  charm:     { name:'闪耀护符', icon:'✨', desc:'本局闪光敌人出现概率翻倍！', start:0, w15:0 },
+  hotdrink:  { name:'香飘飘热饮', icon:'☕', desc:'每次使用无双技能后立刻回满自己的生命值！（10秒冷却）', start:0, w15:0 },
+  buy1get1:  { name:'买一送一', icon:'🛍️', desc:'武器大师专属,升级时可以额外免费再多拿一把武器。', start:0, w15:0 },
+  nohand:    { name:'骑士不徒手而亡', icon:'🗡', desc:'武器大师专属,将「木棍」视为「圣剑」！基础伤害30，拿到真圣剑时，提高圣剑20％的伤害！', start:1, w15:0 },
   /* 🧢 训练家专属奇物（用户本轮点名）：别人一律禁选 —— 见 roleBanArts 里的 `if (!r && !isTrainer())` */
-  wish:      { name:'千年之愿', icon:'🌠', desc:'**训练家专属**：**基拉祈的等级立刻 +20**（上限也同时 +20 → 满层 70 级）；当它学会「破灭之愿」时，那一招自动升级为 **破灭之愿☆**（**范围 +50% · 伤害 +50%**）', start:0, w15:0 },
+  wish:      { name:'千年之愿', icon:'🌠', desc:'训练家专属,基拉祈的等级提升20级,并且当基拉祈学会「破灭之愿」时,强化破灭之愿的技能效果！', start:0, w15:0 },
   /* 🌟 原始回归（训练家专属 · **第 25 波必刷**）：图标按队里那只神兽换成朱红 / 靛蓝 / 青绿宝珠（见 artIcon） */
   primal:    { name:'原始回归', icon:'💠', desc:'据说和丰缘地区的传说渊源颇深，散发着三色光辉的宝珠。', start:0, w15:0, primal:1 }
 };
@@ -13030,7 +13030,7 @@ function artGain(id) {
   if (id === 'hagen' && catE) {
     catE.roarT = 1.0;
     catE.busy = false;
-    addText(p.x, p.y - 46, '橘猫觉醒 —— 猛虎降临!!', 20, '#ffe9a8', '#5a3a00');
+    addText(p.x, p.y - 46, '🐈 像我这样的基米，可以哈所有人！', 20, '#ffe9a8', '#5a3a00');
     addRing(p.x, p.y, '#ff9d3c', 14);
     addRing(p.x, p.y, '#fff', 6);
     sfx.big();
@@ -13209,7 +13209,7 @@ function gearEatTiger(e) {
   rings.push({ x: c.x, y: c.y, r: 6, vr: 420, life: 0.62, max: 0.62, color: '#cfeaff', width: 6 });
   catE = null;                       // 猛虎被吞：场上消失
   p.art.cat = 0; p.art.hagen = 0;    // 连奇物一起失效（代价换来齿轮开场 -30% 血）
-  addText(p.x, p.y - 72, '🐈 哈根被终焉齿轮吞掉了！', 22, '#ff9d3c', '#3a1a00');
+  addText(p.x, p.y - 72, '🐈 哈吉咪被终焉齿轮吃掉了！', 22, '#ff9d3c', '#3a1a00');
   shake = Math.max(shake, 9);
   flashG = Math.max(flashG, 0.12);
   dbgGearAteCat++;
@@ -13721,43 +13721,6 @@ function eggClaim() {
 }
 function fillCodex() {
   let h = '';
-  /* Boss 波次表（本版本：20/30 换成了泰拉瑞亚向 Boss，灭世魔君/终焉齿轮退役） */
-  h += '<div class="cdx-sec">⚔ Boss 波次（三档难度共用一张表）</div>';
-  h += '<div class="cdx-item"><span class="ic">⭐</span><b>第 5 / 15 / 25 波 · 总大将</b><small>'
-    + '沿用灭世魔君的整套打法：**双环螺旋弹幕 + 瞄准扇形连弹 + 阶段召唤援军（66% / 33% 血量）+ 蓄力冲撞 / 蓄力瞬移**；'
-    + '⚠️ **第 5 波的总大将不放「双环螺旋弹幕」**（用户要求：第一个 Boss 时角色还没成型），其余招式照旧，第 15 / 25 波也不受影响；'
-    + '基础血量 **1000 × 波次倍率**（2000 / 6000 / 9000），**不再使用跃击**。看到红色预警线（冲撞）或地面脉冲准星（瞬移）立刻横移</small></div>';
-  h += '<div class="cdx-item"><span class="ic">🪱</span><b>第 10 波 · 世界吞噬者 <span style="color:#8d8a77;">/ 🎖️ 指挥官 / 🟢 超级史莱姆（三选一）</span></b><small>'
-    + '基础血量 **2000 × 波次倍率**（10 波 = 8000）。多节蠕虫（头 + 10 节躯体）。**钻地时受伤只有 15%**，地面仅留翕动土丘 + 震动环；'
-    + '破土前亮**落点圈 + 紫色预警线**（约 1.1 秒）——**出圈即完全免伤**；扑击后**僵直 0.7 秒**是输出窗口。'
-    + '打**头**最有效，头一死躯体全消</small></div>';
-  h += '<div class="cdx-item"><span class="ic">🟢</span><b>第 10 波 · 超级史莱姆（三选一之一）</b><small>'
-    + '基础血量 **6000 × 波次倍率**。**它在场时整张图变成「黏糊糊场地」：玩家移速 −50%**（连它分裂出的小史莱姆也算）。'
-    + '攻击方式：**原地蓄力 0.5 秒（越压越扁）→ 高高跳起砸向你**，落点有金色/绿色预警圈、砸中 175px 范围内造成 **26 伤**，落地僵直一小段。'
-    + '**半血时炸开**（范围伤害 + 绿爆）并**分裂成三只各 1/4 本体最大生命的小史莱姆**，本体退场——**三只全清才算讨伐**，清完后场地恢复</small></div>';
-  h += '<div class="cdx-item"><span class="ic">🌙</span><b>第 20 波 · 双子魔眼 <span style="color:#8d8a77;">/ 🗡️ 虚空执剑者 / 🏃 超级跑者（三选一）</span></b><small>'
-    + '一次两只、**各有独立血条**（左上 激光眼 / 右上 火焰眼），**两只都倒下才算击破**。'
-    + '**激光眼（远攻）**保持 520px、每 1.35 秒 5 发扇形激光（14 伤）；**火焰眼（近战）**贴身、300px 内**蓄力 0.7 秒**（橙色预警线）后**高速冲刺**（约 405px，撞到 26 伤）</small></div>';
-  h += '<div class="cdx-item"><span class="ic">🏃</span><b>第 20 波 · 超级跑者（三选一之一）</b><small>'
-    + '基础血量 **3400 × 波次倍率**（略高于双子 2800 / 虚空 2400）。它**贴着地图最外圈绕跑道狂奔**'
-    + '（跑速 = 铁骑冲锋 **×1.5 = 1200px/s**，地面上会画出它那条跑道）。'
-    + '**每 2~5 秒随机**它冲出赛道、**锁定你的方向直线冲过来**，跑回跑道后继续绕圈 —— **全程没有任何预警线**，'
-    + '而且它**只会造成冲撞伤害**（撞到 26×1.2 伤，0.7 秒最多结算一次）。**两种打法**：'
-    + '**① 直接打空血条**（血厚，硬啃要时间）**② 撑满 120 秒**它自己体力耗尽倒下（血条下写着「你跑不过我你信吗？」+ 倒计时）。'
-    + '⚠️ 中途它会补两次：第 **60 秒**喝雪碧 **回 50% 最大生命**、第 **90 秒**吃巧乐兹**再回 30% 并把跑速提高 20%（1440px/s）**</small></div>';
-  h += '<div class="cdx-item"><span class="ic">🌸</span><b>第 30 波 · 世纪之花 <span style="color:#8d8a77;">/ 💡 光明掠夺者（二选一，击败 → 通关）</span></b><small>'
-    + '基础血量 **10000**（× 波次倍率，30 波 = 90000）。三段血量：**扎根 → 盛放（<66%）→ 狂怒（<33%，加速追击 + 近身脉冲 + 援军）**。'
-    + '脚下**翠绿预警圈**（1.1 秒）出圈免伤 → 绽放的藤蔓持续 4 秒、**每 0.5 秒 8 伤**；'
-    + '**换阶段花苞闭合时它只吃 1/4 伤害**，张开（花蕊发亮）再全力打</small></div>';
-  h += '<div class="cdx-item"><span class="ic">💡</span><b>第 30 波 · 光明掠夺者（二选一之一，击败 → 通关）</b><small>'
-    + '基础血量 **7000 × 波次倍率**。**它在场时你会被致盲**：视野从 980px 一路收到 **300px**（画面渐渐变黑，远处敌人几乎看不见）。'
-    + '**不攻击时完全不可见、也完全打不到**（小地图上也不显示），隐身期间会在地图上随机移动。三套技能（权重 3:3:2）：'
-    + '**① 紫色直线激光**——突然出现在你身边、蓄力 1 秒 → 沿直线射出 **3 秒**，命中**每 0.5 秒 10 伤**；你离开光束范围它会**缓慢追踪**你，技能结束 2 秒后再次隐身；'
-    + '**② 三连爪击**——蓄力 1 秒 → 扇形爪击 **3 次**（每次间隔 0.3 秒），每次附带一段短位移；'
-    + '**③ 骷髅召唤**——原地蓄力 2 秒，地上出现**三个法阵**，每个召一只**骷髅头**（轻骑贼最快的速度直线冲、接触立刻自爆）。'
-    + '**每被打掉 1/5 最大生命 → 原地瘫痪 8 秒**：这 8 秒**致盲解除**、它**受到伤害 +30%**，8 秒后重新站起（致盲与隐身回归，瘫痪进度条重新计算）</small></div>';
-  h += '<div class="cdx-item"><span class="ic">☠</span><b>退役 Boss：灭世魔君 / 终焉齿轮</b><small>'
-    + '代码与演出保留，但**任何正常波次都不会再出现**（旧存档/旧攻略里提到的它们已被世界吞噬者 / 双子魔眼 / 世纪之花取代）</small></div>';
   h += '<div class="cdx-sec">✦ 奇遇事件 · 每波随机 1 个（🔥 地狱 / ♾ 无尽 · Boss 波不触发）</div>';
   for (const ev of HELL_EVENTS) {
     h += '<div class="cdx-item"><span class="ic">' + ev.icon + '</span><b>' + ev.name + '</b><small>' + ev.desc + '</small></div>';
