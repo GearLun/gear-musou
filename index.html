@@ -132,6 +132,16 @@
     text-shadow: 0 0 12px rgba(255,209,102,.9);
     animation: eggPop .5s ease-out;
   }
+  /* ============ 💾 存档码（导出 / 导入局外存档） ============ */
+  .save-code {
+    width: 100%; box-sizing: border-box; padding: 8px 10px; border-radius: 8px;
+    background: #10160c; color: #cfe6c0; border: 1px solid #3d4a30;
+    font-family: Consolas, "Courier New", monospace; font-size: 12.5px; line-height: 1.5;
+    letter-spacing: .04em; word-break: break-all; resize: vertical; min-height: 62px;
+  }
+  .save-code:focus { outline: none; border-color: #8ff0e8; box-shadow: 0 0 0 2px rgba(143,240,232,.18); }
+  .save-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 6px; }
+  .save-row .btn { padding: 7px 14px; font-size: 14px; }
   @keyframes eggPop {
     0%   { transform: scale(.86); opacity: 0; }
     55%  { transform: scale(1.06); opacity: 1; }
@@ -423,7 +433,7 @@
   <!-- 开始界面 -->
   <div class="screen show" id="sc-start">
    <div class="home-inner">
-    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.2.3</small></div>
+    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.3.0</small></div>
     <div class="keys" id="keys-desk">
       <span><b>WASD</b> / <b>方向键</b></span><span>移动</span>
       <span><b>自动攻击</b></span><span id="kbd-atk-d">自动挥砍，无需按键</span>
@@ -529,6 +539,17 @@
    <div class="ui-inner">
     <div class="over-title" style="font-size:40px;color:#8ff0e8;">📖 图 鉴</div>
     <div class="cdx-panel" id="cdx-body"></div>
+    <!-- 💾 存档码：把局外存档导出成一段短字符 / 从别人的存档码导入（导入会覆盖原存档，二次确认） -->
+    <div class="cdx-sec">💾 存档码（导出 / 导入**局外存档**：养成等级 · 闪光图鉴 · 局数 · 传承金币…）</div>
+    <div class="cdx-item" style="flex-direction:column;align-items:stretch;">
+      <textarea class="save-code" id="save-code" spellcheck="false" placeholder="点「📤 导出存档」生成存档码；或把存档码粘贴到这里，再点「📥 导入存档」"></textarea>
+      <div class="save-row">
+        <button class="btn btn2" id="btn-save-export">📤 导出存档</button>
+        <button class="btn btn2" id="btn-save-copy">📋 复制存档码</button>
+        <button class="btn btn3" id="btn-save-import">📥 导入存档</button>
+      </div>
+      <div class="hint" id="save-tip" style="color:#a9c39a;margin-top:4px;">存档码只包含**局外**进度，不含当前这一局；换设备 / 重装后可以用它把进度搬过去。</div>
+    </div>
     <div class="start-btns" style="margin-top:8px;">
       <button class="btn btn2" id="btn-codex-close">关 闭</button>
       <button class="btn btn3" id="btn-wipe">🗑 清空存档</button>
@@ -833,7 +854,7 @@
 <script>
 'use strict';
 /* ============================================================
-   草·割无双  MUSOU MOW  —  无双割草 正式版 v1.2.3
+   草·割无双  MUSOU MOW  —  无双割草 正式版 v1.3.0
    纯 Canvas 2D + WebAudio 程序化音效，无任何外部资源
    ============================================================ */
 (() => {
@@ -1083,7 +1104,7 @@ let dbgFireBurn = 0;         // 🔥 火法师火球「命中即点燃」的次�
 let dbgLunges = 0, dbgJumps = 0, dbgSlams = 0, dbgGenShots = 0;   // 诊断：兵卒突刺 / 跃击起跳 / 落地 / 总大将落地弹幕
 let dbgBH = 0;   // 诊断：哈姆黑洞生成次数
 let dbgWaterTicks = 0, dbgWaterBursts = 0, dbgWaterHits = 0, dbgWaterLaneN = 0;   // 诊断：水法师 水柱周期结算 / 水爆 / 命中即伤 / 水柱命中总数（含多柱叠加）
-let dbgWaterVacuum = 0, dbgWaterExtra = 0;   // 🌊 水法师重做：自动吸取的法术球总数 / 额外两道激光水柱的发射次数
+let dbgWaterVacuum = 0, dbgWaterExtra = 0, dbgWaterBeamHits = 0, dbgWaterMusouOrbs = 0;   // 🌊 水法师：自动吸取的法术球总数 / 术有专攻激光的发射次数 / 激光命中数 / 无双生成的蓝球数
 let thunderClouds = [];                                       // 雷法师无双：雷云（可同时存在多朵）
 let arcs = [];                                                // 闪电链折线特效
 let dbgBolts = 0, dbgChainN = 0, dbgThunHits = 0, dbgThunExec = 0, dbgThunExecWait = 0, dbgClouds = 0, dbgCloudBolts = 0;   // 诊断：雷法师（ExecWait = 因 0.5s 冷却被推迟的 Boss 雷罚次数）
@@ -1150,9 +1171,9 @@ const p = {
   role: 'warrior', bowT: 0, mageT: 0,   // 角色：warrior 战士 / archer 弓箭手 / mage 法师；bowT 拉弓、mageT 咏唱后坐动画
   job: '', jobPend: 0,                  // 法师魔法转职：'' 未专精（=火法师）/ 'fire' / 'water'
   jetOn: 0, jetTick: 0, waterBurstT: 0, jetPrev: null,  // 水法师：水柱喷射状态 / 结算计时 / 无双水爆计时 / 上一帧被命中的敌人
-  waterRampT: 0, waterOrbN: 0, waterExtraT: 0,          // 🌊 水法师重做：本波累计的**喷射秒数**（每满 1 秒伤害 +8%）
-                                                        //   · 累计**吸取的蓝球数**（每满 10 颗 → 朝鼠标额外两道激光水柱）
-                                                        //   · 无双期间「每 2 秒额外两道水柱」的倒计时
+  waterRampT: 0, waterOrbN: 0, waterFullPrev: 0,          // 🌊 水法师：本波累计的**喷射秒数**（每满 1 秒伤害 +8% · **断档 / 每波开始都清空**）
+                                                        //   · 累计**吸取的蓝球数**（仅诊断读数，不再触发激光）
+                                                        //   · 上一帧「法力条是否满」——术有专攻激光走**上升沿**触发
   lightJetOn: 0, lightJetTick: 0, lightJetPrev: null,  // 光法师：无双持续光波状态 / 结算计时 / 上一帧被命中的敌人
   mem: 200, memT: 0,                    // 法师法术条：当前值 / 剩余回复时间（8 发起；见底后 2 秒回满，期间停止普攻；无双即刻回满且期间不消耗）
   alive: true
@@ -7176,17 +7197,43 @@ function petFieldClamp(u) {
   if (nx !== u.x || ny !== u.y) { dbgPetEdgeN++; u.x = nx; u.y = ny; }
   return u;
 }
+/* 📱 手机端「自动索敌」的转向速度（用户要求）：线性攻击**不许瞬移式锁敌**，要转过去。
+   速度 = **0.5 秒转满 360°**（4π rad/s ≈ 12.57 rad/s；「可以转得快，但不要瞬移」）。
+   只影响**手机（触屏）档位**的瞄准：电脑端仍然完全跟指针（指针本身就是连续输入的）。 */
+const AIM_TURN_RATE = Math.PI * 2 / 0.5;
+function turnToward(cur, want, dt, rate) {
+  const R = rate || AIM_TURN_RATE;
+  let d = (want - cur) % (Math.PI * 2);
+  if (d > Math.PI) d -= Math.PI * 2;
+  if (d < -Math.PI) d += Math.PI * 2;
+  const step = R * Math.max(0, dt || 0);
+  if (Math.abs(d) <= step) return want;
+  return cur + (d > 0 ? step : -step);
+}
+/* 用全局时钟 `time` 反推「距上次取角过了多久」——`petAimAng` 的调用点太多（19 处），
+   逐个加 dt 参数风险大，所以在这里就地算，保证与帧率无关 */
+function aimDtOf(u) {
+  const now = (typeof time === 'number') ? time : 0;
+  const d = now - (u.aimT === undefined ? now : u.aimT);
+  u.aimT = now;
+  return Math.max(0, Math.min(0.1, d));
+}
 function petAimAng(u) {
-  /* 自主作战的那几只：瞄准**自己锁定的那只敌人**（它们本来就不看你的指针，自己冲上去打） */
+  /* 自主作战的那几只：瞄准**自己锁定的那只敌人**（它们本来就不看你的指针，自己冲上去打）
+     📱 手机端：目标切换时**平滑转过去**（0.5 秒一圈），不再瞬移式锁敌 */
   if (u && petAutoFight(u.petId) && u.huntE && !u.huntE.dead) {
     const hx = u.huntE.x - u.x, hy = u.huntE.y - u.y;
-    if (Math.abs(hx) + Math.abs(hy) > 8) return Math.atan2(hy, hx);
+    if (Math.abs(hx) + Math.abs(hy) > 8) {
+      const want = Math.atan2(hy, hx);
+      if (!isTouchUI) { u.aimT = (typeof time === 'number') ? time : 0; return want; }
+      return turnToward(u.petAng === undefined ? p.face : u.petAng, want, aimDtOf(u));
+    }
   }
   if (!isTouchUI) {
     const dx = mouse.x - u.x, dy = mouse.y - u.y;
     if (Math.abs(dx) + Math.abs(dy) > 8) return Math.atan2(dy, dx);
   }
-  return p.face;
+  return p.face;    // 手机端 = 跟着角色朝向（角色朝向本身已由下面的自动索敌平滑转动）
 }
 /* 🧢 训练家无双是否进行中（唯一的判定口：出手间隔 / 水柱结算 / 回血 / 昏厥即起都读它） */
 function petMusouOn() { return isTrainer() && p.musouT > 0; }
@@ -13911,7 +13958,8 @@ function killEnemy(e) {
     orbs.push({ x: e.x, y: e.y, kind: 'chest', vx: 0, vy: 0, dead: false });   // 每个敌人都掉宝箱
     dbgHellChest++;
   }
-  /* 水法师：击杀敌人额外掉蓝球（与黄球同率 5% 起，术有专攻每层 +1/3，满层 2 倍；闪光必掉） */
+  /* 水法师：击杀敌人额外掉蓝球（基础掉率 5% = 与黄球同率；⚠️ 术有专攻本轮改为「满法力两道激光」，
+     不再加掉率；闪光必掉）。水法师的蓝球大头来自无双开局生成的那 9 颗。 */
   if (!noOrb && isWater() && (shiny || Math.random() < mpDropRate())) {
     orbs.push({ x: e.x, y: e.y, kind: 'mp', vx: 0, vy: 0, dead: false });
   }
@@ -14896,14 +14944,21 @@ const FIRE_M_CD = [5, 3.5, 2];                            // 达标之后，每�
    ⚠️ 紧接着用户又改口：「**提高 80％伤害改为提高 50％，提高的太多了有些太强了**」→ `FIRE_DMG_BUFF = 1.5`。
    最终：基础档 [1.0, 1.5, 2.0] × 2 × 1.5 = **[3.0, 4.5, 6.0]**（× 法师普攻）。
    拆成常量写：「本轮加成」只动 `FIRE_DMG_BUFF` · 「上一轮翻倍」是 `FIRE_M_DMG_MUL` 里的 2 · 基础成长单独一份。 */
-const FIRE_DMG_BUFF = 1.5;                                // 🔥 火法师火球 / 陨石伤害再提高 **50%**（用户把 80% 下调过来）
+const FIRE_DMG_BUFF = 1.5;                                // 🔥 **陨石**伤害再提高 50%（火球已改口径，不再用它）
 const FIRE_M_DMG_BASE = [1.0, 1.5, 2.0];
 const FIRE_M_DMG_MUL = 2 * FIRE_DMG_BUFF;
 const FIRE_M_DMG = FIRE_M_DMG_BASE.map(v => v * FIRE_M_DMG_MUL);
 const FIRE_M_R = (150 * 1.5) / 2;                         // 半径 = 流星群 225 的一半 = 112.5
 const FIRE_M_FX_LIFE = 0.34;                              // 🌋 陨石落地**动画**时长（伤害仍是瞬间结算，动画只是表现）
 const FIRE_BALL_BURN_T = 4;                               // 🔥 火球命中即点燃：给敌人挂上的灼烧秒数（同「燃烧刀」的 4 秒）
-const FIRE_BALL_DMG_MUL = 2 * FIRE_DMG_BUFF;                // 🔥 火球伤害：翻倍（×2）× 再提高 50%（×1.5）= ×3（在 fireBall 里乘）
+/* 🔥 火球伤害（用户本轮再改口径）：**法师普攻 + 角色等级**；**无双期间再 ×1.5**。
+   ⚠️ 同时用户要求「火法师开启无双后**不会加高伤害节奏**」→ 出手间隔不再因无双变快（见 `doCast`）。
+   改倍率只动 `FIRE_BALL_MUSOU_MUL`；基础式子改 `fireBallDmg()` 一处即可。 */
+const FIRE_BALL_MUSOU_MUL = 1.5;                          // 无双期间火球额外 ×1.5
+function fireBallDmg(base) {
+  const lv = p.lvl || 0;                                   // 玩家等级（升级面板里的等级）
+  return Math.max(1, Math.round((base + lv) * (p.musouT > 0 ? FIRE_BALL_MUSOU_MUL : 1)));
+}
 let mMeteorFx = [];                                       // 🌋 火法师·术有专攻：就地陨石的落地动画（纯视觉，不参与伤害）
 function fireMasteryCd() { return FIRE_M_CD[Math.max(0, Math.min(2, (p.mut.mastery || 1) - 1))]; }
 function fireMasteryDmgMul() { return FIRE_M_DMG[Math.max(0, Math.min(2, (p.mut.mastery || 1) - 1))]; }
@@ -14972,15 +15027,14 @@ function memShotsMax() { return Math.floor(memMax() / memCost()); }
 /* 无双光环对敌人的吸引力度（法师 / 弓箭手为 0：远程定位的无双不再把敌人吸到脸上；
    弓箭手拿「十一月雨」时无双是箭雨、根本没有光环，所以这里直接按职业返回） */
 function musouPullForce() { return (isMage() || isArcher() || isWM()) ? 0 : 900; }   // 🗡️ 武器大师的无双不吸附敌人
-/* 🔥 火法师普攻 = **穿透火球**（用户本轮：「改成和妙蛙草能量球类似的穿透伤害，而非爆炸」）——
+/* 🔥 火法师普攻 = **穿透火球**（用户：「改成和妙蛙草能量球类似的穿透伤害，而非爆炸」）——
    打穿敌人继续直线飞，**同一只只吃一次满伤**（`hitSet`），飞满射程就消失（**不再有任何爆炸/溅射**）。
-   ＋ 用户追加：**伤害翻倍**（`FIRE_BALL_DMG_MUL = 2`）；再追加「**提高 80%**」、随后又下调成「**提高 50%**」→
-   现在这个常量 = `2 × FIRE_DMG_BUFF(1.5)` = **3**，乘在这里 → 普攻与无双期间那一发都吃。 */
+   ＋ 伤害口径（用户最新）：**法师普攻 + 玩家等级**，**无双期间再 ×1.5** → 见 `fireBallDmg()`。 */
 function fireBall(ang, dmg) {
   pBullets.push({
     x: p.x + Math.cos(ang) * 20, y: p.y + Math.sin(ang) * 20,
     vx: Math.cos(ang) * 470, vy: Math.sin(ang) * 470,
-    dmg: Math.round(dmg * FIRE_BALL_DMG_MUL), splash: 0,
+    dmg: fireBallDmg(dmg), splash: 0,
     fire: true, arrow: false, chi: false, pierce: true,   // pierce = 打穿（和「能量球 / 战术目镜子弹」同一套）
     hitSet: null,
     R: fireRadius(),
@@ -15028,7 +15082,7 @@ function takeOrb(o, quiet) {
   if (o.kind === 'hp') {
     healOverflow(14);   // 绿球只回血：溢出的部分**不再**转护盾（只有夺命质变能转）
   } else if (o.kind === 'mp') {
-    p.mem = Math.min(memMax(), p.mem + WATER_ORB_MEM);   // 蓝球（法术球）：回法术条（水法师击杀掉落 · 用户本轮：60 → 30）
+    p.mem = Math.min(memMax(), p.mem + WATER_ORB_MEM);   // 蓝球（法术球）：回法术条（用户本轮：30 → 150 点）
     p.memT = 0;
   } else if (o.kind === 'chest') {
     openGoldChest(null, quiet);   // 挖金矿咯：开宝箱（全图吸取时静音，金币总额由汇总提示给出）
@@ -15088,12 +15142,14 @@ function doCast() {
   const musou = p.musouT > 0;
   /* 无双期间不消耗法术条；其余时候法术条未回满（或不够一发）→ 停止普攻，等回满后再继续 */
   if (!musou && (p.memT > 0 || p.mem < cost)) { p.atkCd = 0.12; return; }
-  /* 施法间隔 0.35s（= 上一版 0.52s 再提速 1.5 倍） */
-  p.atkCd = musou ? 0.15 : Math.max(0.12, 0.35 * (1 - effSpdRed()) * (artGot('hagen') ? 0.82 : 1)) / effSpdMul();
+  /* 施法间隔 0.35s（= 上一版 0.52s 再提速 1.5 倍）
+     ⚠️ 用户本轮：「火法师开启无双技能后**不会加高伤害节奏**」→ 无双期间**不再**把间隔压到 0.15s，
+     出手节奏与平时完全一致（无双只让火球伤害 ×1.5，见 `fireBallDmg()`）。 */
+  p.atkCd = Math.max(0.12, 0.35 * (1 - effSpdRed()) * (artGot('hagen') ? 0.82 : 1)) / effSpdMul();
   p.mageT = 0.18;   // 咏唱后坐动画
   /* 质变·多重施法：多条弹道同时射出（每条独立，各自直线飞行） */
   const lanes = 1 + (p.mut.multicast || 0);
-  const dmg = musou ? mageAtkDmg() * 2 : mageAtkDmg();
+  const dmg = mageAtkDmg();          // 火球自己再按「普攻 + 等级（×无双 1.5）」算，见 fireBallDmg()
   for (let i = 0; i < lanes; i++) {
     const off = (i - (lanes - 1) / 2) * 0.17;
     if (isThunder()) fireBolt(p.face + off, dmg);     // 雷法师：闪电球（命中触发连锁，不爆炸）
@@ -15124,8 +15180,8 @@ function refillMana(fromMusou) {
   p.memT = 0;
 }
 /* ============================================================
-   水法师（第 10 波转职）：水柱持续喷射（耗法术条）/ 无双 = 全场击退水爆
-   —— 多重施法 → 水柱数量；术有专攻 → 水柱宽度；击杀掉蓝球回法术条
+   水法师（第 5 波转职）：水柱持续喷射（耗法术条 150/秒）/ 无双 = 全场击退水爆 + 补满法力 + 场地生成 9 颗蓝球
+   —— 多重施法 → 水柱宽度（不再分裂）；术有专攻 → **法力条满时头顶左右各一道激光**
    ============================================================ */
 function isWater() { return isMage() && p.job === 'water'; }
 function isThunder() { return isMage() && p.job === 'thunder'; }
@@ -15619,22 +15675,25 @@ function updateThunderClouds(dt) {
 }
 function waterLen() { return mageRange(false) * 0.9; }                 // 水柱长度
 /* ============================================================
-   🌊 水法师重做（用户逐条点名，本轮）—— 数值都在下面这几个常量/函数里，改就改这里
+   🌊 水法师重做（用户逐条点名）—— 数值都在下面这几个常量/函数里，改就改这里
    ============================================================ */
 const WATER_W_MUL = 30;           // 多重施法：**水柱宽度 +30px/层**（水柱**不再分裂**，永远 1 条）
-const WATER_RAMP_PER_SEC = 0.08;  // 每**持续喷满 1 秒**水柱 → 水柱伤害 +8%（本波内累计，**每波开始清空**）
-const WATER_ORB_MEM = 30;         // 蓝球（法术球）回复的法术条（60 → 30）
-const WATER_ORB_PER_VOLLEY = 10;  // 累计吸取 10 颗法术球 → 朝鼠标额外射出**两道激光水柱**
-const WATER_VACUUM_MAX = 10;      // 法力见底时，一次最多吸取的蓝球数
-const WATER_BEAM_LEN = 760;       // 额外激光水柱的攻击距离 = **根源波动（380）的两倍**
-const WATER_BEAM_OFF = 26;        // 两道水柱的枪口左右偏移（参照根源波动☆的 triOff 40）
-const WATER_MUSOU_EXTRA_T = 2;    // 无双期间**每 2 秒**也额外射出两道水柱
+const WATER_RAMP_PER_SEC = 0.08;  // 每**持续喷满 1 秒**水柱 → 水柱伤害 +8%（**断档立刻清空**、**每波开始也清空**）
+const WATER_ORB_MEM = 150;        // 蓝球（法术球）回复的法术条（用户本轮：30 → **150**）
+const WATER_VACUUM_MAX = 3;       // 法力见底时一次最多吸取的蓝球数（用户本轮：10 → **3**）
+const WATER_BEAM_LEN = 760;       // 术有专攻·激光的距离 = **根源波动☆（380）的两倍**
+const WATER_HEAD_UP = 30;         // 激光枪口：模型**头顶上方的「空气处」**
+const WATER_HEAD_SIDE = 26;       // 左右各偏 26px（两道激光的枪口）
+const WATER_BEAM_DMG = [2, 3.5, 5];   // 术有专攻 1 / 2 / 3 层：每道激光 = 法师普攻 × **2 / 3.5 / 5**（最高 ×5）
+const WATER_MUSOU_ORBS = 9;       // 无双开启瞬间在场地里生成的蓝球数（每颗回 150 点法力）
+const JET_TICK = 0.5;             // 水柱每跳的结算间隔（用户本轮：0.3 秒 → **0.5 秒**）
 function waterWidth() { return 26 + WATER_W_MUL * (p.mut.multicast || 0); }   // 水柱宽度（多重施法 +30/层）
 function waterLanes() { return 1; }                                          // ⚠️ 多重施法**不再分裂**水柱（用户要求）
 function waterRampSec() { return Math.floor(p.waterRampT || 0); }            // 本波已累计的**整秒**喷射时间
 function waterRampMul() { return 1 + WATER_RAMP_PER_SEC * waterRampSec(); }  // 伤害倍率（1.00 → 每秒 +0.08）
-/* 💧 单道水柱每跳伤害 = 法师普攻 × 1.2 × 本波喷射加成（多柱已不存在，见 waterLanes） */
-function waterTickDmg() { return Math.max(2, Math.round(mageAtkDmg() * 1.2 * waterRampMul())); }
+/* 💧 单道水柱每跳伤害 = **法师普攻 × 喷射加成**（用户本轮去掉了旧的 ×1.2；因喷射加成从 0 起算，
+   用户没有「见底自动吸球」以外的额外倍率来源） */
+function waterTickDmg() { return Math.max(2, Math.round(mageAtkDmg() * waterRampMul())); }
 /* 水柱耗蓝速率：用户本轮要求 **150/秒** → 「满魔能 450 恰好连喷 3 秒」；
    初始法术条 200 → 200/150 ≈ 1.33 秒（无魔能词条时的持续时间） */
 const JET_FULL_MEM = 450, JET_FULL_SECS = 3;
@@ -15645,12 +15704,11 @@ function waterMuzzle() {
   const off = 36;   // 法杖球局部 (22,0) + 杖身偏移 14
   return { x: p.x + Math.cos(p.face) * off, y: p.y + Math.sin(p.face) * off - 2 };
 }
-/* 蓝球（法术球）掉率：**由「术有专攻」决定**（用户要求）——
-   0 层不掉 · 1 层 1/2 · 2 层 3/4 · 满级（3 层）**必定掉落**；闪光敌人仍然必掉（见 killEnemy） */
-function mpDropRate() {
-  const m = Math.min(3, p.mut.mastery || 0);
-  return m <= 0 ? 0 : Math.min(1, 0.5 + 0.25 * (m - 1));
-}
+/* 蓝球（法术球）掉率 ⚠️ **用户本轮把「术有专攻」的效果从「蓝球掉率」改成了「满法力两道激光」**，
+   所以掉率不再随层数变化 → 回到**与黄球同率的基础值 5%**（历史口径）；闪光敌人仍然必掉（见 killEnemy）。
+   水法师的蓝球经济现在主要靠「无双开局生成的 9 颗」（见 spawnWaterMusouOrbs）。 */
+const MP_BASE_DROP = 0.05;
+function mpDropRate() { return MP_BASE_DROP; }
 /* 点到线段的距离（水柱命中判定） */
 function segDist(px2, py2, x1, y1, x2, y2) {
   const dx = x2 - x1, dy = y2 - y1;
@@ -15666,10 +15724,12 @@ function updateWaterJet(dt) {
      只清 `jetOn` 的话，断喷（蓝耗见底 / 切职业 / 读档）后重新起喷时，
      「上一轮记录里的敌人」会被当成已经吃过「刚压到的那一口」→ 要等 0.3s 节拍才掉第一滴血。
      （`p.jetNew` 是历史死字段：只被赋值、全文件没有任何读取点，已删。） */
-  if (!isWater() || !p.alive) { p.jetOn = 0; p.jetPrev = null; return; }
+  if (!isWater() || !p.alive) { p.jetOn = 0; p.jetPrev = null; p.waterRampT = 0; return; }
   const canJet = p.memT <= 0 && p.mem > 0;
-  if (!canJet) { p.jetOn = 0; p.jetPrev = null; return; }
-  if (!p.jetOn) { p.jetOn = 1; p.jetTick = 0.3; }   // 起喷：首次周期结算在 0.3s 后（起喷瞬间由"命中即伤"补上）
+  /* ⚠️ 用户本轮：「**若断档则清空加成**」→ 停喷（没蓝 / 回复中）的那一帧就把喷射加成归零，
+     不再是「只按每波清」；重新起喷后从 ×1.00 重新往上累。 */
+  if (!canJet) { p.jetOn = 0; p.jetPrev = null; p.waterRampT = 0; return; }
+  if (!p.jetOn) { p.jetOn = 1; p.jetTick = JET_TICK; }   // 起喷：首次周期结算在 0.5s 后（起喷瞬间由"命中即伤"补上）
   /* 持续消耗法术条：150/秒（满魔能 450 恰好连喷 3 秒；初始 200 自动为 ≈1.33 秒） */
   p.mem = Math.max(0, p.mem - waterDrainRate() * dt);
   /* 🌊 本波喷射时长累计：**每持续喷满 1 秒，水柱伤害 +8%**（`waterRampMul()`，每波开始由 startWave 清空） */
@@ -15686,6 +15746,7 @@ function updateWaterJet(dt) {
       if (p.mem <= 0) {                       // 一颗都没有（或吸完仍是 0）→ 进 2 秒回复、水柱中断
         p.memT = memFullT();
         p.jetOn = 0; p.jetPrev = null;
+        p.waterRampT = 0;                     // 断档 → 喷射加成清空（用户要求）
         tone(180, 90, 'square', 0.10, 0.07);
         return;
       }
@@ -15724,10 +15785,10 @@ function updateWaterJet(dt) {
     burst(e.x, e.y, 3 + h.n, '#8fd8ff', 200);
   }
   p.jetPrev = new Set(hits.keys());
-  /* 每 0.3s 周期结算 */
+  /* 每 0.5s 周期结算（用户本轮：0.3 秒 → 0.5 秒） */
   p.jetTick -= dt;
   if (p.jetTick <= 0) {
-    p.jetTick = 0.3;
+    p.jetTick = JET_TICK;
     dbgWaterTicks++;
     const jd = waterTickDmg();
     for (const [e, h] of hits) jetHitLanes(e, h, jd);   // 多柱各自独立结算
@@ -15740,12 +15801,15 @@ function updateWaterJet(dt) {
   }
 }
 /* ============================================================
-   🌊 法术球吸取 ＋ 额外激光水柱（水法师重做 · 用户逐条点名）
-   ① `waterVacuumOrbs(max)`：法术条见底时**自动吸取全图蓝球**（一次至多 max 颗，就近吸）；
-      **每累计 10 颗** → `waterExtraBeams()` 朝鼠标方向额外射出两道激光水柱
-   ② `waterExtraBeams()`：实现方式照**根源波动☆**那套「两个枪口 → 同一个落点」，但
-      **攻击距离 = 根源波动（380）的两倍 = 760**；两道共用一个 `hitSet`（同一只敌人只吃一次），
-      伤害 = 当前水柱每跳伤害（含本波喷射加成）；视觉复用光炮那套线段数组（染色成水蓝）
+   🌊 法术球吸取 ＋ 术有专攻·激光水柱（水法师重做 · 用户逐条点名）
+   ① `waterVacuumOrbs(max)`：法术条见底时**自动吸取全图蓝球**（用户本轮：一次至多 **3** 颗，就近吸）
+   ② `checkWaterMasteryBeams()` / `waterMasteryBeams()`：**术有专攻**（本轮改口径）——
+      **每当法力条涨满的那一刻**，从模型**头顶左右两侧的「空气处」**各射出**一道**激光水柱
+      （枪口 = 头顶上方 ±26px；两道**各自独立结算**，同一只敌人可被两道各打一次）
+      · 实现效果与**根源波动☆**相同：两个枪口射向**同一个落点**（鼠标方向，超出射程就截断）
+      · 距离 = **根源波动☆（380）的两倍 = 760**；宽度沿用 `waterWidth()`
+      · 每道伤害 = **法师普攻 × 2 / 3.5 / 5**（术有专攻 1 / 2 / 3 层，最高 ×5）**× 喷射加成**
+   ③ `spawnWaterMusouOrbs(n)`：**无双开启瞬间**在场地里生成 **9 颗蓝球**（每颗回 150 点法力）
    ============================================================ */
 function waterVacuumOrbs(max) {
   const list = orbs.filter(o => !o.dead && o.kind === 'mp');
@@ -15758,35 +15822,49 @@ function waterVacuumOrbs(max) {
   }
   dbgWaterVacuum += n;
   addText(p.x, p.y - 56, '💧 吸取 ' + n + ' 颗法术球', 17, '#8fd8ff', '#04203a');
-  /* 每累计 10 颗 → 额外两道激光水柱（跨多次吸取累计；见 p.waterOrbN） */
-  p.waterOrbN = (p.waterOrbN || 0) + n;
-  while (p.waterOrbN >= WATER_ORB_PER_VOLLEY) {
-    p.waterOrbN -= WATER_ORB_PER_VOLLEY;
-    waterExtraBeams();
-  }
+  p.waterOrbN = (p.waterOrbN || 0) + n;   // 仅诊断读数（用户本轮起：吸取不再触发激光，激光改由「法力条满」触发）
   return n;
 }
-function waterExtraBeams() {
+/* 术有专攻·激光的单道伤害 = 法师普攻 × [2 / 3.5 / 5]（按层数）× 喷射加成 */
+function waterMasteryBeamDmg() {
+  const m = Math.max(1, Math.min(WATER_BEAM_DMG.length, p.mut.mastery || 0));
+  return Math.max(2, Math.round(mageAtkDmg() * WATER_BEAM_DMG[m - 1] * waterRampMul()));
+}
+/* 法力条「涨满的那一刻」触发（上升沿；法力条满的一瞬间连射两道，之后要等它再次涨满） */
+function checkWaterMasteryBeams() {
+  if (!isWater() || !p.alive) { p.waterFullPrev = 0; return 0; }
+  const full = (p.memT <= 0 && p.mem >= memMax() - 0.001) ? 1 : 0;
+  const was = p.waterFullPrev || 0;
+  p.waterFullPrev = full;
+  if (!full || was) return 0;
+  return waterMasteryBeams();
+}
+/* 两道激光水柱：枪口在**模型头顶左右两侧的「空气处」**，两道**各自独立结算**（同一敌人可吃两次） */
+function waterMasteryBeams() {
   if (!isWater() || !p.alive) return 0;
-  const L = WATER_BEAM_LEN, Wd = waterWidth(), dmg = waterTickDmg();
-  const mz = waterMuzzle();
+  const m = Math.min(WATER_BEAM_DMG.length, p.mut.mastery || 0);
+  if (m <= 0) return 0;                       // 没拿术有专攻 → 没有这道激光
+  const L = WATER_BEAM_LEN, Wd = waterWidth(), dmg = waterMasteryBeamDmg();
+  const hx = p.x, hy = p.y - WATER_HEAD_UP;   // 头顶上方的「空气处」
   /* 落点 = 鼠标所在的那个世界点；比 760 还远就落在最远处（和根源波动☆一样「朝指针方向」打） */
   let tx = Math.max(26, Math.min(W - 26, mouse.x));
   let ty = Math.max(26, Math.min(H - 26, mouse.y));
-  let dx = tx - mz.x, dy = ty - mz.y, dd = Math.hypot(dx, dy) || 1;
-  if (dd > L) { dx = dx / dd * L; dy = dy / dd * L; tx = mz.x + dx; ty = mz.y + dy; dd = L; }
+  let dx = tx - hx, dy = ty - hy, dd = Math.hypot(dx, dy) || 1;
+  if (dd > L) { dx = dx / dd * L; dy = dy / dd * L; tx = hx + dx; ty = hy + dy; dd = L; }
   const ux = dx / dd, uy = dy / dd, px = -uy, py = ux;
-  const hitSet = new Set(), segs = [];
-  for (const off of [-WATER_BEAM_OFF, WATER_BEAM_OFF]) {   // 两个枪口 → 同一个落点
-    const sx = mz.x + px * off, sy = mz.y + py * off;
+  const segs = [];
+  let hits = 0;
+  for (const off of [-WATER_HEAD_SIDE, WATER_HEAD_SIDE]) {   // 左右两个枪口 → 同一个落点
+    const sx = hx + px * off, sy = hy + py * off;
     segs.push({ x1: sx, y1: sy, x2: tx, y2: ty, bounce: false });
+    /* ⚠️ 每一道**独立计算**：各自一份 hitSet、各自过一遍 hitEnemy（同一只敌人被两道各打一次） */
     for (const e of enemies) {
-      if (e.dead || hitSet.has(e)) continue;
+      if (e.dead) continue;
       if (segDist(e.x, e.y, sx, sy, tx, ty) <= Wd / 2 + e.r) {
-        hitSet.add(e);
         const ex = e.x - sx, ey = e.y - sy, ed = Math.hypot(ex, ey) || 1;
         hitEnemy(e, ex / ed, ey / ed, 320, dmg);
         burst(e.x, e.y, 8, '#8fd8ff', 320);
+        hits++;
       }
     }
   }
@@ -15794,9 +15872,27 @@ function waterExtraBeams() {
   rings.push({ x: tx, y: ty, r: 12, vr: 620, life: 0.3, max: 0.3, color: '#8fd8ff', width: 6 });
   burst(tx, ty, 20, '#bfe9ff', 420);
   dbgWaterExtra++;
+  dbgWaterBeamHits += hits;
   shake = Math.max(shake, 4);
   tone(880, 1320, 'sine', 0.10, 0.06);
-  return hitSet.size;
+  return hits;
+}
+/* 🌊 无双：在场地里生成 n 颗蓝球（走散在场地内、离玩家有点距离 → 需要跑过去捡/靠吸球） */
+function spawnWaterMusouOrbs(n) {
+  let made = 0;
+  for (let i = 0; i < n; i++) {
+    let x = 0, y = 0, ok = false;
+    for (let t = 0; t < 24; t++) {                         // 最多重摇 24 次，避免叠在玩家脚下
+      x = rnd(140, W - 140); y = rnd(140, H - 140);
+      if (Math.hypot(x - p.x, y - p.y) > 260) { ok = true; break; }
+    }
+    if (!ok) continue;
+    orbs.push({ x, y, kind: 'mp', vx: 0, vy: 0, dead: false });   // 与击杀掉落的蓝球完全同款（原地不动）
+    rings.push({ x, y, r: 6, vr: 420, life: 0.34, max: 0.34, color: '#8fd8ff', width: 3 });
+    made++;
+  }
+  dbgWaterMusouOrbs += made;
+  return made;
 }
 /* 水法师无双：以**屏幕中心**爆发、**覆盖全屏**的水爆（全场持续击退 + 伤害） */
 function castWaterBurst() {
@@ -16322,6 +16418,175 @@ function syncMetaBtn() {
   if (b) b.textContent = '🌟 养成' + (meta.bank > 0 ? '（💠' + meta.bank + '）' : '');
 }
 
+/* ══════════════════════════════════════════════════════════════════════════
+   💾 局外存档「导入 / 导出」（主页「📖 图鉴」面板里 · 用户要求）
+   · 导出：把局外存档按**固定顺序**摊平成一串十进制数字 → 十进制转 **64 进制** → 一段短码
+   · 导入：反向拆回十进制 → 按字段**覆盖**原存档（⚠️ 界面二次确认「原存档会被删除，请先备份」）
+   · ⚠️ **顺序与位宽不要改**（改了老存档码就解不开）；以后新增内容请用**预留段**
+     （`treeRes` = 后续养成项/技能书等级 · `dexRes` = 后续闪光图鉴相关）
+   ══════════════════════════════════════════════════════════════════════════ */
+const SAVE64 = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-_';   // 64 个字符（不含 + / =，URL 安全）
+const SAVE_PREFIX = 'GM';          // 码前缀（校验用）；内部还有 1 位格式版本号
+const SAVE_VER = 1;
+/* 字段表：[名字, 每槽位位数, 槽位数]；总位数 = Σ (w × n) */
+const SAVE_LAYOUT = [
+  ['ver',     1, 2],     // ① 格式版本（1）+ 1 位备用
+  ['tree',    2, 12],    // ② 局外养成等级（当前 7 项 → 留到 12 项）
+  ['treeRes', 1, 16],    // ③ 预留：后续新增的养成项 / 技能书等级
+  ['dex',     1, 24],    // ④ 闪光图鉴（当前 12 只 → 留到 24 只）
+  ['dexOn',   1, 24],    // ⑤ 闪光外观启用
+  ['dexRes',  1, 24],    // ⑥ 预留：后续新增图鉴 / 技能书开关
+  ['runs',    6, 1],     // ⑦ 总局数（6 位十进制）
+  ['bank',    10, 1],    // ⑧ 传承金币（10 位）
+  ['earned',  10, 1],    // ⑨ 累计带出（10 位）
+  ['sets',    1, 3],     // ⑩ 三职业套装解锁
+  ['setsUse', 1, 3],     // ⑪ 套装启用
+  ['flag',    1, 2],     // ⑫ egg / setAll 两个一次性标记
+];
+const SAVE_DIGITS = SAVE_LAYOUT.reduce((a, f) => a + f[1] * f[2], 0);   // 总位数（148）
+const SAVE_CK = 2;                                                      // 末尾 2 位校验数字
+const SAVE_OFF = (() => {
+  const o = {}; let p = 0;
+  for (const [k, w, n] of SAVE_LAYOUT) { o[k] = { p, w, n }; p += w * n; }
+  return o;
+})();
+function savePad(v, w) {
+  const mx = Math.pow(10, w) - 1;
+  return String(Math.max(0, Math.min(mx, Math.floor(Number(v) || 0)))).padStart(w, '0');
+}
+/* 摊平成一串十进制数字（每位一个字符，方便整体换 64 进制） */
+function saveDigits() {
+  let s = '';
+  s += savePad(SAVE_VER, 1) + '0';                                        // ver + 备用
+  for (let i = 0; i < 12; i++) s += savePad(META_TREE[i] ? metaLv(META_TREE[i].id) : 0, 2);
+  s += '0'.repeat(16);                                                    // 预留（养成 / 技能书）
+  for (let i = 0; i < 24; i++) s += (SHINY_SPECIES[i] && shinyGot(SHINY_SPECIES[i])) ? '1' : '0';
+  for (let i = 0; i < 24; i++) s += (SHINY_SPECIES[i] && shinyOn(SHINY_SPECIES[i])) ? '1' : '0';
+  s += '0'.repeat(24);                                                    // 预留（图鉴）
+  s += savePad(meta.runs, 6) + savePad(meta.bank, 10) + savePad(meta.earned, 10);
+  for (const c of CLASS_SETS) s += meta.sets[c.role] ? '1' : '0';
+  for (const c of CLASS_SETS) s += meta.use[c.role] ? '1' : '0';
+  s += (meta.egg ? '1' : '0') + (meta.setAll ? '1' : '0');
+  return s;
+}
+/* 校验：按位置加权求和 → 2 位十进制（防手抄漏一位 / 抄错一位） */
+function saveCk(s) {
+  let a = 0;
+  for (let i = 0; i < s.length; i++) a = (a + (s.charCodeAt(i) - 48) * ((i % 9) + 1)) % 100;
+  return String(a).padStart(2, '0');
+}
+function decToB64(dec) {
+  let n = BigInt(dec), out = '';
+  const B = 64n;
+  while (n > 0n) { out = SAVE64[Number(n % B)] + out; n = n / B; }
+  return out || '0';
+}
+function b64ToDec(str) {
+  let n = 0n;
+  const B = 64n;
+  for (const ch of str) {
+    const v = SAVE64.indexOf(ch);
+    if (v < 0) return null;
+    n = n * B + BigInt(v);
+  }
+  return n.toString();
+}
+function exportSaveCode() { const d = saveDigits(); return SAVE_PREFIX + decToB64(d + saveCk(d)); }
+/* 解码（含校验）；失败返回 { ok:0, why } */
+function decodeSaveCode(code) {
+  const raw = String(code || '').trim().replace(/\s+/g, '');
+  if (!raw) return { ok: 0, why: '存档码是空的' };
+  if (raw.slice(0, SAVE_PREFIX.length) !== SAVE_PREFIX) return { ok: 0, why: '存档码格式不对（应以 ' + SAVE_PREFIX + ' 开头）' };
+  const dec = b64ToDec(raw.slice(SAVE_PREFIX.length));
+  if (dec === null) return { ok: 0, why: '存档码里有非法字符（只允许 0-9 A-Z a-z - _）' };
+  const all = dec.padStart(SAVE_DIGITS + SAVE_CK, '0');
+  if (all.length !== SAVE_DIGITS + SAVE_CK) return { ok: 0, why: '存档码长度不对（可能少抄了一段）' };
+  const dig = all.slice(0, SAVE_DIGITS), ck = all.slice(SAVE_DIGITS);
+  if (saveCk(dig) !== ck) return { ok: 0, why: '存档码校验失败（抄漏/抄错了一位？）' };
+  if (Number(dig[SAVE_OFF.ver.p]) !== SAVE_VER) return { ok: 0, why: '存档码版本不认识（v' + dig[SAVE_OFF.ver.p] + '）' };
+  const seg = (k, i) => dig.substr(SAVE_OFF[k].p + SAVE_OFF[k].w * i, SAVE_OFF[k].w);
+  const num = (k, i) => Number(seg(k, i));
+  const wide = (k) => Number(dig.substr(SAVE_OFF[k].p, SAVE_OFF[k].w * SAVE_OFF[k].n));   // 单值字段（位数 × 槽数）
+  const tree = {}, dex = {}, dexOn = {};
+  META_TREE.forEach((n, i) => { tree[n.id] = num('tree', i); });                  // 多余槽位留给以后新增的养成项
+  SHINY_SPECIES.forEach((id, i) => {
+    if (num('dex', i)) { dex[id] = 1; if (num('dexOn', i)) dexOn[id] = 1; }
+  });
+  const sets = {}, use = {};
+  CLASS_SETS.forEach((c, i) => {
+    sets[c.role] = num('sets', i) ? 1 : 0;
+    use[c.role] = sets[c.role] && num('setsUse', i) ? 1 : 0;
+  });
+  return {
+    ok: 1, why: '', digits: dig,
+    data: {
+      tree, dex, dexOn, sets, use,
+      runs: wide('runs'), bank: wide('bank'), earned: wide('earned'),
+      egg: num('flag', 0), setAll: num('flag', 1),
+    },
+  };
+}
+/* 覆盖式导入（⚠️ 会**清掉当前局外存档**再写入解码结果） */
+function applySaveCode(code) {
+  const r = decodeSaveCode(code);
+  if (!r.ok) return r;
+  const d = r.data;
+  meta.tree = {}; meta.sets = {}; meta.use = {}; meta.shinyDex = {}; meta.shinyOn = {};
+  for (const n of META_TREE) meta.tree[n.id] = Math.max(0, Math.min(n.max, d.tree[n.id] || 0));
+  meta.shinyDex = Object.assign({}, d.dex);
+  meta.shinyOn = Object.assign({}, d.dexOn);
+  for (const c of CLASS_SETS) { meta.sets[c.role] = d.sets[c.role] ? 1 : 0; meta.use[c.role] = d.use[c.role] ? 1 : 0; }
+  meta.runs = Math.max(0, d.runs | 0);
+  meta.bank = Math.max(0, d.bank | 0);
+  meta.earned = Math.max(0, d.earned | 0);
+  meta.egg = d.egg ? 1 : 0;
+  meta.setAll = d.setAll ? 1 : 0;
+  metaSave(); syncMetaBtn();
+  return r;
+}
+/* —— 图鉴面板里的三个按钮 —— */
+let saveImportArmed = 0;      // 「导入」第一次点击只**警告**，第二次才真的覆盖
+function saveTip(txt, col) { const t = $('save-tip'); if (t) { t.innerHTML = txt; t.style.color = col || '#a9c39a'; } }
+function saveImportReset() { saveImportArmed = 0; const b = $('btn-save-import'); if (b) b.textContent = '📥 导入存档'; }
+{ const b = $('btn-save-export'); if (b) b.addEventListener('click', () => {
+  const code = exportSaveCode();
+  const box = $('save-code');
+  if (box) { box.value = code; if (box.focus) box.focus(); if (box.select) box.select(); }
+  saveTip('✅ 已生成存档码（<b>' + code.length + '</b> 个字符）——请把它存到聊天记录 / 备忘录里，换设备时粘回来即可。', '#8ff0e8');
+  saveImportReset();
+}); }
+{ const b = $('btn-save-copy'); if (b) b.addEventListener('click', () => {
+  const box = $('save-code');
+  const code = box ? String(box.value || '').trim() : '';
+  if (!code) { saveTip('⚠️ 先点「📤 导出存档」生成一段存档码，再复制。', '#e0a06a'); return; }
+  const manual = () => { if (box) { if (box.focus) box.focus(); if (box.select) box.select(); } saveTip('⚠️ 浏览器不给自动复制，已帮你**选中**：按 Ctrl+C（手机长按）复制。', '#e0a06a'); };
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(code).then(() => saveTip('✅ 已复制到剪贴板，粘到安全的地方保存即可。', '#8ff0e8'), manual);
+    else manual();
+  } catch (e) { manual(); }
+}); }
+{ const b = $('btn-save-import'); if (b) b.addEventListener('click', () => {
+  const box = $('save-code');
+  const code = box ? String(box.value || '').trim() : '';
+  if (!saveImportArmed) {                       // 第一次：只警告，先让玩家备份
+    saveImportArmed = 1;
+    b.textContent = '⚠️ 确认导入（覆盖原存档）';
+    saveTip('⚠️ <b>导入会删除当前存档！</b>请先点「📤 导出存档」把现在的进度<b>备份</b>好（或确认不再需要），' +
+            '再点一次「⚠️ 确认导入（覆盖原存档）」。<br><span style="color:#8d8a77;">导入内容：养成等级 · 闪光图鉴 · 局数 · 传承金币 · 套装解锁（不含当前这一局）。</span>', '#ff8a6a');
+    return;
+  }
+  const r = applySaveCode(code);
+  saveImportReset();
+  if (!r.ok) { saveTip('❌ 导入失败：' + r.why, '#ff8a6a'); return; }
+  renderMeta(); renderShinyDex();
+  const d = r.data;
+  saveTip('✅ 导入成功！传承金币 <b>' + d.bank + '</b> · 局数 <b>' + d.runs + '</b> · 闪光图鉴 <b>' +
+          Object.keys(d.dex).length + '</b> 只 · 养成等级合计 <b>' +
+          META_TREE.reduce((a, n) => a + (d.tree[n.id] || 0), 0) + '</b> 级。原存档已被这次导入覆盖。', '#8ff0e8');
+  if (sfx && sfx.pick) sfx.pick();
+  flashG = Math.max(flashG, 0.15);
+}); }
+
 function saveGame(nextWave, artDueWv) {
   const data = {
     v: 1,
@@ -16605,7 +16870,7 @@ function resetRun() {
   thunderClouds = []; arcs = [];
   p.rageT = 0; p.rageBonus = 0; p.manapoolT = 0; p.lavaTick = 0; p.lastBlink = 0;
   p.jobPend = 0; p.jetOn = 0; p.jetTick = 0; p.waterBurstT = 0;   // 转职状态跨局保留（不重置 p.job）
-  p.waterRampT = 0; p.waterOrbN = 0; p.waterExtraT = 0;           // 🌊 水法师重做：喷射加成 / 吸取计数 / 无双额外水柱计时
+  p.waterRampT = 0; p.waterOrbN = 0; p.waterFullPrev = 0;         // 🌊 水法师：喷射加成 / 吸取计数 / 「法力条满」上升沿标记
   p.lightJetOn = 0; p.lightJetTick = 0; p.lightJetPrev = null; lightBeams = [];
   p.mag = gunMagMax(); p.reloadT = 0; p.nadeN = 0; p.deployCd = 0;
   allyUnits = []; gunNades = []; gunRockets = []; sidekickCd = 0;
@@ -16613,7 +16878,7 @@ function resetRun() {
   dbgCarShots = 0; dbgCarRockets = 0; dbgCarHeal = 0;
   dbgHellEv = 0; dbgHellPits = 0; dbgHellRing = 0; dbgGreenBrute = 0; dbgHellChest = 0; dbgHellPitsHit = 0;
   dbgWaterTicks = 0; dbgWaterBursts = 0; dbgWaterHits = 0; dbgWaterLaneN = 0; p.jetPrev = null;
-  dbgWaterVacuum = 0; dbgWaterExtra = 0;
+  dbgWaterVacuum = 0; dbgWaterExtra = 0; dbgWaterBeamHits = 0; dbgWaterMusouOrbs = 0;
   dbgBolts = 0; dbgChainN = 0; dbgThunHits = 0; dbgThunExec = 0; dbgThunExecWait = 0; dbgClouds = 0; dbgCloudBolts = 0; dbgStrikeN = 0; dbgStrikeHits = 0; thunderClouds = []; arcs = []; thunBossCd = 0;
   dbgBlinkShocks = 0;
   dbgLunges = 0; dbgJumps = 0; dbgSlams = 0; dbgGenShots = 0;
@@ -21605,13 +21870,19 @@ function updateGame(dt, rawDt) {
   }
   p.walk += (Math.abs(kdMove.x) + Math.abs(kdMove.y)) * dt * 260 + (p.dashT > 0 ? 60 : 0);
 
-  /* 攻击朝向：桌面 = 鼠标指针方向；触屏 = 自动锁定最近敌人 */
+  /* 攻击朝向：桌面 = 鼠标指针方向；触屏 = 自动锁定最近敌人
+     📱 用户要求：手机端**线性攻击**（水法师水柱 / 水枪链 / 喷射火焰 / 光炮 / 子弹…都吃 `p.face`）
+     不许「瞬移式锁敌」——锁定最近敌人时**按角度速度转过去**（`AIM_TURN_RATE`，0.5 秒一圈）；
+     骑士仍然**朝向 = 移动方向**且不延迟（盾挡正前方 / 撞击方向都必须跟手）。 */
   if (isTouchUI) {
     const ta = nearestAlive(99999);
-    /* 骑士在手机端：朝向 = **移动方向**（盾挡正前方、撞击也按移动方向算） */
-    if (isKnight() && (kd.x || kd.y)) p.face = Math.atan2(kd.y, kd.x);
-    else if (ta) p.face = Math.atan2(ta.y - p.y, ta.x - p.x);
-    else if (kd.x || kd.y) p.face = Math.atan2(kd.y, kd.x);
+    if (isKnight()) {
+      if (kd.x || kd.y) p.face = Math.atan2(kd.y, kd.x);
+    } else if (ta) {
+      p.face = turnToward(p.face, Math.atan2(ta.y - p.y, ta.x - p.x), dt);
+    } else if (kd.x || kd.y) {
+      p.face = turnToward(p.face, Math.atan2(kd.y, kd.x), dt);
+    }
   } else {
     p.face = Math.atan2(mouse.y - p.y, mouse.x - p.x);
   }
@@ -21886,7 +22157,9 @@ function updateGame(dt, rawDt) {
           castWaterBurst();
           p.musouT = musouMaxT();
           p.waterBurstT = 0.18;
-          p.waterExtraT = WATER_MUSOU_EXTRA_T;   // 🌊 无双期间**每 2 秒**额外两道激光水柱（用户要求）
+          /* 🌊 用户本轮：无双开启瞬间**立刻补满法力条**（上面的 refillMana(true) 已做）
+             ＋ 在场地里生成 9 颗蓝球（每颗回 150 点法力；见 spawnWaterMusouOrbs） */
+          spawnWaterMusouOrbs(WATER_MUSOU_ORBS);
         } else if (isLight()) {
           /* 光法师无双：持续光波（正常无双时间；光波由 updateLightWave 每帧结算，且不可反射） */
           p.musouT = musouMaxT();
@@ -21968,9 +22241,6 @@ function updateGame(dt, rawDt) {
         if (n) { dbgWaterBursts++; tone(420, 240, 'sine', 0.08, 0.04); }
         rings.push({ x: cx, y: cy, r: 24, vr: 1900, life: 0.34, max: 0.34, color: '#8fd8ff', width: 6 });
       }
-      /* 🌊 无双期间**每 2 秒**额外射出两道激光水柱（朝鼠标方向 · 见 waterExtraBeams） */
-      p.waterExtraT = (p.waterExtraT || 0) - dt;
-      if (p.waterExtraT <= 0) { p.waterExtraT = WATER_MUSOU_EXTRA_T; waterExtraBeams(); }
     }
     if (p.musouT <= 0) { flashG = 0.2; addRing(p.x, p.y, '#fff', 8); }
   }
@@ -22441,7 +22711,8 @@ function updateGame(dt, rawDt) {
   updateHellHazards(dt);               // 地狱奇遇：法师火坑 / 炽热擂台边缘火海
   updateLavaRing(dt);                  // 法师质变·熔岩结界
   tickFireMastery(dt);                 // 🌋 火法师·术有专攻：把「灼烧满 2 秒」的敌人就地砸一颗陨石
-  updateWaterJet(dt);                  // 水法师：水柱喷射（耗法术条 + 每 0.3s 伤害）
+  checkWaterMasteryBeams();            // 🌊 水法师·术有专攻：法力条**涨满的那一刻**射出头顶左右两道激光（必须在喷射扣蓝之前判定）
+  updateWaterJet(dt);                  // 水法师：水柱喷射（耗法术条 + 每 0.5s 伤害）
   updateLightAttack();                 // 光法师：法术条一满即倾泻全部法力打出光炮
   updateLightWave(dt);                 // 光法师无双：持续光波（每 0.3s 结算，不可反射）
   updateLightBeams(dt);                // 光炮视觉淡出
@@ -25613,7 +25884,9 @@ window.__musouDebug = () => ({ kills, score, coins, wave, state, alive: p.alive,
      ＋ 🔥 火球命中点燃的次数与时长 / 陨石落地动画的在场数与寿命 */
   mMeteors: dbgMasteryMeteors, mR: FIRE_M_R, mCd: fireMasteryCd(), mDmgMul: fireMasteryDmgMul(), mBurnT: FIRE_M_BURN_T,
   fireBurnN: dbgFireBurn, fireBurnT: FIRE_BALL_BURN_T, mFxN: mMeteorFx.length, mFxLife: FIRE_M_FX_LIFE,
-  fireDmgMul: FIRE_BALL_DMG_MUL, mDmgBase: FIRE_M_DMG_BASE.slice(), mDmgMul2: FIRE_M_DMG_MUL, fireDmgBuff: FIRE_DMG_BUFF,
+  /* 🔥 火球（新口径）：伤害 = 法师普攻 + 玩家等级，无双时再 ×`fireBallMusouMul` */
+  fireBallMusouMul: FIRE_BALL_MUSOU_MUL, fireBallLv: p.lvl || 0, fireBallNow: fireBallDmg(mageAtkDmg()),
+  mDmgBase: FIRE_M_DMG_BASE.slice(), mDmgMul2: FIRE_M_DMG_MUL, fireDmgBuff: FIRE_DMG_BUFF,
   multicast: (p.mut.multicast || 0), lanes: 1 + (p.mut.multicast || 0), mastery: (p.mut.mastery || 0),
   job: p.job || '', jobPend: p.jobPend || 0, water: isWater() ? 1 : 0, jetOn: p.jetOn || 0,
   weapon: p.weapon || '', weaponPend: p.weaponPend || 0, gunner: isGunner() ? 1 : 0, cardKing: isCard() ? 1 : 0, arrowN: dbgArrows,
@@ -25670,10 +25943,12 @@ window.__musouDebug = () => ({ kills, score, coins, wave, state, alive: p.alive,
   allies: allyUnits.filter(u => !u.dead).map(u => ({ k: u.kind, hp: Math.round(u.hp), maxhp: u.maxhp, x: Math.round(u.x), y: Math.round(u.y), invT: +(u.invT || 0).toFixed(2) })),
   rockets: gunRockets.length, nadeLive: gunNades.length,
   waterTicks: dbgWaterTicks, waterHits: dbgWaterHits, waterLaneN: dbgWaterLaneN, waterBursts: dbgWaterBursts, waterW: waterWidth(), waterL: Math.round(waterLen()), waterLanes: waterLanes(), waterDmg: waterTickDmg(), mpRate: +mpDropRate().toFixed(4),
-  /* 🌊 水法师重做读数：喷射时长累计 / 伤害加成倍率 / 蓝球回复量 / 吸取与额外水柱计数 / 额外水柱长度 */
+  /* 🌊 水法师读数：喷射时长累计 / 伤害加成倍率 / 蓝球回复量 / 吸取与激光计数 / 激光长度与伤害 / 无双蓝球 */
   waterRampT: +(p.waterRampT || 0).toFixed(2), waterRampSec: waterRampSec(), waterMul: +waterRampMul().toFixed(3),
   waterOrbMem: WATER_ORB_MEM, waterOrbN: p.waterOrbN || 0, waterVacuum: dbgWaterVacuum, waterExtra: dbgWaterExtra,
-  waterBeamLen: WATER_BEAM_LEN, waterExtraT: +(p.waterExtraT || 0).toFixed(2), waterBeams: lightBeams.filter(b => b.water).length,
+  waterBeamDmg: (isWater() && (p.mut.mastery || 0) > 0) ? waterMasteryBeamDmg() : 0,
+  waterBeamHits: dbgWaterBeamHits, waterMusouOrbs: dbgWaterMusouOrbs, waterFull: p.waterFullPrev ? 1 : 0,
+  waterBeamLen: WATER_BEAM_LEN, waterBeams: lightBeams.filter(b => b.water).length, jetTick: JET_TICK,
   light: isLight() ? 1 : 0, lightShots: dbgLightShots, lightHits: dbgLightHits, lightW: lightWidth(), lightFanN: lightFanN(), lightFanDeg: lightFanDeg(),
   lightFullT: +lightMemFullT().toFixed(2), lightBeamN: lightBeams.length, lightSegN: lightBeams.length ? lightBeams[lightBeams.length - 1].segs.length : 0,
   lightBounces: dbgLightBounces, lightAngles: dbgLightAngles.slice(),
@@ -26086,6 +26361,14 @@ window.__musouSetAll = () => ({ sets: metaSetsOwned(), need: CLASS_SETS.length, 
 window.__musouSetAllTry = () => metaSetAllCheck();   // 测试钩子：再走一次发奖判定（已领过 / 没集齐都返回 0）
 window.__musouMetaCost = (id) => metaCost(id);   // 测试钩子：读取某节点升级价格
 window.__musouMetaBuy = (id) => metaBuy(id);     // 测试钩子：走真实购买流程
+/* 💾 存档码钩子（导出 / 解码 / 覆盖导入）—— 导入会**清掉当前局外存档**，测试里请自行备份后用完恢复 */
+window.__musouSaveCode = () => exportSaveCode();                       // 导出当前局外存档的存档码
+window.__musouSaveLen = () => SAVE_DIGITS + SAVE_CK;                   // 十进制总位数（148 + 2 位校验）
+window.__musouSaveLayout = () => SAVE_LAYOUT.map(f => f[0] + ':' + (f[1] * f[2])).join(' ');   // 字段表（含预留段）
+window.__musouSaveDecode = (code) => { const r = decodeSaveCode(String(code || '')); return r.ok ? { ok: 1, data: r.data, digits: r.digits } : { ok: 0, why: r.why }; };
+window.__musouSaveApply = (code) => { const r = applySaveCode(String(code || '')); if (r.ok) { renderMeta(); renderShinyDex(); } return r.ok ? { ok: 1, data: r.data } : { ok: 0, why: r.why }; };
+window.__musouAimRate = () => AIM_TURN_RATE;                           // 📱 手机端线性攻击的转向速度（rad/s）
+window.__musouAimTurn = (cur, want, dt) => turnToward(cur, want, dt);   // 转向助手（钉「0.5 秒转满 360°」）
 window.__musouCoinsTotal = (v) => { if (v !== undefined) { coinsTotal = Math.max(0, v | 0); runBanked = false; } return coinsTotal; }; // 测试钩子：设定本局总金币
 window.__musouBankNow = () => metaBankRun();     // 测试钩子：立即结算带出
 window.__musouWinNow = () => { if (state === 'play' && p.alive) victory(); };   // 测试钩子：直接触发通关结算
@@ -27353,8 +27636,11 @@ window.__musouMaxHp = (v) => { if (state === 'play') { p.maxhp = Math.max(1, v |
 window.__musouLeechK = (v) => { if (state === 'play') p.leechK = Math.max(0, v | 0); }; // 测试钩子：设定夺命累计击杀进度（隔离历史残值）
 window.__musouMana = (v, t) => { if (state === 'play') { p.mem = Math.max(0, Math.min(memMax(), v | 0)); p.memT = t > 0 ? t : 0; return p.mem; } return -1; }; // 测试钩子：设定法师法术条（第二参数为剩余回复秒数）
 window.__musouWaterRamp = (v) => { p.waterRampT = Math.max(0, +v || 0); return waterRampSec(); };   // 🌊 测试钩子：直接设「本波已喷射秒数」（水柱伤害加成 = 1 + 0.08×整秒数）
-window.__musouWaterOrb = (v) => { p.waterOrbN = Math.max(0, v | 0); return p.waterOrbN; };           // 🌊 测试钩子：设「已累计吸取的法术球数」（每 10 颗 → 额外两道激光水柱）
-window.__musouWaterTimer = (v) => { p.waterExtraT = Math.max(0, +v || 0); return p.waterExtraT; };   // 🌊 测试钩子：设「无双期间额外水柱」的倒计时（不靠帧数等 2 秒，钉住节拍）
+window.__musouWaterOrb = (v) => { p.waterOrbN = Math.max(0, v | 0); return p.waterOrbN; };           // 🌊 测试钩子：设「已累计吸取的法术球数」（诊断读数，不再触发激光）
+window.__musouWaterBeamsNow = () => waterMasteryBeams();   // 🌊 测试钩子：立刻射出术有专攻的两道激光（返回命中次数）
+window.__musouWaterBeamDmg = () => waterMasteryBeamDmg();  // 🌊 测试钩子：单道激光的当前伤害（法师普攻 × 层数档 × 喷射加成）
+window.__musouWaterSpawnOrbs = (n) => spawnWaterMusouOrbs(n | 0);   // 🌊 测试钩子：手动生成 n 颗蓝球（无双那 9 颗同款）
+window.__musouWaterFullCheck = () => { p.waterFullPrev = 0; return checkWaterMasteryBeams(); };  // 🌊 测试钩子：把「法力条满」的上升沿重置后再判定一次
 window.__musouWaterBeams = () => lightBeams.filter(b => b.water).map(b => ({ w: b.w, segs: b.segs.map(s => ({ x1: Math.round(s.x1), y1: Math.round(s.y1), x2: Math.round(s.x2), y2: Math.round(s.y2), len: Math.round(Math.hypot(s.x2 - s.x1, s.y2 - s.y1)) })) }));   // 🌊 测试钩子：当前在场的「额外两道激光水柱」（段长用来钉「距离 = 根源波动×2 = 760」）
 window.__musouDropOrb = (kind) => { if (state === 'play') { orbs.push({ x: p.x, y: p.y, kind: kind || 'hp', vx: 0, vy: 0, dead: false }); return true; } return false; }; // 测试钩子：在玩家脚下掉一个球（默认绿球/回血球）
 window.__musouDropOrbAt = (kind, x, y) => { if (state === 'play') { orbs.push({ x: x, y: y, kind: kind || 'hp', vx: 0, vy: 0, dead: false }); return orbs.length - 1; } return -1; }; // 测试钩子：在指定世界坐标掉一个球（验证「每波结束全图吸取」）
