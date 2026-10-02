@@ -66,6 +66,16 @@
   .btn:hover { transform: translateY(-2px) scale(1.04); filter: brightness(1.08); }
   .btn:active { transform: translateY(2px); box-shadow: 0 1px 0 #7a5a17; }
   .start-btns { display: flex; gap: 16px; align-items: center; }
+  /* 🖥️ 低配置电脑模式开关：钉在**主页左下角**（用户要求的位置）。
+     手机端主页会整体 zoom 0.5，所以这里也按 0.5 缩放跟随（body.touch 那条见下）。 */
+  #btn-lowspec {
+    position: absolute; left: 18px; bottom: 16px; z-index: 6;
+    font-size: 13px; padding: 6px 12px; opacity: .8;
+    background: #24303f; box-shadow: 0 2px 0 #131a24; color: #cfe0f0;
+  }
+  #btn-lowspec:hover { opacity: 1; }
+  #btn-lowspec.on { background: #2f5a3a; box-shadow: 0 2px 0 #16301d; color: #d6ffe4; opacity: 1; }
+  body.touch #btn-lowspec { left: 10px; bottom: 10px; font-size: 20px; padding: 8px 14px; }
   /* 主页内容包一层：手机端整体缩到 1/2（外层 .screen 仍是全屏遮罩，背景不变） */
   .home-inner {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -476,6 +486,9 @@
       <button class="btn btn2" id="btn-bosslab" style="display:none;">🧪 Boss 试验场</button>
     </div>
     <div class="hint">每波结束自动存档 · 本局总金币的 1% 会带出局外养成</div>
+    <!-- 🖥️ 低配置电脑模式开关（**主页左下角** · 用户要求）：只关光晕 / 降一档分辨率 / 减粒子，
+         **不动任何数值**。状态记 localStorage（`gear-musou-lowspec`），也可用 `?lowspec=1` 直链强制开。 -->
+    <button class="btn btn2 lows" id="btn-lowspec">🖥️ 低配置模式</button>
    </div>
   </div>
 
@@ -889,23 +902,60 @@ let PERF_TOUCH = false;       // 是否按手机端减负（bindTouchUI 识别�
 let FX_SHADOW = true;         // 是否允许 shadowBlur 光晕
 let RENDER_DPR_MAX = 2;       // 渲染分辨率上限
 let PART_MAX = 720;           // 粒子数上限
+let TEXT_MAX = 200;           // 飘字（伤害数字/提示）上限 —— 怪多时「每次受击一个字」会瞬间堆到几千
+let SHOT_MAX = 700;           // 敌方射弹上限（弹幕海时兜底，超出丢最老的）
 let fxForceHigh = false;      // ?fx=high：手机上也不减负（调试对照用）
+/* 🖥️ **低配置电脑模式**（用户要求：「对低配置电脑不是特别友好…可以出一个低配置电脑模式，放在主页左下角」）
+   —— 只关「画得贵」的东西，**不动任何数值/机制**（伤害、血量、刷怪、判定一律照旧，不阉割体验）：
+      · 渲染分辨率上限 1.0（等于不放大：VW×VH 就 92 万像素，普通核显也吃得下）
+      · 光晕全关（shadowBlur 是桌面 WebGL/软件光栅化的大头，见 applyShadowPatch）
+      · 粒子 160、飘字 120（满屏烟花时最容易掉帧的两处）
+      · 关掉「每帧重建的全屏天气叠加」与角色脚下的高级特效（见 LOWSPEC_SKIP_*）
+   开关状态记在 localStorage，主页左下角的按钮切换（`#btn-lowspec`）。 */
+const LOWSPEC_KEY = 'gear-musou-lowspec';
+/* ⚠️ localStorage 一律走 `typeof localStorage !== 'undefined'`（不要写 `window.localStorage`）——
+   无头测试桩里只挂了 `global.localStorage`，`window` 是个没有 localStorage 的普通对象；
+   写成 window.localStorage 会在测试里静默跳过（本文件其它存读档也都是这个写法，保持一致）。 */
+function lowSpecLoad() {
+  try { return (typeof localStorage !== 'undefined' && localStorage.getItem(LOWSPEC_KEY) === '1') ? 1 : 0; } catch (e) { return 0; }
+}
+function lowSpecSave(v) {
+  try { if (typeof localStorage !== 'undefined') localStorage.setItem(LOWSPEC_KEY, v ? '1' : '0'); } catch (e) {}
+}
+let PERF_LOWSPEC = !!lowSpecLoad();
+let PERF_LOWSPEC_FORCED = false;   // ?lowspec=1 强制开（调试 / 分享给低配朋友的直链）
+function lowSpecOn() { return PERF_LOWSPEC || PERF_LOWSPEC_FORCED; }
+try {
+  const q = String((window.location && window.location.search) || '');
+  fxForceHigh = /(^|[?&])fx=high(&|$)/.test(q);
+  PERF_LOWSPEC_FORCED = /(^|[?&])lowspec=1(&|$)/.test(q);
+} catch (e) {}
+function applyPerfProfile() {
+  const low = lowSpecOn();
+  const touchLow = PERF_TOUCH && !fxForceHigh;
+  FX_SHADOW = !low && !touchLow;
+  RENDER_DPR_MAX = low ? 1.0 : (touchLow ? 1.25 : 2);
+  PART_MAX = low ? 160 : (touchLow ? 420 : 720);
+  TEXT_MAX = low ? 120 : (touchLow ? 220 : 200);
+  SHOT_MAX = low ? 420 : 700;
+}
+/* 低配档下要跳过的**纯视觉**大宗开销（都不影响判定）：
+   · 全屏天气叠加（德尔塔气流/大太阳/始源之海那层整屏 fillRect + 风痕）
+   · 角色脚下的高级特效（熔岩圈细分、粘液场地纹理条带等） */
+function lowSpecSkipWeather() { return lowSpecOn(); }
+/* 🐾 **场上敌人数量上限**（用户要求：「给游戏中最大敌人的数量做个规定，当玩家击杀其他敌人后，再继续刷新新的敌人」）
+   —— 队列里的敌人**一个都不会少**（波次构成完全不变），只是出怪口在满员时暂停：**杀一个补一个**。
+   这样做的好处是「怪海」时的 CPU / 绘制压力有硬上限（原来靠 `enemies.length < 400` 兜底，
+   400 只同屏已经是低配机的灾难）；低配模式再收紧一档。
+   ⚠️ 只管**波次队列**这一个出口 —— 钩子/召唤/Boss 分裂/奇遇事件直接 `spawnEnemy` 的不受限
+   （它们是玩法事件，数量本来就小）。 */
+function foeLiveCap() { return lowSpecOn() ? 130 : (PERF_TOUCH ? 170 : 240); }
 /* 📱🖥 强制横屏 / 主页「电脑操作·手机操作」切换的模块级状态。
    ⚠️ **必须声明在这里**：文件靠后的 boot 段落（bindTouchUI(); rotateGateInit(); uiModeToggleInit();）
    在加载时就调用了它们，声明若放在后面那段函数块里会踩 TDZ
    「ReferenceError: Cannot access 'xxx' before initialization」—— 踩过，别再挪回去。 */
 let rotateTried = 0, rotateLocked = 0, rotateGateWired = false, rotateAutoOnce = false;
 const UI_MODE_KEY = 'gear-musou-uimode';
-try {
-  const q = String((window.location && window.location.search) || '');
-  fxForceHigh = /(^|[?&])fx=high(&|$)/.test(q);
-} catch (e) {}
-function applyPerfProfile() {
-  const low = PERF_TOUCH && !fxForceHigh;
-  FX_SHADOW = !low;
-  RENDER_DPR_MAX = low ? 1.25 : 2;
-  PART_MAX = low ? 420 : 720;
-}
 /* 手机端把 `shadowBlur` 变成「写进去也不生效」的属性：全工程 70 多处光晕一次性关掉，
    不用逐个改绘制代码（漏掉一处就白优化）。桌面端 / 无头测试里保持原样（拿不到原型描述符就跳过）。 */
 let _sbVal = 0, shadowPatchDone = false;
@@ -1412,17 +1462,25 @@ function shadeAir(x, y, r, h) {
   ctx.fill();
 }
 function addPart(x, y, vx, vy, life, size, color, grav) {
+  /* 🛡️ **NaN 网（粒子层）**：坐标/速度不是有限数就**直接不生成** ——
+     真机上 NaN 粒子会让 `ctx.fillRect/translate` 收到 NaN，画布状态被写坏 → 之后每帧都画不出东西
+     （玩家看到的「画面卡死」）。比事后清理更省：坏粒子根本不进数组。
+     ⚠️ 粒子的坐标大量来自 `e.x + rnd(...)`（敌人/召唤物/宠物），所以这一层必须自己兜住。 */
+  if (!isFinite(x) || !isFinite(y) || !isFinite(vx) || !isFinite(vy) || !isFinite(life) || !isFinite(size)) { dbgNaNRescue++; return; }
   if (parts.length > PART_MAX) parts.splice(0, parts.length - PART_MAX);   // 手机端预算更低（PART_MAX 由性能档位决定）
   parts.push({ x, y, vx, vy, life, max: life, size, color, grav: grav || 0 });
 }
 function addText(x, y, txt, size, color, stroke) {
+  if (!isFinite(x) || !isFinite(y)) return;   // 🛡️ 同上：飘字坐标也来自实体
   if (texts.length > 36) texts.shift();
   texts.push({ x, y, vy: -46, life: 0.85, max: 0.85, txt, size, color, stroke: stroke || '' });
 }
 function addRing(x, y, color, width) {
+  if (!isFinite(x) || !isFinite(y)) return;   // 🛡️ 同上
   rings.push({ x, y, r: 10, vr: 720, life: 0.42, max: 0.42, color, width: width || 6 });
 }
 function burst(x, y, n, color, spd) {
+  if (!isFinite(x) || !isFinite(y) || !isFinite(spd)) return;
   for (let i = 0; i < n; i++) {
     const a = Math.random() * TAU, s = rnd(spd * 0.3, spd);
     addPart(x, y, Math.cos(a) * s, Math.sin(a) * s, rnd(0.25, 0.55), rnd(2, 4.5), color, 260);
@@ -1679,7 +1737,7 @@ function spawnEnemy(type, forceShiny, noShiny, probe) {
     shiny: noShiny ? false : (forceShiny ? true : (surge || Math.random() < shinyChance())),
     spk: rnd(0, 0.2),
     flash: 0, bob: rnd(0, TAU), fx: 0, fy: -1, dead: false
-  };
+  };;
   /* —— 新战技状态初始化 —— */
   if (type === 'grunt') e.lunge = { phase: 'idle', t: 0, ang: 0, cd: rnd(0.6, 1.8) };          // 兵卒：蓄力突刺
   if (type === 'runner') e.runT = 0;                                                            // 轻骑贼：加速计时
@@ -2157,7 +2215,18 @@ function gruntSkill(e, dt, tg, d) {
     g.cd -= dt;
     if (g.cd <= 0 && d < GRUNT_TRIGGER && d > 34) {
       /* 起手瞬间锁定方向与走廊：蓄力期间不再转向，玩家看到指示器就能判断该往哪躲 */
-      g.phase = 'charge'; g.t = GRUNT_CHARGE; g.ang = Math.atan2(tg.y - e.y, tg.x - e.x);
+      g.phase = 'charge'; g.t = GRUNT_CHARGE;
+      g.ang = Math.atan2(tg.y - e.y, tg.x - e.x);
+      /* 🛡️ 锁定角必须有限：兵卒突刺直接用它写坐标（`e.x += cos(g.ang) * …`），
+         一旦这里拿到 NaN（目标或自己当时坐标不合法），这个 NaN 会被**永久缓存**，
+         之后每次突刺都把坐标写成 NaN → 真机画布状态被写坏 → 画面卡死。
+         这里就地兜底：拿不到合法方向就朝玩家（再不行就朝右）。 */
+      if (!isFinite(g.ang)) {
+        const fx = isFinite(p.x) && isFinite(e.x) ? p.x - e.x : 1;
+        const fy = isFinite(p.y) && isFinite(e.y) ? p.y - e.y : 0;
+        g.ang = (isFinite(fx) && isFinite(fy) && (fx || fy)) ? Math.atan2(fy, fx) : 0;
+        dbgNaNRescue++;
+      }
       g.hit = false;
       /* 蓄力提示走特效：地面走廊指示器（绘制层），不写文字 */
       addRing(e.x, e.y, '#ffd166', 4);
@@ -5255,7 +5324,8 @@ const PRIMAL = {
   seaTick: 0.5, seaPct: 0.10, seaBossDiv: 40,        // 🌧️ 始源之海：每 0.5 秒 10%（Boss ÷40）
   sunBurnT: 1.5, sunDmgMul: 1.1,                     // ☀️ 终结之地：保持烧伤 + 受伤 ×1.1
   deltaTick: 1.0, deltaPct: 0.20, deltaBossDiv: 40,  // 🌀 德尔塔气流：每秒 20%（Boss ÷40）
-  deltaPush: 300                                     // 强制位移速度（px/s）→ 每秒约 300px
+  deltaPush: 300,                                    // 强制位移速度（px/s）→ 每秒约 300px
+  deltaVMax: 420,                                    // ⚠️ 风速叠加到 vx/vy 上的**上限**（防无限累加把敌人甩飞 / 画面卡死）
 };
 let primalWeather = '';              // 当前场景天气：'' / 'seasource' / 'desolateland' / 'deltastream'（渲染用）
 let primalT1 = 0;                    // 特性结算计时器（始源之海 / 德尔塔气流共用）
@@ -5331,7 +5401,14 @@ function tickPrimalAbilities(dt) {
     const ny = Math.max(40, Math.min(H - 40, e.y + uy * step));
     if (nx !== e.x || ny !== e.y) dbgPrimalPushed++;
     e.x = nx; e.y = ny;
+    /* ⚠️⚠️ 这里**必须钳速度上限**（2026-10 用户报「德尔塔气流长时间游玩会卡死」的根因之一）：
+       原来只是 `e.vx += ux*step*4` 无限累加 —— 正常走位的敌人有「速度向目标 lerp」把它拉回来，
+       但**站桩 / 眩晕 / 冲刺 / 钻地**这些状态里 `vx` 不被 lerp（甚至每帧被清零后再被风加一次）→
+       几分钟后 vx 能涨到几十万；等状态一结束，`e.x += e.vx*dt` 会把敌人瞬间甩到天文数字坐标，
+       接着画面上就是「半径几十万的圆 / 巨大 shadowBlur」→ 光栅化卡死（低配机尤其明显）。 */
     e.vx += ux * step * 4; e.vy += uy * step * 4;   // 顺手带一点惯性，看起来像被风推着走
+    if (e.vx > PRIMAL.deltaVMax) e.vx = PRIMAL.deltaVMax; else if (e.vx < -PRIMAL.deltaVMax) e.vx = -PRIMAL.deltaVMax;
+    if (e.vy > PRIMAL.deltaVMax) e.vy = PRIMAL.deltaVMax; else if (e.vy < -PRIMAL.deltaVMax) e.vy = -PRIMAL.deltaVMax;
   }
 }
 /* 按最大生命的百分比直接扣血（**不吃任何加成** —— 用户明确要求）：杂兵全额、Boss ÷div
@@ -5340,8 +5417,13 @@ function tickPrimalAbilities(dt) {
    一跳就是 2000 万，会把 `devDmg` 的秒伤读数彻底带偏）。
    ⚠️ 所以这里**不能**调 `devDummyAdd()`；绝对值的技能伤害照旧由 `hitEnemy` 记账。 */
 function primalPctBurst(pct, div) {
-  for (const e of enemies) {
-    if (e.dead) continue;
+  /* ⚠️ 用**下标 + 长度快照**遍历：killEnemy 可能当场往 `enemies` 里塞东西
+     （超级史莱姆分裂出 3 只小史莱姆、指挥官召唤援军…），
+     用 `for (const e of enemies)` 会把这些**刚出生的**敌人也立刻结算一次 20% 伤害（不该有的一跳）。 */
+  const n0 = enemies.length;
+  for (let i = 0; i < n0; i++) {
+    const e = enemies[i];
+    if (!e || e.dead) continue;
     if (enemyInvuln(e)) continue;
     const d = Math.max(1, Math.round(e.maxhp * pct / (e.boss ? div : 1)));
     dbgPrimalHit++;
@@ -5602,9 +5684,18 @@ function primalWxInit() {
 }
 function drawPrimalWeather() {
   if (!primalWeather) return;
-  primalWxInit();
   const t = time, X = camX, Y = camY;
   ctx.save();
+  /* 🖥️ 低配置模式：天气只留**一层纯色叠加**（它本来是每帧上百条 stroke + 一次整屏 fillRect）。
+     天气的机制（伤害 / 位移 / 烧伤）一点没动，只是不再画风痕雨丝。 */
+  if (lowSpecSkipWeather()) {
+    ctx.fillStyle = primalWeather === 'seasource' ? 'rgba(28,58,110,0.20)'
+      : primalWeather === 'desolateland' ? 'rgba(255,138,40,0.15)' : 'rgba(48,132,84,0.16)';
+    ctx.fillRect(X, Y, VW, VH);
+    ctx.restore();
+    return;
+  }
+  primalWxInit();
   if (primalWeather === 'seasource') {
     /* 🌧️ 始源之海：深蓝环境色 + 斜落的大雨 */
     ctx.fillStyle = 'rgba(28,58,110,0.24)';
@@ -9153,6 +9244,15 @@ function hitEnemy(e, ax, ay, force, dmg, chest) {
     return;
   }
   if (enemyAirInvuln(e)) return;
+  /* 🛡️🛡️ **击退方向/受力的 NaN 兜底（真机「画面卡死」的元凶之一，2026-10 长跑体检抓到的）**：
+     调用方普遍写成 `hitEnemy(e, dx / dd, dy / dd, …)`，而 `dd` 是判定点到敌人中心的距离 ——
+     两者重合时 `dd = 0` → `0/0 = NaN` → `e.kx += NaN` → 下一帧 `e.x += (vx+kx)*dt` 把**坐标也变成 NaN**，
+     接着 `ctx.translate/ellipse` 拿到 NaN：整个画布状态被写坏，之后每帧都画不出东西 = 玩家看到的「画面卡死」。
+     这里统一兜住（方向不合法就当没有方向、力/速度也各自防一手），从源头断掉 NaN。 */
+  if (!isFinite(ax) || !isFinite(ay)) { ax = 0; ay = 0; }
+  if (!isFinite(force)) force = 0;
+  if (!isFinite(e.kx)) e.kx = 0;
+  if (!isFinite(e.ky)) e.ky = 0;
   /* 🛡️ 兜底（防「敌人无敌」）：血量/伤害只要不是有限数就就地修正 ——
      `e.hp -= NaN` 会让 `e.hp <= 0` 永远不成立，那只敌人从此**再也打不死**（还会拖住整波不清剿）。
      已知来源：光环/被动武器没有 dmg 字段（无限手套等），旧代码把 undefined 传成了 NaN。 */
@@ -12465,6 +12565,8 @@ let artCuts = 0;                 // 诊断：全屏斩次数
 let enemyFreezeT = 0, roars = 0, catAtkN = 0;   // 猛虎震慑计时 / 虎啸 / 猫爪 计数
 let clawFx = [];                 // 猫爪痕特效
 let dbgBurnTicks = 0, dbgExec = 0, dbgStuns = 0;   // 诊断：灼伤结算/欧内秒杀/离子停滞 计数
+let dbgNaNRescue = 0;                 // 🛡️ NaN 警察救回的敌人数/粒子数（诊断读数；正常局应恒 0）
+let dbgFoeDrawN = 0;                  // 诊断：上一帧真正画出来的敌人数（视口剔除后）
 let dbgSpin = 0, dbgSpinC = 0;                    // 诊断：满级旋风斩旋转（本体 / 影分身）次数
 const ART_DEFS = {
   missile:   { name:'弹射导弹', icon:'🚀', desc:'闪避后飞出 3 枚自动追踪导弹', start:0, w15:0 },
@@ -17978,6 +18080,7 @@ syncMetaBtn();       // 主页「养成」按钮上显示传承金币余额
 bindTouchUI();        // 触屏控制绑定（操作方式可在主页用按钮切换）
 rotateGateInit();     // 📱 强制横屏：竖屏遮罩 + 「全屏并锁定横屏」按钮
 uiModeToggleInit();   // 🖥📱 主页「电脑操作 / 手机操作」切换按钮
+lowSpecToggleInit();  // 🖥️ 主页左下角「低配置模式」开关（localStorage 记忆 + 立刻套用画质档位）
 
 /* ============================================================
    手机端触屏支持：摇杆 / 闪避 / 奥义 / 暂停
@@ -18198,6 +18301,45 @@ function uiModeToggleInit() {
   if (b && b.addEventListener) b.addEventListener('click', () => setUiMode(!isTouchUI, true));
   uiModeLabel();
 }
+/* ============================================================
+   🖥️ **低配置电脑模式**（用户要求：「对低配置电脑不是特别友好…可以出一个低配置电脑模式，放在主页左下角」）
+   —— 挡位只压「画得贵」的三件事 + 跳两层纯视觉叠加，**一个数值都不动**（伤害/血量/刷怪/判定全照旧）：
+     ① RENDER_DPR_MAX = 1.0（画布不再按 devicePixelRatio 放大 → 低配机上每帧像素直接少一半以上）
+     ② 光晕全关（applyShadowPatch 把 shadowBlur 变成空写，全工程 70+ 处一次性省掉）
+     ③ 粒子 160 / 飘字 120 / 敌弹 420（满屏烟花与弹幕海最先拖垮帧率的地方）
+     ④ 跳过全屏天气叠加与部分脚下特效（见 lowSpecSkipWeather）
+   开关记在 localStorage（`gear-musou-lowspec`），也可用直链 `?lowspec=1` 强制打开（分享给低配机器的朋友）。 */
+function lowSpecLabel() {
+  const b = $('btn-lowspec');
+  if (!b) return;
+  b.textContent = lowSpecOn() ? '🖥️ 低配置模式 · 已开启' : '🖥️ 低配置模式';
+  try { b.title = lowSpecOn() ? '关掉光晕 / 降分辨率 / 减粒子（数值不受影响）—— 点一下切回高画质' : '给低配置电脑：关掉光晕、降一档分辨率、减少粒子（不影响任何数值）'; } catch (e) {}
+  if (b.classList && b.classList.toggle) b.classList.toggle('on', lowSpecOn());
+}
+function setLowSpec(on, fromUser) {
+  PERF_LOWSPEC = !!on;
+  lowSpecSave(PERF_LOWSPEC);
+  applyPerfProfile();
+  applyShadowPatch();
+  applyRenderScale();
+  lowSpecLabel();
+  if (fromUser && typeof addText === 'function' && state === 'play' && p && p.alive) {
+    addText(p.x, p.y - 60, lowSpecOn() ? '🖥️ 低配置模式：已开启' : '✨ 画质已恢复', 18, '#9fe08a', '#0c2f12');
+  }
+}
+function lowSpecToggleInit() {
+  const b = $('btn-lowspec');
+  if (b && b.addEventListener) b.addEventListener('click', () => setLowSpec(!lowSpecOn(), true));
+  lowSpecLabel();
+}
+window.__musouLowSpec = () => ({   // 测试钩子：低配档读数 + 实际生效的挡位
+  on: lowSpecOn() ? 1 : 0, saved: PERF_LOWSPEC ? 1 : 0, forced: PERF_LOWSPEC_FORCED ? 1 : 0,
+  partMax: PART_MAX, textMax: TEXT_MAX, shotMax: SHOT_MAX, dprMax: RENDER_DPR_MAX, shadow: FX_SHADOW ? 1 : 0,
+  dpr: +DPR.toFixed(2), skipWeather: lowSpecSkipWeather() ? 1 : 0, touch: PERF_TOUCH ? 1 : 0,
+  foeCap: foeLiveCap(),
+});
+/* 🐾 测试钩子：场上敌人上限 / 当前存活数 / 还排着多少没进场（「杀一个补一个」的读数） */
+window.__musouFoeCap = () => ({ cap: foeLiveCap(), live: enemies.length, q: spawnQ.length, lowSpec: lowSpecOn() ? 1 : 0, touch: PERF_TOUCH ? 1 : 0 });
 function bindTouchUI() {
   /* 独立版本强制模式：<body class="force-touch"> 手机版 / <body class="force-desk"> 电脑版 */
   let forcedTouch = false, forcedDesk = false;
@@ -22969,6 +23111,31 @@ function updateGame(dt, rawDt) {
   cmdSetAura(commanderAlive());
   for (const e of enemies) {
     if (e.dead) continue;
+    /* 🛡️🛡️ **NaN 警察（放在每个敌人分支的最前面）**：真机「画面卡死」的元凶之一 ——
+       击退/索敌方向普遍写成 `dx / d`，判定点与敌人中心重合（d = 0）时会得到 NaN，
+       一旦写进 `e.kx/vx` 就会顺着 `e.x += (vx+kx)*dt` 污染**坐标**，随后 `ctx.translate/ellipse`
+       收到 NaN，整个画布状态被写坏 → 之后每帧都画不出东西（玩家看到的就是「卡死」）。
+       ⚠️ 必须放在**所有 `continue` 分支之前**：铁骑/晕眩/指挥官/一次性骑兵这些分支都会提前 continue，
+       放在后面的话它们身上的 NaN 永远没人管。 */
+    if (!isFinite(e.x) || !isFinite(e.y) || !isFinite(e.vx) || !isFinite(e.vy) || !isFinite(e.kx) || !isFinite(e.ky)) {
+      dbgNaNRescue++;
+      if (!isFinite(e.x)) e.x = isFinite(px) ? px : W / 2;
+      if (!isFinite(e.y)) e.y = isFinite(py) ? py : H / 2;
+      e.x = Math.max(20, Math.min(W - 20, e.x)); e.y = Math.max(20, Math.min(H - 20, e.y));
+      if (!isFinite(e.vx)) e.vx = 0;
+      if (!isFinite(e.vy)) e.vy = 0;
+      if (!isFinite(e.kx)) e.kx = 0;
+      if (!isFinite(e.ky)) e.ky = 0;
+    }
+    /* 🛡️ 顺手体检**缓存的朝向角**：这类字段一旦是 NaN 会一路带到 `ctx.rotate()`（画布状态被写坏）
+       而且不会自己恢复（比如兵卒突刺的锁定角是「起手那一刻」算好的，之后每帧都拿它写坐标）。
+       这些角度都只是视觉/位移方向，兜成 0 完全无害。 */
+    if (e.lunge && !isFinite(e.lunge.ang)) { e.lunge.ang = 0; dbgNaNRescue++; }
+    if (!isFinite(e.cAng)) e.cAng = 0;
+    if (!isFinite(e.twinAng)) e.twinAng = 0;
+    if (!isFinite(e.vAng)) e.vAng = 0;
+    if (!isFinite(e.aimAng)) e.aimAng = 0;
+    if (!isFinite(e.face)) e.face = 0;
     e.flash -= rawDt; e.bob += dt * 9;
     /* 灼伤持续伤害（每 0.3s 2% 最大生命；Boss 仅 1/4）与离子晕眩计时
        腾空中的战将/总大将无敌：灼伤读条与结算一并冻结（落地后继续烧）
@@ -23311,7 +23478,15 @@ function updateGame(dt, rawDt) {
           if (aCav) { b.x += dx * push * 0.5; b.y += dy * push * 0.5; }          // 铁骑纹丝不动，只挤开旁人
           else if (bCav) { a.x -= dx * push * 0.5; a.y -= dy * push * 0.5; }
           else {
-            const wB = a.resist / (a.resist + b.resist);
+            /* 🛡️🛡️ **这里曾经是「画面卡死」的真凶（2026-10 长跑体检 + 写屏障抓到的）**：
+               原式 `wB = a.resist / (a.resist + b.resist)` —— 当两只敌人的 resist **都是 0**
+               （无视击退的靶子 / 假人）或**都没有这个字段**（部分 ETYPES 没写 resist → undefined）时，
+               分母为 0（或 NaN）→ `wB = NaN` → 下面两行把 **a.x / b.x 直接写成 NaN** →
+               `ctx.translate/ellipse` 收到 NaN 把画布状态写坏 → 之后每帧都画不出东西 = 玩家看到的「画面卡死」。
+               修法：resist 缺省按 1 算、两边都为 0 时各推一半，除数也一起兜住。 */
+            const ra = (a.resist === undefined ? 1 : a.resist), rb = (b.resist === undefined ? 1 : b.resist);
+            const rsum = ra + rb;
+            const wB = (isFinite(rsum) && rsum > 0) ? ra / rsum : 0.5;
             a.x -= dx * push * 0.5 * wB; a.y -= dy * push * 0.5 * wB;
             b.x += dx * push * 0.5 * (1 - wB); b.y += dy * push * 0.5 * (1 - wB);
           }
@@ -23323,7 +23498,7 @@ function updateGame(dt, rawDt) {
   tickHexes(dt);   // 终焉齿轮场地魔法阵倒计时/爆发
   tickPlanteraVines(dt);   // 世纪之花·藤蔓（预警 → 绽放 → 每 0.5s 结算）
   tickHoennFields(dt);     // 🌟 丰缘之战：断崖之剑的落点地刺 / 根源波动的预警线与光柱（施法者死了也要把在场的打完）
-  tickPrimalAbilities(dt); // 🌟 原始回归的特性：始源之海 / 终结之地 / 德尔塔气流（被动、不进技能表）
+  tickPrimalAbilities(dt); // 🌟 原始回归的特性
   tickBlackHoles(dt);   // 哈姆黑洞：吸附/灼烧/Boss 追踪
 
   /* ---- 箭矢 ---- */
@@ -23567,9 +23742,11 @@ function updateGame(dt, rawDt) {
   }
   orbs = orbs.filter(o => !o.dead);
 
-  /* ---- 波次推进 ---- */
+  /* ---- 波次推进 ----
+     ⚠️ `enemies.length` 在这里**就是活着的敌人数**（上面那句 `enemies = enemies.filter(e => !e.dead)` 每帧清一次），
+     所以「满员 → 停止出怪、击杀腾位 → 自动继续」直接用它对上 `foeLiveCap()` 即可。 */
   spawnT -= dt;
-  if (enemyFreezeT <= 0 && spawnQ.length && spawnT <= 0 && enemies.length < 400) {
+  if (enemyFreezeT <= 0 && spawnQ.length && spawnT <= 0 && enemies.length < foeLiveCap()) {
     spawnEnemy(spawnQ.shift());
     spawnT = spawnInt;
   }
@@ -23850,6 +24027,30 @@ function drawGame() {
     ctx.restore();
   }
 
+  dbgFoeDrawN = 0;   // 本帧真正画出来的敌人数（视口剔除后；诊断读数）
+  /* 🛡️🛡️ **绘制前的 NaN 总闸（每帧一次 O(n) 体检，250 只敌人 ≈ 2000 次 isFinite，成本可忽略）**：
+     敌人相关的绘制分散在好几个循环里（预警线 / 突刺走廊 / 本体 / 血条…），逐处加判断既啰嗦又容易漏；
+     在这里统一体检一遍，保证**后面所有绘制**拿到的都是有限数 ——
+     真机上 `ctx.translate/rotate/ellipse` 收到 NaN 会把画布状态写坏，玩家看到的就是「画面卡死」。
+     ⚠️ 必须放在**所有敌人绘制之前**（包括 23152 那条预警线循环）。 */
+  for (const e of enemies) {
+    if (!isFinite(e.x) || !isFinite(e.y) || !isFinite(e.vx) || !isFinite(e.vy) || !isFinite(e.kx) || !isFinite(e.ky)) {
+      dbgNaNRescue++;
+      if (!isFinite(e.x)) e.x = isFinite(p.x) ? p.x : W / 2;
+      if (!isFinite(e.y)) e.y = isFinite(p.y) ? p.y : H / 2;
+      e.x = Math.max(20, Math.min(W - 20, e.x)); e.y = Math.max(20, Math.min(H - 20, e.y));
+      if (!isFinite(e.vx)) e.vx = 0;
+      if (!isFinite(e.vy)) e.vy = 0;
+      if (!isFinite(e.kx)) e.kx = 0;
+      if (!isFinite(e.ky)) e.ky = 0;
+    }
+    if (e.lunge && !isFinite(e.lunge.ang)) { e.lunge.ang = 0; dbgNaNRescue++; }
+    if (!isFinite(e.cAng)) e.cAng = 0;
+    if (!isFinite(e.twinAng)) e.twinAng = 0;
+    if (!isFinite(e.vAng)) e.vAng = 0;
+    if (e.cav && !isFinite(e.cav.ang)) e.cav.ang = 0;
+  }
+
   /* 冲锋预警线（铁骑瞄准 / Boss 蓄力冲撞） 与 Boss 瞬移落点标记 */
   for (const e of enemies) {
     if (e.dead) continue;
@@ -24113,8 +24314,29 @@ function drawGame() {
     ctx.restore();
   }
 
-  /* 敌人 */
+  /* 敌人
+     🖥️ **视口剔除（本轮性能优化）**：世界 3200×1800、视野只有 1280×720 → **场上约 5/6 的敌人在屏幕外**，
+     以前每帧照样逐个画（影子 + 本体 + 血条 + 特效），怪一多就是纯粹白烧（用户反馈「敌人数量太多会卡顿」）。
+     这里只跳过**完全在视野外 260px 以外**的敌人 —— 余量给足，预警线/大体型怪不会在边缘被切掉；
+     **Boss 一律不剔除**（它们的血条与预警线是屏幕级表演）。
+     剔除只影响绘制，**逻辑/判定/小地图一点没变**。 */
+  const cullL = camX - 260, cullR = camX + VW + 260, cullT = camY - 260, cullB = camY + VH + 260;
   for (const e of enemies) {
+    /* 🛡️ **绘制前的最后一道 NaN 网**：只要坐标不是有限数就地拉回场上。
+       真机上 `ctx.translate/ellipse` 收到 NaN 会把画布状态写坏 → 之后每帧都画不出东西
+       （玩家看到的就是「画面卡死」）。放在这里保证**任何来源**的 NaN 都到不了 canvas。 */
+    if (!isFinite(e.x) || !isFinite(e.y)) {
+      dbgNaNRescue++;
+      e.x = Math.max(20, Math.min(W - 20, isFinite(e.x) ? e.x : (isFinite(p.x) ? p.x : W / 2)));
+      e.y = Math.max(20, Math.min(H - 20, isFinite(e.y) ? e.y : (isFinite(p.y) ? p.y : H / 2)));
+      if (!isFinite(e.vx)) e.vx = 0;
+      if (!isFinite(e.vy)) e.vy = 0;
+    }
+    /* 🛡️ 缓存的朝向角同理（`ctx.rotate(NaN)` 一样会把画布状态写坏），而且**必须在这里兜**：
+       面板冻结（choosing）的帧里 updateGame 直接 return，更新期那道网不会跑，但**绘制照跑**。 */
+    if (e.lunge && !isFinite(e.lunge.ang)) { e.lunge.ang = 0; dbgNaNRescue++; }
+    if (!e.boss && !e.devDummy && (e.x < cullL || e.x > cullR || e.y < cullT || e.y > cullB)) continue;
+    dbgFoeDrawN++;
     /* 💡 光明掠夺者隐身时**连影子都不能留**：影子是这里（调用方）画的，而 `drawEnemy` 里那句
        「隐身 → 直接 return 不画」只挡得住本体 —— 以前椭圆影子照样跟着它满场跑，
        玩家靠影子就能读出它的走位，「隐身」在视觉层等于没用（小地图那边都已经专门跳过它了）。 */
@@ -26768,6 +26990,38 @@ window.__musouMiniMap = () => ({   // 测试钩子：小地图矩形 / 视野框
 });
 window.__musouClearField = (keepOrbs) => { if (state !== 'play') return; enemies = []; shots = []; warnFx = []; roninWalls = []; blades = []; plunderRunes = []; hexes = []; blackHoles = []; homingM = []; catE = null; cardCats = []; charmUnits = []; klLances = []; royalCavs = []; skySpears = []; wmThrusts = []; wmPlanes = []; wmOrbit = {}; wmOrbitOn = {}; wmOrbitHit = {}; wmOrbitDmg = {}; wmAnim = {}; wmDrones = []; wmBottles = []; wmFires = []; wmDashSlashes = []; wmShurikens = []; wmPrisms = []; wmHolySeq = {}; wmBeams = []; wmCharge = {}; wmAuraT = {}; dbgWMShotOrigins = []; swordE = null; drones = []; pBullets = []; bolts = []; if (!keepOrbs) orbs = []; spawnQ = []; meteors = []; firePits = []; mMeteorFx = []; thunderClouds = []; arcs = []; lightBeams = []; rainDrops = []; rainHits = []; voidImpacts = []; fxSprites = []; petBeams = []; petPools = []; petTornadoes = []; petMeteors = []; planteraVines = []; hoennSpikes = []; hoennBeams = []; nukeFx = null; }; // 测试钩子：清场 + 停出怪 + 移除随行攻击体/火坑/陨石/雷云/光炮/雨幕/哈吉咪/**世纪之花藤蔓/丰缘之战的地刺与光柱/未落地的核弹**（keepOrbs=true 时保留掉落物，测「每波吸取」用）
 window.__musouClearAllies = () => { allyUnits = []; };   // 测试钩子：清空部署单位（敌人索敌会优先打假人/随从，探针期必须清掉才锁定角色）
+/* 🩺 性能探针：把「每帧会变长的那批数组」的长度 + 敌人的速度/血量统计一次读出来。
+   用途：长跑体检（tests/smoke.js S61）里**采样 N 次看趋势** —— 只跑几帧是看不出泄漏的，
+   长时间游玩卡死基本都是「某个数组只涨不消」或「速度无上限累加」造成的。 */
+window.__musouPerfProbe = () => {
+  const live = enemies.filter(e => !e.dead);
+  let maxV = 0, maxSpd = 0, maxVBody = 0, sumHp = 0, bossN = 0, shinyN = 0, burningN = 0;
+  for (const e of live) {
+    const v = Math.max(Math.abs(e.vx || 0), Math.abs(e.vy || 0));
+    if (v > maxV) maxV = v;
+    /* `maxVBody` = **只算普通敌人**（Boss / 假人本来就有冲刺速度，不被风推）→ 长跑体检拿它验「风速不许累加」 */
+    if (!e.boss && !e.bossUnit && !e.devDummy && v > maxVBody) maxVBody = v;
+    const s = Math.hypot(e.vx || 0, e.vy || 0);
+    if (s > maxSpd) maxSpd = s;
+    sumHp += e.hp || 0;
+    if (e.boss) bossN++;
+    if (e.shiny) shinyN++;
+    if ((e.burnT || 0) > 0) burningN++;
+  }
+  return {
+    arr: {
+      enemies: enemies.length, live: live.length, parts: parts.length, texts: texts.length, shots: shots.length,
+      orbs: orbs.length, rings: rings.length, slashes: slashes.length, pBullets: pBullets.length, bolts: bolts.length,
+      warnFx: warnFx.length, drones: drones.length, spawnQ: spawnQ.length, lightBeams: lightBeams.length,
+      rainDrops: rainDrops.length, thunderClouds: thunderClouds.length, meteors: meteors.length, firePits: firePits.length,
+      allyUnits: allyUnits.length, wmPlanes: wmPlanes.length, royalCavs: royalCavs.length, homingM: homingM.length,
+      cards: cardCats.length, fxSprites: fxSprites.length, mMet: mMeteorFx.length, hexes: hexes.length,
+    },
+    maxV: Math.round(maxV), maxVBody: Math.round(maxVBody), foeDrawn: dbgFoeDrawN, nanRescue: dbgNaNRescue, maxSpd: Math.round(maxSpd), sumHp: Math.round(sumHp), bossN, shinyN, burningN,
+    perf: { partMax: PART_MAX, dprMax: RENDER_DPR_MAX, shadow: FX_SHADOW ? 1 : 0, lowSpec: lowSpecOn() ? 1 : 0, dpr: +DPR.toFixed(2), foeCap: foeLiveCap() },
+    kills, wave, time: +time.toFixed(1),
+  };
+};
 /* 测试钩子：场上（未死）敌人的类型列表；**Boss 后面带 `*`**。用来验「某波的 Boss 到底在不在场」 */
 window.__musouFoeTypes = () => enemies.filter(e => !e.dead).map(e => e.type + (e.boss ? '*' : ''));
 /* 测试钩子：**直接往场上放一只 Boss**（默认⭐总大将）。用来验「打完总大将才弹御三家三选一」这类
@@ -27651,7 +27905,7 @@ window.__musouPrimalInfo = () => {
     weather: primalWeather, ticks: dbgPrimalTicks, hit: dbgPrimalHit, pushed: dbgPrimalPushed, t1: +primalT1.toFixed(3),
     dmgMul: PRIMAL_DMG_MUL, sunMul: PRIMAL.sunDmgMul,
     seaTick: PRIMAL.seaTick, seaPct: PRIMAL.seaPct, seaBossDiv: PRIMAL.seaBossDiv,
-    deltaTick: PRIMAL.deltaTick, deltaPct: PRIMAL.deltaPct, deltaBossDiv: PRIMAL.deltaBossDiv, deltaPush: PRIMAL.deltaPush,
+    deltaTick: PRIMAL.deltaTick, deltaPct: PRIMAL.deltaPct, deltaBossDiv: PRIMAL.deltaBossDiv, deltaPush: PRIMAL.deltaPush, deltaVMax: PRIMAL.deltaVMax,
     balls: Object.assign({}, PRIMAL_ART_IMG), icon: primalArtIcon(), desc: primalArtDesc(),
     /* 卡片上印的那句（用户点名）—— 钩子单独给出来，冒烟好钉死「卡片文案 = 风味那句」 */
     card: ART_DEFS[PRIMAL_ART].desc,
@@ -27859,6 +28113,13 @@ window.__musouArtSlots = () => ({ count: artCount(), cap: artCap(), list: artOwn
    而无头桩默认把它吞掉。有了这个钩子就能一眼指出「是哪个数组的第几只、哪个字段坏了」。
    `Infinity` 单独归一类：像龙箭弹体的 `maxTrav = Infinity`（无限射程）是**合法**的。 */
 window.__musouNaNAudit = (limit) => {
+  /* 🩺 先体检**玩家与镜头**：敌人坐标 NaN 的头号原因是出怪时 `p.x/p.y` 已经是 NaN
+     （`spawnEnemy` 用玩家坐标 + 极坐标偏移算出生点，`Math.max/min` 夹不出 NaN，只会一路传下去）。
+     体检工具里带上这两个，才能一眼看出「是敌人坏了，还是玩家先坏的」。 */
+  const self = {
+    p: { x: p.x, y: p.y, vx: p.vx, vy: p.vy, hp: p.hp, maxhp: p.maxhp, face: p.face },
+    cam: { camX: camX, camY: camY, dpr: DPR },
+  };
   const ARRS = {
     enemies, allyUnits, shots, orbs, parts, texts, rings, slashes, warnFx, drones, pBullets, bolts, hexes,
     meteors, firePits, thunderClouds, arcs, lightBeams, petBeams, petPools, petTornadoes, petMeteors, fxSprites,
@@ -27898,7 +28159,7 @@ window.__musouNaNAudit = (limit) => {
   }
   scan('player', 0, p);
   for (const i in wmOrbit) scan('wmOrbit', i, wmOrbit[i]);
-  return { nan, inf, missing, nanN: nan.length, infN: inf.length, missingN: missing.length, counts: (() => { const o = {}; for (const k of Object.keys(ARRS)) if (Array.isArray(ARRS[k])) o[k] = ARRS[k].length; return o; })() };
+  return { self, nan, inf, missing, nanN: nan.length, infN: inf.length, missingN: missing.length, counts: (() => { const o = {}; for (const k of Object.keys(ARRS)) if (Array.isArray(ARRS[k])) o[k] = ARRS[k].length; return o; })() };
 };
 window.__musouSlotList = () => slotList.slice();   // 测试钩子：替换面板里列出的已持有奇物（**分页前的全量**；界面上按 SLOT_PAGE_SIZE=7 一页）
 window.__musouSlotPick = (i) => { if (curKind !== 'slot' || !choosing) return false; slotPick(i | 0); return true; };   // 测试钩子：点第 i 个槽位丢掉（**绝对下标**，跨页有效）
