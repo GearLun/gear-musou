@@ -1175,7 +1175,7 @@ const p = {
   role: 'warrior', bowT: 0, mageT: 0,   // 角色：warrior 战士 / archer 弓箭手 / mage 法师；bowT 拉弓、mageT 咏唱后坐动画
   job: '', jobPend: 0,                  // 法师魔法转职：'' 未专精（=火法师）/ 'fire' / 'water'
   jetOn: 0, jetTick: 0, waterBurstT: 0, jetPrev: null,  // 水法师：水柱喷射状态 / 结算计时 / 无双水爆计时 / 上一帧被命中的敌人
-  waterRampT: 0, waterOrbN: 0, waterFullPrev: 0,          // 🌊 水法师：本波累计的**喷射秒数**（每满 1 秒伤害 +8% · **断档 / 每波开始都清空**）
+  waterRampT: 0, waterOrbN: 0, waterFullPrev: 0, waterExtraT: 0,          // 🌊 水法师：本波累计的**喷射秒数**（每满 1 秒伤害 +8% · **断档 / 每波开始都清空**）
                                                         //   · 累计**吸取的蓝球数**（仅诊断读数，不再触发激光）
                                                         //   · 上一帧「法力条是否满」——术有专攻激光走**上升沿**触发
   lightJetOn: 0, lightJetTick: 0, lightJetPrev: null,  // 光法师：无双持续光波状态 / 结算计时 / 上一帧被命中的敌人
@@ -15695,9 +15695,9 @@ function waterWidth() { return 26 + WATER_W_MUL * (p.mut.multicast || 0); }   //
 function waterLanes() { return 1; }                                          // ⚠️ 多重施法**不再分裂**水柱（用户要求）
 function waterRampSec() { return Math.floor(p.waterRampT || 0); }            // 本波已累计的**整秒**喷射时间
 function waterRampMul() { return 1 + WATER_RAMP_PER_SEC * waterRampSec(); }  // 伤害倍率（1.00 → 每秒 +0.08）
-/* 💧 单道水柱每跳伤害 = **法师普攻 × 喷射加成**（用户本轮去掉了旧的 ×1.2；因喷射加成从 0 起算，
-   用户没有「见底自动吸球」以外的额外倍率来源） */
-function waterTickDmg() { return Math.max(2, Math.round(mageAtkDmg() * waterRampMul())); }
+/* 💧 单道水柱每跳伤害 = **角色等级 + 法师普攻 × 喷射加成**（用户本轮把「角色等级」加进公式：
+   乘法先算 —— 等级是**不吃喷射加成**的固定加数，和火球「普攻 + 等级」是同一个思路） */
+function waterTickDmg() { return Math.max(2, Math.round((p.lvl || 0) + mageAtkDmg() * waterRampMul())); }
 /* 水柱耗蓝速率：用户本轮要求 **150/秒** → 「满魔能 450 恰好连喷 3 秒」；
    初始法术条 200 → 200/150 ≈ 1.33 秒（无魔能词条时的持续时间） */
 const JET_FULL_MEM = 450, JET_FULL_SECS = 3;
@@ -15734,8 +15734,10 @@ function updateWaterJet(dt) {
      不再是「只按每波清」；重新起喷后从 ×1.00 重新往上累。 */
   if (!canJet) { p.jetOn = 0; p.jetPrev = null; p.waterRampT = 0; return; }
   if (!p.jetOn) { p.jetOn = 1; p.jetTick = JET_TICK; }   // 起喷：首次周期结算在 0.5s 后（起喷瞬间由"命中即伤"补上）
-  /* 持续消耗法术条：150/秒（满魔能 450 恰好连喷 3 秒；初始 200 自动为 ≈1.33 秒） */
-  p.mem = Math.max(0, p.mem - waterDrainRate() * dt);
+  /* 持续消耗法术条：150/秒（满魔能 450 恰好连喷 3 秒；初始 200 自动为 ≈1.33 秒）
+     🌊 用户本轮：**水法师无双持续期间法力条不会减少**（喷射照旧、蓝条不减；无双开启时已补满 → 整段无双满蓝） */
+  if (p.musouT > 0) p.memT = 0;
+  else p.mem = Math.max(0, p.mem - waterDrainRate() * dt);
   /* 🌊 本波喷射时长累计：**每持续喷满 1 秒，水柱伤害 +8%**（`waterRampMul()`，每波开始由 startWave 清空） */
   p.waterRampT = (p.waterRampT || 0) + dt;
   if (p.mem <= 0) {
@@ -15829,25 +15831,40 @@ function waterVacuumOrbs(max) {
   p.waterOrbN = (p.waterOrbN || 0) + n;   // 仅诊断读数（用户本轮起：吸取不再触发激光，激光改由「法力条满」触发）
   return n;
 }
-/* 术有专攻·激光的单道伤害 = 法师普攻 × [2 / 3.5 / 5]（按层数）× 喷射加成 */
-function waterMasteryBeamDmg() {
-  const m = Math.max(1, Math.min(WATER_BEAM_DMG.length, p.mut.mastery || 0));
-  return Math.max(2, Math.round(mageAtkDmg() * WATER_BEAM_DMG[m - 1] * waterRampMul()));
+/* 激光的单道伤害 = **法师普攻 × 倍率 × 喷射加成**（用户本轮再次点名这条式子）。
+   倍率取 `WATER_BEAM_DMG`：术有专攻 **1 / 2 / 3 层 = ×2 / ×3.5 / ×5**（用户先前要求「最高 ×5」）；
+   **没拿术有专攻时按基础 ×2**（无双期间每 2 秒那两道就属于这种「无双自带」的激光，见下）。 */
+function waterBeamMul() {
+  const m = Math.min(WATER_BEAM_DMG.length, p.mut.mastery || 0);
+  return m > 0 ? WATER_BEAM_DMG[m - 1] : WATER_BEAM_DMG[0];
 }
-/* 法力条「涨满的那一刻」触发（上升沿；法力条满的一瞬间连射两道，之后要等它再次涨满） */
-function checkWaterMasteryBeams() {
-  if (!isWater() || !p.alive) { p.waterFullPrev = 0; return 0; }
+function waterMasteryBeamDmg() {
+  return Math.max(2, Math.round(mageAtkDmg() * waterBeamMul() * waterRampMul()));
+}
+/* 🌊 每帧检查（`updateGame` 里在扣蓝之前调用）：
+   ① **无双持续期间每 2 秒**射两道水激光（`WATER_MUSOU_BEAM_T`，**不看术有专攻** —— 这是无双自带的）
+   ② 法术条「涨满的那一刻」再补射两道（上升沿；有术有专攻才会触发） */
+const WATER_MUSOU_BEAM_T = 2;
+function checkWaterMasteryBeams(dt) {
+  if (!isWater() || !p.alive) { p.waterFullPrev = 0; p.waterExtraT = 0; return 0; }
+  let n = 0;
+  if (p.musouT > 0) {
+    p.waterExtraT = (p.waterExtraT || 0) - (dt || 0);
+    if (p.waterExtraT <= 0) { p.waterExtraT = WATER_MUSOU_BEAM_T; n += waterMasteryBeams(true); }
+  } else if (p.waterExtraT) {
+    p.waterExtraT = 0;                       // 无双一结束就归零（下次开无双重新按 2 秒计）
+  }
   const full = (p.memT <= 0 && p.mem >= memMax() - 0.001) ? 1 : 0;
   const was = p.waterFullPrev || 0;
   p.waterFullPrev = full;
-  if (!full || was) return 0;
-  return waterMasteryBeams();
+  if (!full || was) return n;
+  return n + waterMasteryBeams(false);
 }
-/* 两道激光水柱：枪口在**模型头顶左右两侧的「空气处」**，两道**各自独立结算**（同一敌人可吃两次） */
-function waterMasteryBeams() {
+/* 两道激光水柱：枪口在**模型头顶左右两侧的「空气处」**，两道**各自独立结算**（同一敌人可吃两次）。
+   `force = true` = 无双自带的那两道（不需要术有专攻，倍率按基础 ×2） */
+function waterMasteryBeams(force) {
   if (!isWater() || !p.alive) return 0;
-  const m = Math.min(WATER_BEAM_DMG.length, p.mut.mastery || 0);
-  if (m <= 0) return 0;                       // 没拿术有专攻 → 没有这道激光
+  if ((p.mut.mastery || 0) <= 0 && !force) return 0;   // 没拿术有专攻 → 没有这道激光
   const L = WATER_BEAM_LEN, Wd = waterWidth(), dmg = waterMasteryBeamDmg();
   const hx = p.x, hy = p.y - WATER_HEAD_UP;   // 头顶上方的「空气处」
   /* 落点 = 鼠标所在的那个世界点；比 760 还远就落在最远处（和根源波动☆一样「朝指针方向」打） */
@@ -16874,7 +16891,7 @@ function resetRun() {
   thunderClouds = []; arcs = [];
   p.rageT = 0; p.rageBonus = 0; p.manapoolT = 0; p.lavaTick = 0; p.lastBlink = 0;
   p.jobPend = 0; p.jetOn = 0; p.jetTick = 0; p.waterBurstT = 0;   // 转职状态跨局保留（不重置 p.job）
-  p.waterRampT = 0; p.waterOrbN = 0; p.waterFullPrev = 0;         // 🌊 水法师：喷射加成 / 吸取计数 / 「法力条满」上升沿标记
+  p.waterRampT = 0; p.waterOrbN = 0; p.waterFullPrev = 0; p.waterExtraT = 0;         // 🌊 水法师：喷射加成 / 吸取计数 / 「法力条满」上升沿标记 / 无双每 2 秒两道激光的计时
   p.lightJetOn = 0; p.lightJetTick = 0; p.lightJetPrev = null; lightBeams = [];
   p.mag = gunMagMax(); p.reloadT = 0; p.nadeN = 0; p.deployCd = 0;
   allyUnits = []; gunNades = []; gunRockets = []; sidekickCd = 0;
@@ -22168,8 +22185,10 @@ function updateGame(dt, rawDt) {
           p.musouT = musouMaxT();
           p.waterBurstT = 0.18;
           /* 🌊 用户本轮：无双开启瞬间**立刻补满法力条**（上面的 refillMana(true) 已做）
-             ＋ 在场地里生成 9 颗蓝球（每颗回 150 点法力；见 spawnWaterMusouOrbs） */
+             ＋ 在场地里生成 9 颗蓝球（每颗回 150 点法力；见 spawnWaterMusouOrbs）
+             ＋ **无双期间每 2 秒射两道水激光**（计时从 2 秒起算，避免和「满法力那一对」同帧叠在一起） */
           spawnWaterMusouOrbs(WATER_MUSOU_ORBS);
+          p.waterExtraT = WATER_MUSOU_BEAM_T;
         } else if (isLight()) {
           /* 光法师无双：持续光波（正常无双时间；光波由 updateLightWave 每帧结算，且不可反射） */
           p.musouT = musouMaxT();
@@ -22721,7 +22740,7 @@ function updateGame(dt, rawDt) {
   updateHellHazards(dt);               // 地狱奇遇：法师火坑 / 炽热擂台边缘火海
   updateLavaRing(dt);                  // 法师质变·熔岩结界
   tickFireMastery(dt);                 // 🌋 火法师·术有专攻：把「灼烧满 2 秒」的敌人就地砸一颗陨石
-  checkWaterMasteryBeams();            // 🌊 水法师·术有专攻：法力条**涨满的那一刻**射出头顶左右两道激光（必须在喷射扣蓝之前判定）
+  checkWaterMasteryBeams(dt);          // 🌊 水法师：无双每 2 秒两道激光 + 法力条涨满那一刻两道（必须在喷射扣蓝之前判定）
   updateWaterJet(dt);                  // 水法师：水柱喷射（耗法术条 + 每 0.5s 伤害）
   updateLightAttack();                 // 光法师：法术条一满即倾泻全部法力打出光炮
   updateLightWave(dt);                 // 光法师无双：持续光波（每 0.3s 结算，不可反射）
@@ -25961,7 +25980,9 @@ window.__musouDebug = () => ({ kills, score, coins, wave, state, alive: p.alive,
   /* 🌊 水法师读数：喷射时长累计 / 伤害加成倍率 / 蓝球回复量 / 吸取与激光计数 / 激光长度与伤害 / 无双蓝球 */
   waterRampT: +(p.waterRampT || 0).toFixed(2), waterRampSec: waterRampSec(), waterMul: +waterRampMul().toFixed(3),
   waterOrbMem: WATER_ORB_MEM, waterOrbN: p.waterOrbN || 0, waterVacuum: dbgWaterVacuum, waterExtra: dbgWaterExtra,
-  waterBeamDmg: (isWater() && (p.mut.mastery || 0) > 0) ? waterMasteryBeamDmg() : 0,
+  waterBeamDmg: (isWater() && ((p.mut.mastery || 0) > 0 || p.musouT > 0)) ? waterMasteryBeamDmg() : 0,
+  waterBeamMul: isWater() ? waterBeamMul() : 0, waterExtraT: +(p.waterExtraT || 0).toFixed(2),
+  jetFree: (isWater() && p.musouT > 0) ? 1 : 0,   // 🌊 无双期间**不扣法力条**（用户本轮）
   waterBeamHits: dbgWaterBeamHits, waterMusouOrbs: dbgWaterMusouOrbs, waterFull: p.waterFullPrev ? 1 : 0,
   waterBeamLen: WATER_BEAM_LEN, waterBeams: lightBeams.filter(b => b.water).length, jetTick: JET_TICK,
   light: isLight() ? 1 : 0, lightShots: dbgLightShots, lightHits: dbgLightHits, lightW: lightWidth(), lightFanN: lightFanN(), lightFanDeg: lightFanDeg(),
@@ -27652,10 +27673,10 @@ window.__musouLeechK = (v) => { if (state === 'play') p.leechK = Math.max(0, v |
 window.__musouMana = (v, t) => { if (state === 'play') { p.mem = Math.max(0, Math.min(memMax(), v | 0)); p.memT = t > 0 ? t : 0; return p.mem; } return -1; }; // 测试钩子：设定法师法术条（第二参数为剩余回复秒数）
 window.__musouWaterRamp = (v) => { p.waterRampT = Math.max(0, +v || 0); return waterRampSec(); };   // 🌊 测试钩子：直接设「本波已喷射秒数」（水柱伤害加成 = 1 + 0.08×整秒数）
 window.__musouWaterOrb = (v) => { p.waterOrbN = Math.max(0, v | 0); return p.waterOrbN; };           // 🌊 测试钩子：设「已累计吸取的法术球数」（诊断读数，不再触发激光）
-window.__musouWaterBeamsNow = () => waterMasteryBeams();   // 🌊 测试钩子：立刻射出术有专攻的两道激光（返回命中次数）
-window.__musouWaterBeamDmg = () => waterMasteryBeamDmg();  // 🌊 测试钩子：单道激光的当前伤害（法师普攻 × 层数档 × 喷射加成）
+window.__musouWaterBeamsNow = (force) => waterMasteryBeams(force !== undefined ? !!force : true);   // 🌊 测试钩子：立刻射出两道激光（默认**强制**射，无视术有专攻；force=false 走正常门槛。返回命中次数）
+window.__musouWaterBeamDmg = () => waterMasteryBeamDmg();  // 🌊 测试钩子：单道激光的当前伤害（法师普攻 × 倍率档 × 喷射加成）
 window.__musouWaterSpawnOrbs = (n) => spawnWaterMusouOrbs(n | 0);   // 🌊 测试钩子：手动生成 n 颗蓝球（无双那 9 颗同款）
-window.__musouWaterFullCheck = () => { p.waterFullPrev = 0; return checkWaterMasteryBeams(); };  // 🌊 测试钩子：把「法力条满」的上升沿重置后再判定一次
+window.__musouWaterFullCheck = () => { p.waterFullPrev = 0; return checkWaterMasteryBeams(0); };  // 🌊 测试钩子：把「法力条满」的上升沿重置后再判定一次（dt=0 → 不动无双那 2 秒节拍）
 window.__musouWaterBeams = () => lightBeams.filter(b => b.water).map(b => ({ w: b.w, segs: b.segs.map(s => ({ x1: Math.round(s.x1), y1: Math.round(s.y1), x2: Math.round(s.x2), y2: Math.round(s.y2), len: Math.round(Math.hypot(s.x2 - s.x1, s.y2 - s.y1)) })) }));   // 🌊 测试钩子：当前在场的「额外两道激光水柱」（段长用来钉「距离 = 根源波动×2 = 760」）
 window.__musouDropOrb = (kind) => { if (state === 'play') { orbs.push({ x: p.x, y: p.y, kind: kind || 'hp', vx: 0, vy: 0, dead: false }); return true; } return false; }; // 测试钩子：在玩家脚下掉一个球（默认绿球/回血球）
 window.__musouDropOrbAt = (kind, x, y) => { if (state === 'play') { orbs.push({ x: x, y: y, kind: kind || 'hp', vx: 0, vy: 0, dead: false }); return orbs.length - 1; } return -1; }; // 测试钩子：在指定世界坐标掉一个球（验证「每波结束全图吸取」）
