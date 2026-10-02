@@ -1112,6 +1112,10 @@ let dbgArrows = 0;        // 诊断：弓箭手/士兵 发射弹丸数
 let dbgBoltHoming = 0;    // 诊断：雷法师闪电球「锁定过目标」的弹体数（自动追踪生效计数）
 let lightBeams = [];      // 光法师：光炮的线段视觉（含反射段）
 let dbgLightShots = 0, dbgLightHits = 0, dbgLightWaveTicks = 0, dbgLightWaveHits = 0, dbgLightBounces = 0, dbgLightAngles = [], dbgLightDoubles = 0;   // 诊断：光炮发射/命中/反射/无穷法力连射、无双光波结算/命中、最近一发的角度（度）
+/* 🖌️ 绘制计数器（诊断「某个视觉效果**真的被画出来**」，而不只是数据算对了）：
+   `dbgBeamDrawN` = 线段光束（光炮 / 术有专攻激光）画过的条数；`dbgCloneDrawN` = 影分身立绘画过的帧数。
+   ⚠️ 用户报过两次「数据对但不显示」：水法师激光被写在 `if (isLight())` 里、浪客的影分身立绘被 `return` 跳过 —— 都靠这两个读数钉死 */
+let dbgBeamDrawN = 0, dbgCloneDrawN = 0;
 let novRainT = 0, novRainTick = 0, rainSecs = 0;   // 十一月雨：全屏箭雨剩余秒数 / 0.5s 结算计时 / 雨一直下累计增伤秒数
 /* 十一月雨·雨幕视觉：雨丝与落点箭矢冲击都**相对镜头视野**生成（世界 3200×1800 太大，
    旧写法从世界顶端 y=-6 往下落 → 站在地图中下部时雨还没进视野就消失了，看起来「只有上半屏有雨」） */
@@ -16878,6 +16882,7 @@ function resetRun() {
   dbgHellEv = 0; dbgHellPits = 0; dbgHellRing = 0; dbgGreenBrute = 0; dbgHellChest = 0; dbgHellPitsHit = 0;
   dbgWaterTicks = 0; dbgWaterBursts = 0; dbgWaterHits = 0; dbgWaterLaneN = 0; p.jetPrev = null;
   dbgWaterVacuum = 0; dbgWaterExtra = 0; dbgWaterBeamHits = 0; dbgWaterMusouOrbs = 0;
+  dbgBeamDrawN = 0; dbgCloneDrawN = 0;
   dbgBolts = 0; dbgChainN = 0; dbgThunHits = 0; dbgThunExec = 0; dbgThunExecWait = 0; dbgClouds = 0; dbgCloudBolts = 0; dbgStrikeN = 0; dbgStrikeHits = 0; thunderClouds = []; arcs = []; thunBossCd = 0;
   dbgBlinkShocks = 0;
   dbgLunges = 0; dbgJumps = 0; dbgSlams = 0; dbgGenShots = 0;
@@ -21475,7 +21480,11 @@ function drawPlayer() {
   if (!p.alive) return;
   if (isArcher()) { drawArcherPlayer(); return; }   // 弓箭手立绘走独立分支
   if (isMage()) { drawMagePlayer(); return; }       // 法师立绘走独立分支
-  if (isRonin()) { drawRoninPlayer(); return; }     // 浪客立绘：持太刀的武士（自己带无双光环与无敌闪烁）
+  /* 浪客立绘：持太刀的武士（自己带无双光环与无敌闪烁）
+     ⚠️ 影分身立绘原来只画在**非浪客**那条分支的末尾 —— `drawPlayer()` 到浪客这里就 `return` 了，
+     所以浪客拿「影分身十字斩」时**分身根本不显示**（用户报的 bug）。这里补上同款绘制
+     （`p.alive` 上面已判、`!isArcher()` 对浪客恒真；只差 `cloneInCenter()` 的幕布判定）。 */
+  if (isRonin()) { drawRoninPlayer(); if ((p.mut.clone || 0) > 0 && cloneInCenter()) drawCloneGhost(); return; }
   if (isKnight()) { drawKnightPlayer(); return; }   // 🛡️ 骑士立绘：举盾持枪（>150% 移速加成时骑马）
   if (isWM()) { drawWMPlayer(); return; }           // 🗡️ 武器大师：手里 + 腰间 + 无双时身周全是武器
   const musou = p.musouT > 0;
@@ -21600,6 +21609,7 @@ function cloneMirrorPos() {
 function drawCloneGhost() {
   const cp = cloneMirrorPos();
   if (!cp) return;   // 本体离开中央幕布 → 分身消失
+  dbgCloneDrawN++;   // 诊断：影分身立绘真的画了一帧
   const cx = cp.x, cy = cp.y;
   const m = Math.hypot(p.vx, p.vy);
   const leg = Math.sin(p.walk * 0.35) * Math.min(m / 240, 1) * 4;
@@ -24994,9 +25004,14 @@ function drawGame() {
       ctx.beginPath(); ctx.moveTo(mz.x, mz.y); ctx.lineTo(ex, ey); ctx.stroke();
       ctx.restore();
     }
-    for (const b of lightBeams) {
+  }
+  /* 光炮 / 术有专攻激光的**线段视觉**：不分职业都在这里画
+     （⚠️ 以前这段被写在 `if (isLight())` 里面 → 水法师的术有专攻激光**根本不会被画出来**，用户报的就是这个）
+     `b.water = 1` 的换水蓝配色；`b.segs` 是通用结构，光炮的反射段也在里面 */
+  for (const b of lightBeams) {
+      dbgBeamDrawN += b.segs.length;   // 诊断：线段光束真的画出来了（光炮 + 水法师术有专攻激光共用这一段）
       const k = 1 - b.t / b.life;   // 尾段淡出
-      /* 🌊 水法师的额外激光水柱：同一个 segs 结构，只换配色（水蓝） */
+      /* 🌊 水法师的术有专攻激光：同一个 segs 结构，只换配色（水蓝） */
       const wcol = b.water ? 'rgba(110,190,255,0.9)' : 'rgba(255,236,150,0.9)';
       const wcore = b.water ? 'rgba(240,252,255,1)' : 'rgba(255,255,245,1)';
       const wtip = b.water ? 'rgba(200,240,255,0.9)' : 'rgba(255,246,200,0.9)';
@@ -25019,7 +25034,6 @@ function drawGame() {
       }
       ctx.restore();
     }
-  }
   /* 法师陨石：坠落拖尾 + 落点预警圈 */
   for (const me of meteors) {
     const fall = Math.min(1, Math.max(0, (me.t - me.delay) / 0.26));
@@ -25941,6 +25955,7 @@ window.__musouDebug = () => ({ kills, score, coins, wave, state, alive: p.alive,
   medicHealP: MEDIC_HEAL_P, medicHealU: MEDIC_HEAL_U,
   allies: allyUnits.filter(u => !u.dead).map(u => ({ k: u.kind, hp: Math.round(u.hp), maxhp: u.maxhp, x: Math.round(u.x), y: Math.round(u.y), invT: +(u.invT || 0).toFixed(2) })),
   rockets: gunRockets.length, nadeLive: gunNades.length,
+  beamDrawN: dbgBeamDrawN, cloneDrawN: dbgCloneDrawN,   // 🖌️ 绘制计数：线段光束画过的条数 / 影分身立绘画过的帧数
   waterTicks: dbgWaterTicks, waterHits: dbgWaterHits, waterLaneN: dbgWaterLaneN, waterBursts: dbgWaterBursts, waterW: waterWidth(), waterL: Math.round(waterLen()), waterLanes: waterLanes(), waterDmg: waterTickDmg(), mpRate: +mpDropRate().toFixed(4),
   /* 🌊 水法师读数：喷射时长累计 / 伤害加成倍率 / 蓝球回复量 / 吸取与激光计数 / 激光长度与伤害 / 无双蓝球 */
   waterRampT: +(p.waterRampT || 0).toFixed(2), waterRampSec: waterRampSec(), waterMul: +waterRampMul().toFixed(3),
