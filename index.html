@@ -1161,7 +1161,7 @@ const p = {
   swingN: 0, extraN: 0, extraT: 0, thunC: 0, forgeT: 0, leechK: 0,   // leechK：夺命累计击杀进度；thunC：落雷累计击杀；forgeT：即时铸盾计时
   mutFullKills: 0,   // ✨ 质变全满后再击败闪光敌人的次数（每次 +1% 最终造成伤害，本局内永久叠加）
   weapon: '', weaponPend: 0,                              // 弓箭手武器：'' / 'bow' 传统弓 · 'gun' 现代枪械（士兵）· 'card' 牌皇 · 'trainer' 训练家（开发者版本）
-  petKind: '', petOwned: [], trainLv: 0, starterPend: 0,  // 🧢 训练家：御三家 id / 已拥有的宝可梦（最多 6 只）/ 升级强化层数 / 「挑御三家」面板挂起
+  petKind: '', petOwned: [], trainLv: 0, starterPend: 0, starterBossDown: 0,  // 🧢 训练家：御三家 id / 已拥有的宝可梦（最多 6 只）/ 升级强化层数 / 「挑御三家」面板挂起 / 第 5 波总大将是否已倒
   petEgg: 0,                                             // 🥚 宝可梦蛋（第 1 波清剿后到手 · 第 5 波清剿后孵出波克比）
   petCatchWv: [], catchPend: 0,                          // 🐾 已经捕捉过的波次（第 10 / 15 波各一次）· 面板挂起
   legendPend: 0, legendGot: 0,                           // 🌟 丰缘之战奖励：面板挂起 · 本局是否已经收过一只神兽（一局只能有一只，进存档）
@@ -8067,21 +8067,36 @@ function petEggWaveEnd(wave) {
    ⚠️ 判定不能只看 `p.starterPend`（它不进存档）：`starterPickDue()` 是**从状态推导**的兜底 ——
    只要「训练家 + 波次已过 5 + 手里还留着 2 只以上御三家」就成立，所以存档/读档、老存档进来
    都会在下一次 `tryOpen()` 时把面板补上（`tryOpen` 里它排在奇物/升级前面）。 */
-const PET_STARTER_PICK_WAVE = 5;   // 第 5 波清剿后：御三家三选一
+const PET_STARTER_PICK_WAVE = 5;   // 第 5 波**打完总大将之后**：御三家三选一
 function starterOwnedN() {
   const own = p.petOwned || [];
   let n = 0;
   for (const id of PET_STARTERS) if (own.indexOf(id) >= 0) n++;
   return n;
 }
-function starterPickDue() { return isTrainer() && wave >= PET_STARTER_PICK_WAVE && starterOwnedN() > 1; }
-function petStarterWaveEnd(wave) {
+/* ⚠️⚠️ 用户本轮修的问题：「御三家选择要在**打完第 5 波总大将之后**，不是打总大将之前」。
+   根因：老的 `starterPickDue()` 只判 `wave >= 5` —— 而 `tryOpen()` 每帧都在跑，
+   所以**第 5 波一开始**（总大将还在场）面板就弹出来了。
+   现在多一道条件 `p.starterBossDown`：**第 5 波的 Boss（⭐总大将）倒下那一刻**才置 1（见 `petStarterBossDown`），
+   另外 `wave > 5` 作为兜底（读老存档 / 存档正好停在已打过第 5 波的时候）。 */
+function starterPickDue() { return isTrainer() && starterOwnedN() > 1 && (p.starterBossDown > 0 || wave > PET_STARTER_PICK_WAVE); }
+/* 第 5 波的 Boss 被讨伐的那一刻调用（killEnemy 里 `if (e.boss)`） */
+function petStarterBossDown() {
   if (!isTrainer() || wave !== PET_STARTER_PICK_WAVE) return 0;
+  p.starterBossDown = 1;                       // 从这一刻起 `starterPickDue()` 才成立
   if (starterOwnedN() <= 1) return 0;          // 只剩一只（或本来就只有一只）→ 不需要选
+  if (p.starterPend > 0) return 0;             // 已经挂起过（避免和波次结算重复弹）
   p.starterPend = 1;
-  bigBanner('🧢 御 三 家 · 三 选 一', '第 ' + PET_STARTER_PICK_WAVE + ' 波清剿 · 另外两只将离队');
+  bigBanner('🧢 御 三 家 · 三 选 一', '第 ' + PET_STARTER_PICK_WAVE + ' 波总大将已讨伐 · 另外两只将离队');
   tryOpen();                                   // 世界在这里冻结，选完才继续（见 pickChoice → tryOpen）
   return 1;
+}
+/* 第 5 波清剿结算时的兜底（⚠️ 必须在总大将倒下之后才生效，见上面那段注释） */
+function petStarterWaveEnd(wave) {
+  if (!isTrainer() || wave !== PET_STARTER_PICK_WAVE) return 0;
+  if (!p.starterBossDown) return 0;            // 总大将还没打完 → 绝不提前弹
+  if (p.starterPend > 0) return 0;             // 总大将那一下已经弹过了
+  return petStarterBossDown();
 }
 function petEggHatch() {
   p.petEgg = 0;
@@ -13854,7 +13869,10 @@ function killEnemy(e) {
   /* 🃏 夺舍牌：击杀瞬间先掷一次倒戈判定（每层 2%，满 5 层 10%）。
      成功 → 目标原地满血变成友军，本函数直接返回：**不计击杀、不掉球、不给分** */
   if (charmCanConvert(e) && Math.random() < charmChance()) { charmConvert(e); return; }
+  if (e.dead) return 0;
   e.dead = true;
+  /* 🧢 训练家：**第 5 波的总大将倒下这一刻**才允许御三家三选一（用户要求「打完总大将之后再选」） */
+  if (e.boss) petStarterBossDown();
   /* 💀 骷髅头：**被玩家提前打死也会在原地炸**（接触自爆与超时自爆走 skullBoom，爆炸由 skullBoomed 去重） */
   if (e.type === 'skull') skullExplode(e);
   if (e.warn) { e.warn.dead = true; e.warn = null; }   // 法师死亡：取消其预警法阵
@@ -16560,10 +16578,24 @@ function b64ToDec(str) {
   return n.toString();
 }
 function exportSaveCode() { const d = saveDigits(); return SAVE_PREFIX + decToB64(d + saveCk(d)); }
+/* 🌟 特殊存档码（用户要求）：「GearLun」= 一键导入**技能树全满 + 三职业闪光套装全满**的存档，
+   传承金币 0、闪光图鉴**留空**。不区分大小写；走的是**同一条导入路径**（照样要二次确认覆盖）。
+   ⚠️ 实现方式：`decodeSaveCode()` 识别到这个码就直接返回一份**预设好的 data**，
+   后面 `applySaveCode()` 照旧按字段覆盖 —— 不要在别处再抄一份覆盖逻辑。 */
+function specialSaveData() {
+  const tree = {};
+  for (const n of META_TREE) tree[n.id] = n.max;                       // 技能树全满（每项都顶到上限）
+  const sets = {}, use = {};
+  for (const c of CLASS_SETS) { sets[c.role] = 1; use[c.role] = 1; }   // 三职业闪光套装：解锁 + 启用
+  return { tree, dex: {}, dexOn: {}, sets, use, runs: 0, bank: 0, earned: 0, egg: 0, setAll: 1 };
+}
 /* 解码（含校验）；失败返回 { ok:0, why } */
 function decodeSaveCode(code) {
   const raw = String(code || '').trim().replace(/\s+/g, '');
   if (!raw) return { ok: 0, why: '存档码是空的' };
+  if (raw.toLowerCase() === 'gearlun') {
+    return { ok: 1, why: '', digits: '', special: 'GearLun', data: specialSaveData() };
+  }
   if (raw.slice(0, SAVE_PREFIX.length) !== SAVE_PREFIX) return { ok: 0, why: '存档码格式不对（应以 ' + SAVE_PREFIX + ' 开头）' };
   const dec = b64ToDec(raw.slice(SAVE_PREFIX.length));
   if (dec === null) return { ok: 0, why: '存档码里有非法字符（只允许 0-9 A-Z a-z - _）' };
@@ -16648,6 +16680,13 @@ function saveImportReset() { saveImportArmed = 0; const b = $('btn-save-import')
   if (!r.ok) { saveTip('❌ 导入失败：' + r.why, '#ff8a6a'); return; }
   renderMeta(); renderShinyDex();
   const d = r.data;
+  if (r.special) {
+    saveTip('✨ 特殊存档码 <b>' + r.special + '</b> 已导入：**技能树全满 + 三职业闪光套装全满**，' +
+            '传承金币 <b>0</b>、闪光图鉴**留空**（按你的要求）。原存档已被这次导入覆盖。', '#8ff0e8');
+    if (sfx && sfx.pick) sfx.pick();
+    flashG = Math.max(flashG, 0.15);
+    return;
+  }
   saveTip('✅ 导入成功！传承金币 <b>' + d.bank + '</b> · 局数 <b>' + d.runs + '</b> · 闪光图鉴 <b>' +
           Object.keys(d.dex).length + '</b> 只 · 养成等级合计 <b>' +
           META_TREE.reduce((a, n) => a + (d.tree[n.id] || 0), 0) + '</b> 级。原存档已被这次导入覆盖。', '#8ff0e8');
@@ -16907,7 +16946,7 @@ function resetRun() {
   p.hurtAge = 0; p.shieldC = 0; p.oshield = 0;
   p.swingN = 0; p.extraN = 0; p.extraT = 0; p.thunC = 0; p.forgeT = 0; p.leechK = 0;
   p.mutFullKills = 0;   // ✨ 质变全满后的「闪光追猎」计数随新局清零
-  p.petKind = ''; p.petOwned = []; p.trainLv = 0; p.starterPend = 0;   // 🧢 训练家：御三家与宝可梦随新局重选
+  p.petKind = ''; p.petOwned = []; p.trainLv = 0; p.starterPend = 0; p.starterBossDown = 0;   // 🧢 训练家：御三家与宝可梦随新局重选
   p.petEgg = 0;                                                        // 🥚 宝可梦蛋也随新局收回
   p.petCatchWv = []; p.catchPend = 0; petCatchCfg = null;              // 🐾 两档捕捉机会也重置
   p.legendPend = 0; p.legendGot = 0;                                   // 🌟 丰缘之战的奖励（一局一只神兽）随新局清零
@@ -17535,7 +17574,7 @@ function startBossLab(type) {
   resetRun();
   p.role = 'warrior'; p.weapon = ''; p.ronin = 0; p.knight = 0; p.wm = 0; p.wmBag = []; p.wmStock = null;
   p.weaponPend = 0; p.roninPend = 0; p.jobPend = 0; p.artPend = 0; p.pending = 0; mutPending = 0;
-  p.starterPend = 0; p.petKind = ''; p.petOwned = []; p.trainLv = 0;   // 🧢 试验场不用训练家那套
+  p.starterPend = 0; p.petKind = ''; p.petOwned = []; p.trainLv = 0; p.starterBossDown = 0;   // 🧢 试验场不用训练家那套
   allyUnits = allyUnits.filter(u => u.kind !== 'pet' && u.kind !== 'shinypet');
   choosing = false; curChoices = []; curKind = 'level';
   hideAllPanels();
@@ -26444,13 +26483,14 @@ window.__musouMetaSetOwn = (role, own, use) => { meta.sets[role] = own ? 1 : 0; 
 window.__musouSetAll = () => ({ sets: metaSetsOwned(), need: CLASS_SETS.length, claimed: meta.setAll ? 1 : 0, reward: SET_ALL_REWARD, bank: meta.bank, gain: lastSetAllGain }); // 测试钩子：三职业闪光套装集齐奖励状态
 window.__musouSetAllTry = () => metaSetAllCheck();   // 测试钩子：再走一次发奖判定（已领过 / 没集齐都返回 0）
 window.__musouMetaCost = (id) => metaCost(id);   // 测试钩子：读取某节点升级价格
+window.__musouMetaTreeCaps = () => META_TREE.map(n => ({ id: n.id, max: n.max }));   // 测试钩子：技能树每项的 id + 上限（算「全满」用）
 window.__musouMetaBuy = (id) => metaBuy(id);     // 测试钩子：走真实购买流程
 /* 💾 存档码钩子（导出 / 解码 / 覆盖导入）—— 导入会**清掉当前局外存档**，测试里请自行备份后用完恢复 */
 window.__musouSaveCode = () => exportSaveCode();                       // 导出当前局外存档的存档码
 window.__musouSaveLen = () => SAVE_DIGITS + SAVE_CK;                   // 十进制总位数（148 + 2 位校验）
 window.__musouSaveLayout = () => SAVE_LAYOUT.map(f => f[0] + ':' + (f[1] * f[2])).join(' ');   // 字段表（含预留段）
-window.__musouSaveDecode = (code) => { const r = decodeSaveCode(String(code || '')); return r.ok ? { ok: 1, data: r.data, digits: r.digits } : { ok: 0, why: r.why }; };
-window.__musouSaveApply = (code) => { const r = applySaveCode(String(code || '')); if (r.ok) { renderMeta(); renderShinyDex(); } return r.ok ? { ok: 1, data: r.data } : { ok: 0, why: r.why }; };
+window.__musouSaveDecode = (code) => { const r = decodeSaveCode(String(code || '')); return r.ok ? { ok: 1, data: r.data, digits: r.digits, special: r.special || '' } : { ok: 0, why: r.why }; };
+window.__musouSaveApply = (code) => { const r = applySaveCode(String(code || '')); if (r.ok) { renderMeta(); renderShinyDex(); } return r.ok ? { ok: 1, data: r.data, special: r.special || '' } : { ok: 0, why: r.why }; };
 window.__musouAimRate = () => AIM_TURN_RATE;                           // 📱 手机端线性攻击的转向速度（rad/s）
 window.__musouAimTurn = (cur, want, dt) => turnToward(cur, want, dt);   // 转向助手（钉「0.5 秒转满 360°」）
 window.__musouCoinsTotal = (v) => { if (v !== undefined) { coinsTotal = Math.max(0, v | 0); runBanked = false; } return coinsTotal; }; // 测试钩子：设定本局总金币
@@ -26729,6 +26769,22 @@ window.__musouMiniMap = () => ({   // 测试钩子：小地图矩形 / 视野框
 });
 window.__musouClearField = (keepOrbs) => { if (state !== 'play') return; enemies = []; shots = []; warnFx = []; roninWalls = []; blades = []; plunderRunes = []; hexes = []; blackHoles = []; homingM = []; catE = null; cardCats = []; charmUnits = []; klLances = []; royalCavs = []; skySpears = []; wmThrusts = []; wmPlanes = []; wmOrbit = {}; wmOrbitOn = {}; wmOrbitHit = {}; wmOrbitDmg = {}; wmAnim = {}; wmDrones = []; wmBottles = []; wmFires = []; wmDashSlashes = []; wmShurikens = []; wmPrisms = []; wmHolySeq = {}; wmBeams = []; wmCharge = {}; wmAuraT = {}; dbgWMShotOrigins = []; swordE = null; drones = []; pBullets = []; bolts = []; if (!keepOrbs) orbs = []; spawnQ = []; meteors = []; firePits = []; mMeteorFx = []; thunderClouds = []; arcs = []; lightBeams = []; rainDrops = []; rainHits = []; voidImpacts = []; fxSprites = []; petBeams = []; petPools = []; petTornadoes = []; petMeteors = []; planteraVines = []; hoennSpikes = []; hoennBeams = []; nukeFx = null; }; // 测试钩子：清场 + 停出怪 + 移除随行攻击体/火坑/陨石/雷云/光炮/雨幕/哈吉咪/**世纪之花藤蔓/丰缘之战的地刺与光柱/未落地的核弹**（keepOrbs=true 时保留掉落物，测「每波吸取」用）
 window.__musouClearAllies = () => { allyUnits = []; };   // 测试钩子：清空部署单位（敌人索敌会优先打假人/随从，探针期必须清掉才锁定角色）
+/* 测试钩子：场上（未死）敌人的类型列表；**Boss 后面带 `*`**。用来验「某波的 Boss 到底在不在场」 */
+window.__musouFoeTypes = () => enemies.filter(e => !e.dead).map(e => e.type + (e.boss ? '*' : ''));
+/* 测试钩子：**直接往场上放一只 Boss**（默认⭐总大将）。用来验「打完总大将才弹御三家三选一」这类
+   「必须等某只 Boss 死」的流程 —— 真等第 5 波那 289 只小怪刷完太慢了。返回那只敌人。 */
+window.__musouSpawnBoss = (type) => (state === 'play' ? spawnEnemy(type || 'general') : null);
+/* 测试钩子：**走真实 `killEnemy` 路径**把场上敌人打死（`__musouClearField()` 只是把数组抹掉、不触发死亡逻辑）。
+   传 `1` = **只杀非 Boss**（用来验「小怪清光但总大将还活着时不许弹御三家三选一」）。返回击杀数。 */
+window.__musouKillFoes = (mobOnly) => {
+  let n = 0;
+  for (const e of enemies.slice()) {
+    if (e.dead) continue;
+    if (mobOnly && e.boss) continue;
+    killEnemy(e); n++;
+  }
+  return n;
+};
 window.__musouDummy = (dx, dy, hp, r, boss) => { // 测试钩子：玩家前方放一只高血「不动靶」兵卒（射程/穿透探针：不移动、不吃击退）；
   /* 可选第 4 参 r：放大判定圈（模拟大体型 / Boss）；第 5 参 boss=1：按 Boss 级目标处理（验证剑气对 Boss 翻倍） */
   if (state !== 'play' || !p.alive) return -1;
@@ -27294,6 +27350,7 @@ window.__musouTrainerInfo = () => {
     owned: (p.petOwned || []).slice(), max: PET_MAX, trainLv: p.trainLv || 0,
     /* 🧢 御三家三选一（第 5 波清剿后必须留一只）：读「还留着几只御三家 / 该不该选 / 是哪一波」 */
     starterN: starterOwnedN(), starterPickWave: PET_STARTER_PICK_WAVE, starterDue: starterPickDue() ? 1 : 0,
+    starterBossDown: p.starterBossDown ? 1 : 0,   // 第 5 波 ⭐总大将 是否已被讨伐（「打完总大将才三选一」的回归读数）
     edge: PET_EDGE, edgeN: dbgPetEdgeN,   // 🚧 场地边界 + 「被墙夹回来」的次数（宝可梦越界 bug 的回归读数）
     pets, petN: pets.length,
     /* 🧬 进化读数：当前段位 / 各段形态 key 与名字 / 进化等级 / 本局进化次数 */
