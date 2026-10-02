@@ -433,7 +433,7 @@
   <!-- 开始界面 -->
   <div class="screen show" id="sc-start">
    <div class="home-inner">
-    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.3.0</small></div>
+    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.3.1</small></div>
     <div class="keys" id="keys-desk">
       <span><b>WASD</b> / <b>方向键</b></span><span>移动</span>
       <span><b>自动攻击</b></span><span id="kbd-atk-d">自动挥砍，无需按键</span>
@@ -853,7 +853,7 @@
 <script>
 'use strict';
 /* ============================================================
-   草·割无双  MUSOU MOW  —  无双割草 正式版 v1.3.0
+   草·割无双  MUSOU MOW  —  无双割草 正式版 v1.3.1
    纯 Canvas 2D + WebAudio 程序化音效，无任何外部资源
    ============================================================ */
 (() => {
@@ -1115,7 +1115,7 @@ let dbgLightShots = 0, dbgLightHits = 0, dbgLightWaveTicks = 0, dbgLightWaveHits
 /* 🖌️ 绘制计数器（诊断「某个视觉效果**真的被画出来**」，而不只是数据算对了）：
    `dbgBeamDrawN` = 线段光束（光炮 / 术有专攻激光）画过的条数；`dbgCloneDrawN` = 影分身立绘画过的帧数。
    ⚠️ 用户报过两次「数据对但不显示」：水法师激光被写在 `if (isLight())` 里、浪客的影分身立绘被 `return` 跳过 —— 都靠这两个读数钉死 */
-let dbgBeamDrawN = 0, dbgCloneDrawN = 0;
+let dbgBeamDrawN = 0, dbgCloneDrawN = 0, dbgBeamTgtBoss = 0;
 let novRainT = 0, novRainTick = 0, rainSecs = 0;   // 十一月雨：全屏箭雨剩余秒数 / 0.5s 结算计时 / 雨一直下累计增伤秒数
 /* 十一月雨·雨幕视觉：雨丝与落点箭矢冲击都**相对镜头视野**生成（世界 3200×1800 太大，
    旧写法从世界顶端 y=-6 往下落 → 站在地图中下部时雨还没进视野就消失了，看起来「只有上半屏有雨」） */
@@ -13961,11 +13961,9 @@ function killEnemy(e) {
     orbs.push({ x: e.x, y: e.y, kind: 'chest', vx: 0, vy: 0, dead: false });   // 每个敌人都掉宝箱
     dbgHellChest++;
   }
-  /* 水法师：击杀敌人额外掉蓝球（基础掉率 5% = 与黄球同率；⚠️ 术有专攻本轮改为「满法力两道激光」，
-     不再加掉率；闪光必掉）。水法师的蓝球大头来自无双开局生成的那 9 颗。 */
-  if (!noOrb && isWater() && (shiny || Math.random() < mpDropRate())) {
-    orbs.push({ x: e.x, y: e.y, kind: 'mp', vx: 0, vy: 0, dead: false });
-  }
+  /* 🌊 水法师：⚠️ 用户本轮要求**击败敌人不再掉落蓝色法力球**（连闪光敌人也不掉）——
+     蓝球现在只有「无双开启时场地生成的那 9 颗」这一个来源（`spawnWaterMusouOrbs`）。
+     原来的掉落分支（`shiny || Math.random() < mpDropRate()`）已删除，`mpDropRate()` 现值恒为 0。 */
   while (mIdx < MILESTONES.length && kills >= MILESTONES[mIdx][0]) {
     bigBanner(MILESTONES[mIdx][1], '连击 ' + combo + '!');
     sfx.fanfare();
@@ -14967,9 +14965,14 @@ function fireMasteryCd() { return FIRE_M_CD[Math.max(0, Math.min(2, (p.mut.maste
 function fireMasteryDmgMul() { return FIRE_M_DMG[Math.max(0, Math.min(2, (p.mut.mastery || 1) - 1))]; }
 /* 就地砸一颗（无延迟）：范围伤害 + 冲击特效（不留下火坑 —— 用户没要求，别自作主张加）
    ⚠️ 伤害**瞬间结算**（用户要求「落地没有延迟=必中」），所以动画只做「刚砸过」的余像：
-   往下收回的尾迹 + 扩散冲击环 + 残光，全部塞进 `mMeteorFx`，由 `tickFireMastery` 推进 */
+   往下收回的尾迹 + 扩散冲击环 + 残光，全部塞进 `mMeteorFx`，由 `tickFireMastery` 推进
+   🌋 用户本轮两条口径：
+     ① 每颗陨石 = **角色等级 + 法师普攻 × 档位倍率**（1 级档 = ×3，即 `等级 + 普攻 × 3`；乘法先算 → 等级不吃倍率）
+     ② **对 Boss 单位伤害翻倍**（`FIRE_M_BOSS_MUL = 2`；只对 Boss 乘，普通敌人不变） */
+const FIRE_M_BOSS_MUL = 2;
+function fireMasteryMeteorDmg() { return Math.max(2, Math.round((p.lvl || 0) + mageAtkDmg() * fireMasteryDmgMul())); }
 function fireMasteryMeteor(x, y) {
-  const R = FIRE_M_R, dmg = Math.max(2, Math.round(mageAtkDmg() * fireMasteryDmgMul()));
+  const R = FIRE_M_R, dmg = fireMasteryMeteorDmg();
   mMeteorFx.push({ x, y, t: 0, life: FIRE_M_FX_LIFE });
   if (mMeteorFx.length > 12) mMeteorFx.shift();
   rings.push({ x, y, r: 14, vr: 780, life: 0.32, max: 0.32, color: '#ffb066', width: 8 });
@@ -14982,7 +14985,9 @@ function fireMasteryMeteor(x, y) {
     if (e.dead) continue;
     const dx = e.x - x, dy = e.y - y, dd = Math.hypot(dx, dy);
     if (dd > R + e.r) continue;
-    hitEnemy(e, dx / (dd || 1), dy / (dd || 1), 320, dmg);
+    /* 🌋 对 Boss 单位**双倍**（用户本轮要求；`e.boss` = 全局那套 Boss 判定） */
+    const one = e.boss ? Math.round(dmg * FIRE_M_BOSS_MUL) : dmg;
+    hitEnemy(e, dx / (dd || 1), dy / (dd || 1), 320, one);
   }
   dbgMasteryMeteors++;
   return dmg;
@@ -15085,7 +15090,10 @@ function takeOrb(o, quiet) {
   if (o.kind === 'hp') {
     healOverflow(14);   // 绿球只回血：溢出的部分**不再**转护盾（只有夺命质变能转）
   } else if (o.kind === 'mp') {
-    p.mem = Math.min(memMax(), p.mem + WATER_ORB_MEM);   // 蓝球（法术球）：回法术条（用户本轮：30 → 150 点）
+    /* 🌊 蓝球（法术球）回法术条 —— 用户最新两条口径：
+       · **自动吸取**（水法师见底自动吸 / 每波清剿后的全图吸取，都是 `quiet = true`）→ 每颗 **150**
+       · 玩家**主动走过去拾取**（130px 近距吸取这条路径）→ 每颗直接 **450** */
+    p.mem = Math.min(memMax(), p.mem + (quiet ? WATER_ORB_MEM : WATER_ORB_MEM_PICK));
     p.memT = 0;
   } else if (o.kind === 'chest') {
     openGoldChest(null, quiet);   // 挖金矿咯：开宝箱（全图吸取时静音，金币总额由汇总提示给出）
@@ -15683,6 +15691,7 @@ function waterLen() { return mageRange(false) * 0.9; }                 // 水柱
 const WATER_W_MUL = 30;           // 多重施法：**水柱宽度 +30px/层**（水柱**不再分裂**，永远 1 条）
 const WATER_RAMP_PER_SEC = 0.08;  // 每**持续喷满 1 秒**水柱 → 水柱伤害 +8%（**断档立刻清空**、**每波开始也清空**）
 const WATER_ORB_MEM = 150;        // 蓝球（法术球）回复的法术条（用户本轮：30 → **150**）
+const WATER_ORB_MEM_PICK = 450;   // 🌊 用户最新：**玩家主动走过去拾取**蓝球 → 直接回 **450** 点法力（自动吸取仍是 150）
 const WATER_VACUUM_MAX = 3;       // 法力见底时一次最多吸取的蓝球数（用户本轮：10 → **3**）
 const WATER_BEAM_LEN = 760;       // 术有专攻·激光的距离 = **根源波动☆（380）的两倍**
 const WATER_HEAD_UP = 30;         // 激光枪口：模型**头顶上方的「空气处」**
@@ -15694,23 +15703,29 @@ function waterWidth() { return 26 + WATER_W_MUL * (p.mut.multicast || 0); }   //
 function waterLanes() { return 1; }                                          // ⚠️ 多重施法**不再分裂**水柱（用户要求）
 function waterRampSec() { return Math.floor(p.waterRampT || 0); }            // 本波已累计的**整秒**喷射时间
 function waterRampMul() { return 1 + WATER_RAMP_PER_SEC * waterRampSec(); }  // 伤害倍率（1.00 → 每秒 +0.08）
-/* 💧 单道水柱每跳伤害 = **角色等级 + 法师普攻 × 喷射加成**（用户本轮把「角色等级」加进公式：
-   乘法先算 —— 等级是**不吃喷射加成**的固定加数，和火球「普攻 + 等级」是同一个思路） */
-function waterTickDmg() { return Math.max(2, Math.round((p.lvl || 0) + mageAtkDmg() * waterRampMul())); }
+/* 💧 单道水柱每跳伤害 ⚠️ 用户本轮又改口径：**（0.2 × 法力条每秒消耗量 + 法师攻击力）× 喷射加成**
+   —— 括号里整体吃喷射加成；「每秒消耗量」= `waterDrainRate() = 满条 ÷ 3`，所以**法力条上限越高水柱越疼**
+   （初始 200 → 0.2×66.7 = 13.3；满魔能 450 → 0.2×150 = 30）。 */
+const WATER_DRAIN_DMG_K = 0.2;
+function waterTickDmg() { return Math.max(2, Math.round((WATER_DRAIN_DMG_K * waterDrainRate() + mageAtkDmg()) * waterRampMul())); }
 /* 水柱耗蓝速率：用户本轮要求 **150/秒** → 「满魔能 450 恰好连喷 3 秒」；
    初始法术条 200 → 200/150 ≈ 1.33 秒（无魔能词条时的持续时间） */
-const JET_FULL_MEM = 450, JET_FULL_SECS = 3;
-function waterDrainRate() { return JET_FULL_MEM / JET_FULL_SECS; }   // 150/秒
-function jetSecs() { return memMax() / waterDrainRate(); }           // 当前法术条可连喷秒数
+/* 水柱耗蓝速率 ⚠️ 用户本轮改口径：**不管法力条上限多少，从满喷到空都是 3 秒**
+   → 速率 = `memMax() / 3`（初始 200 → ≈66.7/秒；满魔能 450 → 150/秒）。
+   ⚠️ 这个「每秒消耗量」还要进**伤害公式**（见 `waterTickDmg()`），所以它必须始终是**名义速率**：
+   无双期间虽然不扣蓝（`p.musouT > 0` 跳过扣蓝），但 `waterDrainRate()` 不变 → 伤害不缩水。 */
+const JET_FULL_SECS = 3;
+function waterDrainRate() { return memMax() / JET_FULL_SECS; }
+function jetSecs() { return memMax() / waterDrainRate(); }            // 当前法术条可连喷秒数（恒 3 秒）
 /* 水柱起点 = 法杖顶端的法球（而不是角色头部/身体中心） */
 function waterMuzzle() {
   const off = 36;   // 法杖球局部 (22,0) + 杖身偏移 14
   return { x: p.x + Math.cos(p.face) * off, y: p.y + Math.sin(p.face) * off - 2 };
 }
-/* 蓝球（法术球）掉率 ⚠️ **用户本轮把「术有专攻」的效果从「蓝球掉率」改成了「满法力两道激光」**，
-   所以掉率不再随层数变化 → 回到**与黄球同率的基础值 5%**（历史口径）；闪光敌人仍然必掉（见 killEnemy）。
-   水法师的蓝球经济现在主要靠「无双开局生成的 9 颗」（见 spawnWaterMusouOrbs）。 */
-const MP_BASE_DROP = 0.05;
+/* 蓝球（法术球）掉率 ⚠️ **用户本轮：击杀敌人彻底不再掉蓝球**（连闪光敌人也不掉）→ 恒为 0。
+   蓝球的唯一来源 = **无双开启时在场地生成的那 9 颗**（`spawnWaterMusouOrbs`）。
+   （这个函数只剩诊断读数用：`dbg().mpRate`。） */
+const MP_BASE_DROP = 0;
 function mpDropRate() { return MP_BASE_DROP; }
 /* 点到线段的距离（水柱命中判定） */
 function segDist(px2, py2, x1, y1, x2, y2) {
@@ -15859,6 +15874,21 @@ function checkWaterMasteryBeams(dt) {
   if (!full || was) return n;
   return n + waterMasteryBeams(false);
 }
+/* 🌊 激光的**自动索敌**（用户最新要求：「激光水柱改为自动攻击敌人，Boss 单位优先」）：
+   先挑**最近的 Boss**；没有 Boss 就挑**最近的敌人**；场上一个敌人都没有 → 退回「朝鼠标点」射。
+   两道激光共用这个目标点（和「根源波动☆」一样：两个枪口 → 同一个落点）。 */
+function waterBeamTarget() {
+  let tB = null, dB = Infinity, tN = null, dN = Infinity;
+  for (const e of enemies) {
+    if (e.dead) continue;
+    const d = Math.hypot(e.x - p.x, e.y - p.y);
+    if (e.boss) { if (d < dB) { dB = d; tB = e; } }
+    else if (d < dN) { dN = d; tN = e; }
+  }
+  const t = tB || tN;
+  if (t) return { x: t.x, y: t.y, boss: t.boss ? 1 : 0 };
+  return { x: mouse.x, y: mouse.y, boss: 0 };
+}
 /* 两道激光水柱：枪口在**模型头顶左右两侧的「空气处」**，两道**各自独立结算**（同一敌人可吃两次）。
    `force = true` = 无双自带的那两道（不需要术有专攻，倍率按基础 ×2） */
 function waterMasteryBeams(force) {
@@ -15866,9 +15896,12 @@ function waterMasteryBeams(force) {
   if ((p.mut.mastery || 0) <= 0 && !force) return 0;   // 没拿术有专攻 → 没有这道激光
   const L = WATER_BEAM_LEN, Wd = waterWidth(), dmg = waterMasteryBeamDmg();
   const hx = p.x, hy = p.y - WATER_HEAD_UP;   // 头顶上方的「空气处」
-  /* 落点 = 鼠标所在的那个世界点；比 760 还远就落在最远处（和根源波动☆一样「朝指针方向」打） */
-  let tx = Math.max(26, Math.min(W - 26, mouse.x));
-  let ty = Math.max(26, Math.min(H - 26, mouse.y));
+  /* 落点 = **自动索敌**那个敌人（Boss 优先）的位置；没有敌人时退回鼠标点。
+     比 760 还远就落在最远处（和根源波动☆一样「朝目标方向」打） */
+  const tg = waterBeamTarget();
+  dbgBeamTgtBoss = tg.boss;
+  let tx = Math.max(26, Math.min(W - 26, tg.x));
+  let ty = Math.max(26, Math.min(H - 26, tg.y));
   let dx = tx - hx, dy = ty - hy, dd = Math.hypot(dx, dy) || 1;
   if (dd > L) { dx = dx / dd * L; dy = dy / dd * L; tx = hx + dx; ty = hy + dy; dd = L; }
   const ux = dx / dd, uy = dy / dd, px = -uy, py = ux;
@@ -25915,6 +25948,7 @@ window.__musouDebug = () => ({ kills, score, coins, wave, state, alive: p.alive,
   /* 🌋 火法师·术有专攻（新）：就地陨石 —— 次数 / 半径 / 间隔 / 伤害系数 / 达标灼烧秒数
      ＋ 🔥 火球命中点燃的次数与时长 / 陨石落地动画的在场数与寿命 */
   mMeteors: dbgMasteryMeteors, mR: FIRE_M_R, mCd: fireMasteryCd(), mDmgMul: fireMasteryDmgMul(), mBurnT: FIRE_M_BURN_T,
+  mDmgNow: fireMageOn() ? fireMasteryMeteorDmg() : 0, mBossMul: FIRE_M_BOSS_MUL, mLv: p.lvl || 0,
   fireBurnN: dbgFireBurn, fireBurnT: FIRE_BALL_BURN_T, mFxN: mMeteorFx.length, mFxLife: FIRE_M_FX_LIFE,
   /* 🔥 火球（新口径）：伤害 = 法师普攻 + 玩家等级，无双时再 ×`fireBallMusouMul` */
   fireBallMusouMul: FIRE_BALL_MUSOU_MUL, fireBallLv: p.lvl || 0, fireBallNow: fireBallDmg(mageAtkDmg()),
@@ -25974,7 +26008,7 @@ window.__musouDebug = () => ({ kills, score, coins, wave, state, alive: p.alive,
   medicHealP: MEDIC_HEAL_P, medicHealU: MEDIC_HEAL_U,
   allies: allyUnits.filter(u => !u.dead).map(u => ({ k: u.kind, hp: Math.round(u.hp), maxhp: u.maxhp, x: Math.round(u.x), y: Math.round(u.y), invT: +(u.invT || 0).toFixed(2) })),
   rockets: gunRockets.length, nadeLive: gunNades.length,
-  beamDrawN: dbgBeamDrawN, cloneDrawN: dbgCloneDrawN,   // 🖌️ 绘制计数：线段光束画过的条数 / 影分身立绘画过的帧数
+  beamDrawN: dbgBeamDrawN, cloneDrawN: dbgCloneDrawN, beamTgtBoss: dbgBeamTgtBoss,   // 🖌️ 绘制计数 / 🌊 最近一次激光索敌是否锁的是 Boss
   waterTicks: dbgWaterTicks, waterHits: dbgWaterHits, waterLaneN: dbgWaterLaneN, waterBursts: dbgWaterBursts, waterW: waterWidth(), waterL: Math.round(waterLen()), waterLanes: waterLanes(), waterDmg: waterTickDmg(), mpRate: +mpDropRate().toFixed(4),
   /* 🌊 水法师读数：喷射时长累计 / 伤害加成倍率 / 蓝球回复量 / 吸取与激光计数 / 激光长度与伤害 / 无双蓝球 */
   waterRampT: +(p.waterRampT || 0).toFixed(2), waterRampSec: waterRampSec(), waterMul: +waterRampMul().toFixed(3),
@@ -25988,7 +26022,7 @@ window.__musouDebug = () => ({ kills, score, coins, wave, state, alive: p.alive,
   lightFullT: +lightMemFullT().toFixed(2), lightBeamN: lightBeams.length, lightSegN: lightBeams.length ? lightBeams[lightBeams.length - 1].segs.length : 0,
   lightBounces: dbgLightBounces, lightAngles: dbgLightAngles.slice(),
   lightWaveTicks: dbgLightWaveTicks, lightWaveHits: dbgLightWaveHits, lightJetOn: p.lightJetOn || 0, lightWaveDmg: lightWaveDmg(), lightDoubles: dbgLightDoubles, lightDmgMul: (isLight() && p.musouT > 0) ? +(1 / 3).toFixed(3) : 1,
-  jetRate: waterDrainRate(), jetSecs: +jetSecs().toFixed(2),
+  jetRate: waterDrainRate(), jetSecs: +jetSecs().toFixed(2), drainDmgK: WATER_DRAIN_DMG_K,
   thunder: isThunder() ? 1 : 0, boltN: dbgBolts, boltHoming: dbgBoltHoming, chainN: dbgChainN, chainBounces: thunderChainBounces(), thunHits: dbgThunHits, thunExec: dbgThunExec, thunExecWait: dbgThunExecWait, execBossCd: +thunBossCd.toFixed(2), execBossCdMax: THUNDER_EXEC_BOSS_CD, execBossPct: THUNDER_EXEC_BOSS_PCT,  execNeed: thunderExecNeed(), cloud: thunderClouds.length, cloudLife: thunderClouds.length ? thunderClouds[0].life : 12, cloudR: thunderCloudR(), cloudBaseR: CLOUD_BASE_R, cloudX: thunderClouds.length ? Math.round(thunderClouds[0].x) : -1, cloudY: thunderClouds.length ? Math.round(thunderClouds[0].y) : -1, cloudBolts: dbgCloudBolts, cloudDmg: thunderTickDmg(), clouds: dbgClouds, arcs: arcs.length,
   jetX: Math.round(waterMuzzle().x), jetY: Math.round(waterMuzzle().y),
   robeCol: isMage() ? (isWater() ? 'blue' : (isThunder() ? 'yellow' : (isLight() ? 'white' : 'red'))) : 'none',   // 法师袍配色（诊断/测试）
