@@ -17735,6 +17735,13 @@ function devLevelUp(n) {
   p.lvl = Math.max(1, Math.min(999, p.lvl + k));
   p.xpNeed = Math.round(5 + Math.pow(p.lvl, 1.5) * 2.6);
   p.hp = p.maxhp;
+  /* ⚠️⚠️ **升级必须顺手跑一遍宝可梦进化判定**（用户报的 bug：「试验场的 50 级伊布没进化」）：
+     这里以前只加等级、直接把 `petEvoCheck` 漏了 —— 于是试验场里**任何等级进化都不发生**
+     （御三家 20/30 级、波克比换招、以及 🎀 伊布 50 级 → 仙子伊布全都不触发），
+     只有 `__musouSetLvl`（测试钩子）那条路是好的，所以冒烟一直没抓到。
+     现在与真实升级路径（`gainXP` 的 while 循环）**完全同款**：先 `petEvoCheck()` 再 `petSylveonCheck()`。 */
+  petEvoCheck();
+  petSylveonCheck();
   /* ⭐ 和真实升级一样**排队一次选择**：普通角色弹「升级词条三选一」，🗡️ 武器大师弹「武器商店」
      （面板没关之前世界冻结，选完/收工后继续） */
   p.pending += k;
@@ -17773,12 +17780,15 @@ function devPetEvolve() {
     n++;
     names.push(petFormName(id) + '（' + petSkillOf(id).name + '）');
   }
+  /* 🎀 这个按钮也顺手兜一下「等级那条线」的进化（试验场里 `devLevelUp` 已经跑了判定，
+     但玩家可能是**先升到 50 级、再点这个进化按钮**，或者读了一份老存档进来 → 这里补一次）。 */
+  if (petSylveonCheck()) { n++; names.push(petFormName('eevee') + '（' + petSkillOf('eevee').name + '）'); }
   if (n > 0) {
     addText(p.x, p.y - 64, '🧬 进化：' + names.join(' · '), 18, '#fff3c4', '#3a2a00');
     bigBanner('🧬 进 化 !', names.join(' · '));
     flashG = Math.max(flashG, 0.3); shake = Math.max(shake, 5);
   } else {
-    addText(p.x, p.y - 64, '🧬 没有可进化的大器晚成宝可梦', 16, '#ffd166', '#3a2a00');
+    addText(p.x, p.y - 64, '🧬 没有可进化的宝可梦', 16, '#ffd166', '#3a2a00');
   }
   return n;
 }
