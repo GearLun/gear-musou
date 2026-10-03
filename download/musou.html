@@ -11981,7 +11981,7 @@ function spawnBlackHole() {   // 无双发动：玩家脚下诞生黑洞
   shake = Math.max(shake, 7);
   slowT = Math.max(slowT, 0.18);
   sfx.musou();
-  bigBanner('🐹 哈姆 · 黑洞!!', '敌军将被吞噬… Boss 在劫难逃!');
+  bigBanner('🐹 哈姆 · 黑洞!!', '黑洞吞噬万物灭！');
 }
 /* 黑洞湮灭爆炸（到达 Boss / 寿终正寝 共用）：320px 内 Boss 吃 12% 巨额伤，其余敌军重创+灼烧 */
 function blackHoleBoom(x, y) {
@@ -14345,7 +14345,7 @@ function startNovRain(auto) {
   } else {
     flashG = Math.max(flashG, 0.55); shake = Math.max(shake, 10);
     sfx.musou();
-    bigBanner('十 一 月 雨 !!', '全屏箭雨 · 无处可逃');
+    bigBanner('十 一 月 雨 !!', '月华飞溅落灵霄！');
     addRing(p.x, p.y, '#7fd4ff', 14);
     addRing(p.x, p.y, '#fff', 8);
     tone(200, 900, 'sine', 0.5, 0.2);
@@ -14538,7 +14538,7 @@ function cardDashBlink(tx, ty, clearShots) {
   flashG = Math.max(flashG, 0.3);
   shake = Math.max(shake, 8);
   sfx.musou();
-  bigBanner('闪 避 · 夺 牌 瞬 移 !', '四周甩出十七张特殊牌 · 弹幕消散');
+  bigBanner('闪 避 · 夺 牌 瞬 移 !', '起源超新星大爆炸！');
   /* 四周均分 17 张特殊牌（整圈 360°，从当前朝向起算） */
   cardMusouVolley(p.face, TAU);
   return true;
@@ -22335,7 +22335,7 @@ function updateGame(dt, rawDt) {
       artCutT = 0.6; artCuts++;
       flashG = 0.7; shake = 10; slowT = 0;
       sfx.musou();
-      bigBanner('秘 奥 义 · 斩', '全屏一击 · 时间冻结');
+      bigBanner('秘 奥 义 · 斩', '现在，时间开始流动...');
       addRing(p.x, p.y, '#fff', 10);
     } else {
       /* 🃏 牌皇无双是**一次性**技能：不进「无双时间」，当场朝正前方 120° 扇面甩 17 张特殊牌收工
@@ -22344,7 +22344,7 @@ function updateGame(dt, rawDt) {
         p.musouT = 0;
         slowT = 0.25; flashG = 0.5; shake += 18;
         sfx.musou();
-        bigBanner('无 双 · 全 牌 齐 发 !', '正前方 120° 扇甩十七张特殊牌 · 一次性奥义');
+        bigBanner('无 双 · 全 牌 齐 发 !', '无尽暗夜之诱惑！');
         cardMusouVolley(p.face);
       } else if (isWM()) {
         /* 🗡️ 武器大师无双：**背包里全部武器一起装备上身**持续一段时间。
@@ -22355,7 +22355,7 @@ function updateGame(dt, rawDt) {
         wmAltTimers = {};
         slowT = 0.25; flashG = 0.5; shake += 16;
         sfx.musou();
-        bigBanner('无 双 · 万 武 齐 鸣 !', '背包全部武器装备上身 · 副武器 60% 伤害 · 不吸附敌人');
+        bigBanner('无 双 · 万 武 齐 鸣 !', '全力无双激烈拳！');
         addRing(p.x, p.y, '#ffd166', 14);
         addRing(p.x, p.y, '#fff3c4', 10);
       } else {
@@ -22365,7 +22365,7 @@ function updateGame(dt, rawDt) {
         p.musouT = musouMaxT();
         slowT = 0.25; flashG = 0.5; shake += 18;
         sfx.musou();
-        bigBanner('无 双 · 旋 枪 突 进 !', '长枪横扫 · 攻击范围拉大 · 移速 +50% · 天降 5 根长矛');
+        bigBanner('无 双 · 旋 枪 突 进 !', '超绝螺旋连击！');
         addRing(p.x, p.y, '#ffd166', 14);
         addRing(p.x, p.y, '#fff3c4', 10);
         knightMusouSpears();
@@ -22375,14 +22375,14 @@ function updateGame(dt, rawDt) {
       sfx.musou();
       /* 🧢 训练家：**开启的那一瞬间**就把昏厥的宝可梦叫回来（不等它自己那一帧的 updatePetAlly） */
       if (isTrainer()) petReviveAll();
-      if (isGunner()) bigBanner('无 双 · 部 署 增 援 !', '机枪 / 火箭炮 / 医疗小队 · 齐备即全屏轰炸');
-      else if (isTrainer()) bigBanner('无 双 · 全 员 出 击 !', '🧢 宝可梦 攻速 +50% · 昏厥即刻满血归队 · 每秒回 20% 生命');
-      else if (isArcher()) bigBanner('无 双 · 箭 雨 !', '万箭齐发 · 满屏洗地');
-      else if (isWater()) bigBanner('无 双 · 狂 涛 怒 潮 !', '水爆自屏幕中心炸开 · 全场击退');
-      else if (isThunder()) bigBanner('无 双 · 雷 云 召 唤 !', '乌云压顶 · 落雷成灾');
-      else if (isLight()) bigBanner('无 双 · 极 光 光 波 !', '光波贯穿 · 期间受伤降至 1/3');
-      else if (isMage()) bigBanner('无 双 · 陨 石 风 暴 !', '天火坠落 · 大地崩裂');
-      else bigBanner('无 双 乱 舞 !', '奥义发动 · 刀刀入魂');
+      if (isGunner()) bigBanner('无 双 · 部 署 增 援 !', "m'aider！请求支援！");
+      else if (isTrainer()) bigBanner('无 双 · 全 员 出 击 !', '🧢 九彩升华齐聚顶！');
+      else if (isArcher()) bigBanner('无 双 · 箭 雨 !', '遮天蔽日暗影箭！');
+      else if (isWater()) bigBanner('无 双 · 狂 涛 怒 潮 !', '海神庄严交响乐！');
+      else if (isThunder()) bigBanner('无 双 · 雷 云 召 唤 !', '终极伏特狂雷闪！');
+      else if (isLight()) bigBanner('无 双 · 极 光 光 波 !', '光波贯穿 · 归无之光！');
+      else if (isMage()) bigBanner('无 双 · 陨 石 风 暴 !', '超强极限爆焰弹！');
+      else bigBanner('无 双 乱 舞 !', '绝对捕食回旋斩！');
       }
       }
       addRing(p.x, p.y, '#ffd166', 14);
