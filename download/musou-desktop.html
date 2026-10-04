@@ -14563,6 +14563,13 @@ $('meta-body').addEventListener('click', (ev) => {
    收录与启用都写进局外存档（`meta.shinyDex` / `meta.shinyOn`）→ **换局、读档都在**，只有删档才清。
    启用的效果：训练家出战时那一只（**含进化后的形态**，按物种 id 记）走 `PET_FR[形态][1]` 闪光贴图。 */
 const SHINY_SPECIES_NAME = { bulba: '妙蛙种子', charm: '小火龙', squirt: '杰尼龟', eevee: '伊布', charcadet: '炭小侍', dreepy: '多龙梅西亚', dratini: '迷你龙', beldum: '铁哑铃', gible: '圆陆鲨', jirachi: '基拉祈', toge: '波克比', kyogre: '盖欧卡', groudon: '固拉多', rayquaza: '烈空坐' };
+
+/* 🧪 测试钩子：刷闪名单与已收录的闪光（图鉴用同一份表） */
+window.__musouShinyInfo = () => ({
+  species: SHINY_SPECIES.slice(), names: Object.assign({}, SHINY_SPECIES_NAME),
+  got: SHINY_SPECIES.filter(shinyGot), on: Object.assign({}, meta && meta.shinyOn || {}),
+  cap: SHINY_HP_MUL
+});
 function renderShinyDex() {
   const box = $('shiny-body');
   if (!box) return;
