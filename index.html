@@ -6948,11 +6948,10 @@ function updatePetWaves(dt) {
       if (e.dead || w.hits.has(e)) continue;
       const dx = e.x - w.x, dy = e.y - w.y, dd = Math.hypot(dx, dy) || 1;
       if (dd > w.r + e.r) continue;
-      w.hits.add(e);
+      w.hits.add(e);                    // ⚠️ 同一道刀波对同一只敌人**只结算一次**（穿透靠这个去重）
       hitEnemy(e, dx / dd, dy / dd, 120, petHitDmg(w.id, w.mul));
       fxPush(w.el, 'hit', w.x, w.y, 2.5, w.ang);
-      w.life = 0;                       // 命中即消散（一刀一波）
-      break;
+      /* 🌿 **无限穿透**：不 break、不消散，继续往前飞，把后面的敌人也割一遍（用户点名） */
     }
     if (w.life <= 0 || w.x < -80 || w.y < -80 || w.x > W + 80 || w.y > H + 80) petWaves.splice(i, 1);
   }
@@ -17935,6 +17934,8 @@ function resetRun() {
   petPools = [];        // 💦 加农水炮的大水坑
   petTornadoes = [];    // 🌀 迷你龙的龙卷风
   petMeteors = [];      // ☄️ 流星群的陨石
+  petMoons = [];        // 🌙 月亮之力（仙子伊布）—— ⚠️ 以前漏了，换局后旧月亮还在飞（自查发现）
+  petWaves = [];        // 🌿 种子闪光的刀波（同上一行）
   petShellClear();      // 🥚 破壳 buff
   petMiracleClear();    // 💖 羁绊奇迹的保命间隔（换局重新起算）
   p.petMenuCd = 0;      // 🧢 开菜单冷却（换招已无冷却）
