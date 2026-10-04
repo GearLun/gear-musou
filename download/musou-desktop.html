@@ -10430,6 +10430,10 @@ function openStarPick() {
         + '<br>' + (id === 'jirachi' ? '后续只会刷出「千年之愿」' : '后续只会刷出「葛拉西蒂亚花」（把花送给它 → 变成天空谢米）'),
       apply() {
         p.starPick = id;
+        /* ⚠️ 幻之宝可梦**只能有一只**：把另一只从队伍与场上清掉（用户报过「基拉祈和谢米一起进队」） */
+        const other = id === 'shaymin' ? 'jirachi' : 'shaymin';
+        if (p.petOwned && p.petOwned.indexOf(other) >= 0) p.petOwned = p.petOwned.filter(x => x !== other);
+        allyUnits = allyUnits.filter(u => !(u.kind === 'pet' && u.petId === other));
         const ok = petGrant(id, true);
         p.starPend = 0;
         petHeadLoad();
@@ -17807,6 +17811,9 @@ function loadGame() {
    重置 / 开局
    ============================================================ */
 function resetRun() {
+  /* 🌟 幻之助战：**每一局都要重新选**（上一局选了谁不能带进新的一局 —— 用户报过
+     「回到主页再进试验场 / 放弃进度重开一局，第一次拿到幻之助战时面板不弹、被自动定了基拉祈」） */
+  p.starPick = undefined; p.starPend = 0; p.starShow = 0;
   /* 🧪 试验场标记随本局清零（正常开新局 / 读档都不会带着它） */
   p.lab = 0; labType = '';
   labBodyClass(false);
