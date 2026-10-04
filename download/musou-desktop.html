@@ -7217,10 +7217,19 @@ function starAidEnsure() {
   if (p.starPick === undefined) {
     if (p.petOwned.indexOf('jirachi') >= 0) p.starPick = 'jirachi';
     else if (p.petOwned.indexOf('shaymin') >= 0) p.starPick = 'shaymin';
+    /* 🧪⚠️ **试验场里绝不弹这个面板**：试验场没有玩家去点它 → 面板一直挂着 → `choosing` 恒真 →
+       updateGame 永远 return = 用户报的「选幻之助战 / 一键满质变就卡死」。这里直接按默认（基拉祈）定夺；
+       想测谢米就点面板「🐾 伙伴」里的 🌸 谢米入队（或测试钩子 __musouStarPick('shaymin')）。 */
+    else if (p.lab) p.starPick = 'jirachi';
     else {
-      if (!p.starPend) p.starPend = 1;
-      if (!choosing) openStarPick();
-      return;                       // 还没选 → 谁都不发
+      /* 防死循环：面板最多弹 3 次（被关掉又没选 → 第 4 次直接按基拉祈定夺，绝不会一直挂住世界） */
+      p.starShow = (p.starShow || 0) + 1;
+      if (p.starShow > 3) p.starPick = 'jirachi';
+      else {
+        if (!p.starPend) p.starPend = 1;
+        if (!choosing) openStarPick();
+        return;                     // 还没选 → 谁都不发
+      }
     }
   }
   const pick = p.starPick === 'shaymin' ? 'shaymin' : 'jirachi';
@@ -10396,9 +10405,10 @@ function openCatchUp() {
    选基拉祈 → 千年之愿；选谢米 → 葛拉西蒂亚花（谢米拿到花会变天空谢米）。 */
 function openStarPick() {
   if (p.starPick !== undefined || choosing) return;
+  p.starPend = 0;               // ⚠️ 先清挂起：面板被关掉时不会每帧重开
+  p.starShow = (p.starShow || 0) + 1;
   curKind = 'star';
   choosing = true;
-  p.starPend = 0;
   flashG = Math.max(flashG, 0.2);
   addRing(p.x, p.y, '#ffd166', 14);
   addRing(p.x, p.y, '#ffb0e0', 9);
@@ -18344,7 +18354,7 @@ function syncLabTools() {
     h += '<div class="dev-row">🧢 御三家：' + petBtn('bulba', '妙蛙种子') + petBtn('charm', '小火龙') + petBtn('squirt', '杰尼龟') + '</div>';
     /* 🐣🐶🔥 另外几只伙伴（波克比 / 伊布 / 炭小侍 / 多龙梅西亚 / 迷你龙）：点一下直接**入队**（不是替换御三家） */
     h += '<div class="dev-row">🐾 伙伴：' + petBtn('toge', '波克比') + petBtn('eevee', '伊布') + petBtn('charcadet', '炭小侍')
-      + petBtn('dreepy', '多龙梅西亚') + petBtn('dratini', '迷你龙') + petBtn('beldum', '铁哑铃') + petBtn('gible', '圆陆鲨')
+      + petBtn('dreepy', '多龙梅西亚') + petBtn('dratini', '迷你龙') + petBtn('beldum', '铁哑铃') + petBtn('gible', '圆陆鲨') + petBtn('shaymin', '谢米')
       + '<span class="dev-tip">后面两只都是大器晚成（20/25 波进化，试验场用上面「🧬 进化」按钮推）</span></div>';
     /* 🌟 神兽三只（盖欧卡 / 固拉多 / 烈空坐）：**只有开发者版有**（用户要求「仅在开发者版更新」）——
        试验场本来就只属于开发者版，所以这一行跟着 `legendOn()` 一起出现/消失；
