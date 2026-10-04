@@ -5108,6 +5108,7 @@ function petItemForm(id) { return (p.petEvoPick && p.petEvoPick[id]) || ''; }
 function petItemStage(id) { return petItemForm(id) ? 1 : 0; }
 /* **这一只**现在几段：大器晚成看波次 · 道具进化看有没有用过道具 · 其余（御三家 / 波克比）看等级 */
 function petStageOf(id) {
+  if (id === 'shaymin' && shayminSkyOn()) return 1;   // 🌸 变天空谢米 = 一次进化（属性 ×1.5）
   if (PET_WAVE_EVO[id]) return petWaveStage(id);
   if (PET_ITEM_EVO[id]) return petItemStage(id);
   return petStage();
@@ -5122,11 +5123,16 @@ const JIRACHI_TOP_LV = 50;
 const WISH_LV_BONUS = 20;      // 🌠 奇物·千年之愿：基拉祈**当前等级与等级上限都 +20**（满层 50 → 70）
 function jirachiLv() { return Math.round(JIRACHI_TOP_LV * ((p.mut && p.mut.starhelp) || 0) / STARHELP_CAP) + (artGot('wish') ? WISH_LV_BONUS : 0); }
 /* 每只宝可梦的「等级」：⭐ 基拉祈只认质变层数 · 其余都吃训练家强化等级（升级 +0.5 伤害 / +1 生命） */
-function petLevelOf(id) { return id === 'jirachi' ? jirachiLv() : (p.trainLv || 0); }
+/* 🌸 谢米：和基拉祈同一套「按幻之助战层数」的等级口径（10/20/30/40/50）· **拿到葛拉西蒂亚花立刻 +20 级** */
+const SHAYMIN_FLOWER_LV = 20;
+function shayminLv() { return Math.round(JIRACHI_TOP_LV * ((p.mut && p.mut.starhelp) || 0) / STARHELP_CAP) + (artGot('gracidea') ? SHAYMIN_FLOWER_LV : 0); }
+function petLevelOf(id) { return id === 'jirachi' ? jirachiLv() : (id === 'shaymin' ? shayminLv() : (p.trainLv || 0)); }
 /* 这只**技能表**走第几段（⚠️ 与「进化段位」`petStageOf` 不是一回事：这两只不进化但会换招）：
    · 🐣 波克比：角色等级 20 / 30 → 帮助☆ / 生命水滴☆
    · ⭐ 基拉祈：**50 级**（= 星之助战满层）→ 解锁破灭之愿 */
 function petSkillStage(id) {
+  /* 🌸 谢米：**50 级解锁种子闪光**（天空谢米换成 ☆ 版，见 petSkillList） */
+  if (id === 'shaymin') return shayminLv() >= JIRACHI_TOP_LV ? 1 : 0;
   if (id === 'toge') return p.lvl >= PET_EVO_LV[1] ? 2 : (p.lvl >= PET_EVO_LV[0] ? 1 : 0);
   if (id === 'jirachi') return jirachiLv() >= JIRACHI_TOP_LV ? (PET_SKILLS.jirachi.length - 1) : 0;
   return petStageOf(id);
@@ -6401,8 +6407,25 @@ const PET_SKILL_DOOMWISH_STAR = {
 /* 🌸 谢米（#492 · 幻之宝可梦）：**目前只有占位技「飞叶快刀」**（用户说明：后续再补专属技能）——
    直接引用妙蛙种子那一份定义（飞叶快刀 = 一次 5 片追踪叶片 · 伤害与出手间隔同款）。
    ⚠️ 等主人给了新技能表，把这两行换成 PET_SKILLS_SHAYMIN_1 / _2 即可（50 级那一档走 petSkillStage）。 */
-const PET_SKILLS_SHAYMIN = [PET_SKILLS_BULBA[1]];
-const PET_SKILLS_SHAYMIN_2 = [PET_SKILLS_BULBA[1]];
+/* 🌿 **种子闪光**（谢米 50 级解锁 · 用户点名）：正前方 **60° 扇形**里陆续甩出 **5 道刀波**，
+   每道 = 谢米攻击力 ×4 · 出手间隔 1 秒；**天空谢米**换成 ☆ 版（**8 道** · 每道 **×6**）。
+   ⚠️ 「随机陆续」用 `spread`（扇形内铺开）+ `gap`（一道道甩，不是同帧齐射）表达。 */
+const PET_SKILL_SEEDFLARE = {
+  id: 'seedflare', name: '种子闪光', icon: '🌿', kind: 'shot', cd: 1, range: 900, fxEl: 'GRASS',
+  desc: '正前方 60° 扇形里陆续甩出 5 道刀波，每道 谢米攻击力 ×4 · ' + petCdText(1),
+  /* ⚠️ 引擎的 shot 载荷用 `spread` = **每道之间的角度步长**（不是总弧度）：60° 扇形铺 5 道 ≈ (π/3)/5 */
+  shot: { n: 5, spread: Math.PI / 3 / 5, mul: 4, spd: 620, homing: 0, fxK: 3 }
+};
+const PET_SKILL_SEEDFLARE_STAR = {
+  id: 'seedflare2', name: '种子闪光☆', icon: '🍀', kind: 'shot', cd: 1, range: 900, fxEl: 'GRASS',
+  desc: '种子闪光强化（天空谢米）：8 道刀波 · 每道 谢米攻击力 ×6 · ' + petCdText(1),
+  shot: { n: 8, spread: Math.PI / 3 / 8, mul: 6, spd: 620, homing: 0, fxK: 3 }
+};
+/* 常驻两招：**能量球☆**（直接引用妙蛙花那一份）+ **帮助☆**（直接引用波克比那一份） */
+const PET_SKILL_ENERGYBALL_STAR_REF = PET_SKILLS_BULBA_2.filter(x => x.id === 'energyballstar')[0] || PET_SKILLS_BULBA_2[0];   // 能量球☆（妙蛙花那一份）
+const PET_SKILL_HELP_STAR_REF = PET_SKILL_HELP_STAR;   // 帮助☆（波克比那一份）
+const PET_SKILLS_SHAYMIN = [PET_SKILL_ENERGYBALL_STAR_REF, PET_SKILL_HELP_STAR_REF];
+const PET_SKILLS_SHAYMIN_2 = [PET_SKILL_ENERGYBALL_STAR_REF, PET_SKILL_HELP_STAR_REF, PET_SKILL_SEEDFLARE];
 const PET_SKILLS_JIRACHI = [PET_SKILL_SWIFT_STAR, PET_SKILL_LIFEDEW_STAR];                  // 未满 50 级
 const PET_SKILLS_JIRACHI_2 = [PET_SKILL_SWIFT_STAR, PET_SKILL_LIFEDEW_STAR, PET_SKILL_DOOMWISH];   // 50 级：解锁破灭之愿
 /* ⚡ 电光一闪（伊布 / 多龙梅西亚共用同一份定义 —— 用户说多龙梅西亚的这招「和伊布一样」）：
@@ -6850,6 +6873,12 @@ const PET_SKILL_DEF_FORM = {
 };
 /* 当前段位的技能表：**分支形态（水伊布…）先按形态 key 查**，其余照旧按「物种 + 段位」 */
 function petSkillList(id) {
+  /* 🌿 谢米：两招常驻 + 50 级的种子闪光；**天空谢米**用 ☆ 版种子闪光（8 道 · ×6） */
+  if (id === 'shaymin') {
+    const list = PET_SKILLS_SHAYMIN.slice();
+    if (shayminLv() >= JIRACHI_TOP_LV) list.push(shayminSkyOn() ? PET_SKILL_SEEDFLARE_STAR : PET_SKILL_SEEDFLARE);
+    return list;
+  }
   const F = PET_SKILLS_FORM[petFormKey(id)];
   if (F) return F;
   const T = PET_SKILLS[id] || PET_SKILLS.bulba;
@@ -13365,7 +13394,7 @@ const ART_DEFS = {
   nohand:    { name:'骑士不徒手而亡', icon:'🗡', desc:'武器大师专属,将「木棍」视为「圣剑」！基础伤害30，拿到真圣剑时，提高圣剑20％的伤害！', start:1, w15:0 },
   /* 🧢 训练家专属奇物（用户本轮点名）：别人一律禁选 —— 见 roleBanArts 里的 `if (!r && !isTrainer())` */
   /* 🌸 葛拉西蒂亚花：图标用素材图（sucai\item\GRACIDEA_FLOWER.png → PET_ITEM_IMG，artIcon 见到同名 key 就出图） */
-  gracidea:  { name:'葛拉西蒂亚花', icon:'GRACIDEA_FLOWER', desc:'训练家专属：把花朵送给谢米，会让谢米发生变化！（将谢米变化为天空谢米！）', start:0, w15:0 },
+  gracidea:  { name:'葛拉西蒂亚花', icon:'GRACIDEA_FLOWER', desc:'训练家专属：将花朵送给谢米，会让谢米发生变化！（将谢米变化为天空谢米，并且立刻提高谢米20级！）', start:0, w15:0 },
   wish:      { name:'千年之愿', icon:'🌠', desc:'训练家专属，基拉祈的等级提升 20 级（上限也 +20 → 满层 70 级），并且当基拉祈学会「破灭之愿」时，强化破灭之愿的技能效果！（升级为破灭之愿☆：范围 +50%、伤害 +50%）', start:0, w15:0 },
   /* 🌟 原始回归（训练家专属 · **第 25 波必刷**）：图标按队里那只神兽换成朱红 / 靛蓝 / 青绿宝珠（见 artIcon） */
   primal:    { name:'原始回归', icon:'💠', desc:'据说和丰缘地区的传说渊源颇深，散发着三色光辉的宝珠。', start:0, w15:0, primal:1 }
