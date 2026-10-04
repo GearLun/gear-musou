@@ -197,6 +197,14 @@
   }
   #dev-tools .dev-btn:hover { background: #26375a; }
   #dev-tools .dev-btn.on { background: #6a4a12; border-color: #ffd166; color: #ffe9a8; }
+  /* ============ ⏳ 加载提示 + 进度条（标题上方） ============ */
+  .loadbox { margin: 0 auto 10px; max-width: 460px; text-align: center; transition: opacity .45s ease; }
+  .loadbox.done { opacity: 0; pointer-events: none; }
+  .load-tip { color: #ffe9a8; font-size: 14px; letter-spacing: .5px; margin-bottom: 7px; text-shadow: 0 1px 0 #14210f; }
+  .load-bar { height: 9px; border-radius: 6px; background: #1b2740; border: 1px solid #3a5a8a; overflow: hidden; }
+  .load-bar > i { display: block; height: 100%; width: 0%; border-radius: 5px;
+    background: linear-gradient(90deg, #7fd06a, #ffe08a); transition: width .18s linear; }
+
   /* ============ 手机端（触屏） ============ */
   #keys-touch { display: none; }
   body.touch #keys-desk { display: none; }
@@ -443,6 +451,11 @@
   <!-- 开始界面 -->
   <div class="screen show" id="sc-start">
    <div class="home-inner">
+    <!-- ⏳ 加载提示（用户要求）：加载完成前页面点不动，先告诉玩家「在加载」并给出进度 -->
+    <div class="loadbox" id="load-box">
+      <div class="load-tip">游戏正在加载中，请稍后,若长时间无法加载，请刷新网页。</div>
+      <div class="load-bar"><i id="load-fill"></i></div>
+    </div>
     <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.0.1</small></div>
     <div class="keys" id="keys-desk">
       <span><b>WASD</b> / <b>方向键</b></span><span>移动</span>
@@ -5318,15 +5331,49 @@ function petShotHit(el, x, y, k) {
   burst(x, y, 6, PET_FX_TINT[el] || '#9fe07a', 260);
 }
 /* 角色图集：data URI，第一次进试验场才开始解码（解码完成前画占位剪影，绝不卡帧） */
+/* ⏳ 加载提示 + 进度条（用户要求）：网页版首次进入时贴图/头像要先解码，这期间页面点不动、
+   玩家以为是卡死 → 在标题上方显示「游戏正在加载中…」并给一条进度条。
+   · 进度 = 头像（PET_HEAD）+ 立绘图集（PET_PNG）里每个 new Image() 的 onload / onerror 各计一次
+   · 全部就绪（或超时兜底）→ 打满 100% 并淡出；无头测试里没有 Image / DOM，这里一律空跑不报错 */
+let loadDone = 0, loadTotal = 0, loadFinished = false;
+function loadBarInit(total) {
+  if (loadTotal > 0 || loadFinished) return;
+  loadTotal = Math.max(1, total | 0);
+  loadBarPaint();
+}
+function loadBarStep() {
+  loadDone++;
+  loadBarPaint();
+}
+function loadBarPaint() {
+  const fill = $('load-fill');
+NaN
+}
+/* 每帧兜底：图片都回来了 / 或者拖太久（2.5 秒）→ 直接收掉进度条，绝不让它挡着主页 */
+let loadWaitT = 0;
+function loadBarTick(dt) {
+  if (loadFinished) return;
+  loadWaitT += dt;
+  if (loadTotal > 0 && loadDone >= loadTotal) { loadDone = loadTotal; loadBarFinish(); return; }
+  if (loadWaitT > 2.5) loadBarFinish();
+}
+function loadBarFinish() {
+  if (loadFinished) return;
+  loadFinished = true;
+  const fill = $('load-fill'); if (fill && fill.style) fill.style.width = '100%';
+  const box = $('load-box');
+  if (box && box.classList) { box.classList.add('done'); setTimeout(() => { if (box.style) box.style.display = 'none'; }, 500); }
+}
 function petLoad() {
   dbgPetLoad++;
+  loadBarInit(Object.keys(PET_HEAD).length + Object.keys(PET_PNG).length);   // ⏳ 进度条总数（头像 + 图集）
   if (typeof Image === 'undefined') { petBad = true; return; }
   for (const id in PET_PNG) {
     if (petImg[id]) continue;
     try {
       const im = new Image();
-      im.onload = function () { petOK[id] = true; };
-      im.onerror = function () { petOK[id] = false; };
+      im.onload = function () { petOK[id] = true; loadBarStep(); };
+      im.onerror = function () { petOK[id] = false; loadBarStep(); };
       im.src = PET_PNG[id];
       petImg[id] = im;
     } catch (e) { petBad = true; return; }
@@ -7029,11 +7076,13 @@ function trainerOn() { return TRAINER_OPEN; }
 let petHeadImg = {}, petHeadOK = {};
 function petHeadLoad() {
   if (typeof Image === 'undefined') return;
+  loadBarInit(Object.keys(PET_HEAD).length + Object.keys(PET_PNG).length);   // ⏳ 进度条总数（头像 + 图集）
   for (const id in PET_HEAD) {
     if (petHeadImg[id]) continue;
     try {
       const im = new Image();
-      im.onload = function () { petHeadOK[id] = true; };
+      im.onload = function () { petHeadOK[id] = true; loadBarStep(); };
+      im.onerror = function () { loadBarStep(); };
       im.src = PET_HEAD[id];
       petHeadImg[id] = im;
     } catch (e) { return; }
@@ -27091,6 +27140,7 @@ let perfAcc = 0, perfN = 0;
 let vigRain = null, vigLowHp = null, vigMusou = null, vigHpNorm = null, vigHpLow = null;
 function frame(now) {
   requestAnimationFrame(frame);
+  loadBarTick(1 / 60);   // ⏳ 加载进度条兜底收尾
   let rawDt = (now - last) / 1000;
   last = now;
   if (rawDt < 0) rawDt = 0;         // 时间戳防倒流（后台/切页等场景）
