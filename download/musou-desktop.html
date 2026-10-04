@@ -7209,6 +7209,15 @@ function petSummonSync() {
 function starAidFirstPend() {
   if (p.starPick === undefined && !p.starPend) p.starPend = 1;
 }
+/* 🌟 幻之助战「选的是谁」—— **以队伍里实际有谁为准**（选择只是兜底）：
+   这样无论走哪条路拿到谢米/基拉祈，专属奇物的刷新条件都对得上（用户报过「拿到谢米却刷不出花」）。
+   ⚠️ 两个都在队里时以谢米优先（花是给谢米用的，而千年之愿只认基拉祈）。 */
+function starChoice() {
+  const own = p.petOwned || [];
+  if (own.indexOf('shaymin') >= 0) return 'shaymin';
+  if (own.indexOf('jirachi') >= 0) return 'jirachi';
+  return (p.starPick === 'shaymin' || p.starPick === 'jirachi') ? p.starPick : '';
+}
 function starAidEnsure() {
   if (!isTrainer() || !((p.mut && p.mut.starhelp) > 0)) return;
   if (!p.petOwned) p.petOwned = [];
@@ -13403,7 +13412,7 @@ const ART_DEFS = {
   nohand:    { name:'骑士不徒手而亡', icon:'🗡', desc:'武器大师专属,将「木棍」视为「圣剑」！基础伤害30，拿到真圣剑时，提高圣剑20％的伤害！', start:1, w15:0 },
   /* 🧢 训练家专属奇物（用户本轮点名）：别人一律禁选 —— 见 roleBanArts 里的 `if (!r && !isTrainer())` */
   /* 🌸 葛拉西蒂亚花：图标用素材图（sucai\item\GRACIDEA_FLOWER.png → PET_ITEM_IMG，artIcon 见到同名 key 就出图） */
-  gracidea:  { name:'葛拉西蒂亚花', icon:'GRACIDEA_FLOWER', desc:'训练家专属：将花朵送给谢米，会让谢米发生变化！（将谢米变化为天空谢米，并且立刻提高谢米20级！）', start:0, w15:0 },
+  gracidea:  { name:'葛拉西蒂亚花', icon: ((typeof PET_ITEM_IMG !== 'undefined' && PET_ITEM_IMG.GRACIDEA_FLOWER) ? ('<img class="up-ic-img" style="width:22px;height:22px;vertical-align:-4px" src="' + PET_ITEM_IMG.GRACIDEA_FLOWER + '" alt="">') : '🌸'), desc:'训练家专属：将花朵送给谢米，会让谢米发生变化！（将谢米变化为天空谢米，并且立刻提高谢米20级！）', start:0, w15:0 },
   wish:      { name:'千年之愿', icon:'🌠', desc:'训练家专属，基拉祈的等级提升 20 级（上限也 +20 → 满层 70 级），并且当基拉祈学会「破灭之愿」时，强化破灭之愿的技能效果！（升级为破灭之愿☆：范围 +50%、伤害 +50%）', start:0, w15:0 },
   /* 🌟 原始回归（训练家专属 · **第 25 波必刷**）：图标按队里那只神兽换成朱红 / 靛蓝 / 青绿宝珠（见 artIcon） */
   primal:    { name:'原始回归', icon:'💠', desc:'据说和丰缘地区的传说渊源颇深，散发着三色光辉的宝珠。', start:0, w15:0, primal:1 }
@@ -13849,8 +13858,8 @@ function artPickPool(wv) {
     if (roleBanArts().includes(id)) continue;   // 角色禁选（弓箭手：无双秘籍 / 哈姆杀所有）
     if (id === 'rainkeep') continue;            // 雨一直下：不进自然池，仅 20 波联动必刷
     /* 🌟 幻之助战的两个专属奇物（用户 2026-10 点名）：**选谁才刷谁的那件** */
-    if (id === 'wish' && p.starPick !== 'jirachi') continue;        // 千年之愿：只有选基拉祈才刷
-    if (id === 'gracidea' && p.starPick !== 'shaymin') continue;     // 葛拉西蒂亚花：只有选谢米才刷
+    if (id === 'wish' && starChoice() !== 'jirachi') continue;        // 🌠 千年之愿：幻之助战选的是基拉祈才刷
+    if (id === 'gracidea' && starChoice() !== 'shaymin') continue;    // 🌸 葛拉西蒂亚花：选的是谢米才刷
     /* 🌟 原始回归：**拿到任意一只神兽之后**才进奇物库（在那之前刷出来毫无意义）；
        第 25 波必定刷（见 pickArts），**没在那儿拿的话后面照样能抽到 / 买到**（用户要求） */
     if (id === PRIMAL_ART && !primalOwner()) continue;
@@ -18353,7 +18362,7 @@ function syncLabTools() {
     h += '<div class="dev-row">🧢 御三家：' + petBtn('bulba', '妙蛙种子') + petBtn('charm', '小火龙') + petBtn('squirt', '杰尼龟') + '</div>';
     /* 🐣🐶🔥 另外几只伙伴（波克比 / 伊布 / 炭小侍 / 多龙梅西亚 / 迷你龙）：点一下直接**入队**（不是替换御三家） */
     h += '<div class="dev-row">🐾 伙伴：' + petBtn('toge', '波克比') + petBtn('eevee', '伊布') + petBtn('charcadet', '炭小侍')
-      + petBtn('dreepy', '多龙梅西亚') + petBtn('dratini', '迷你龙') + petBtn('beldum', '铁哑铃') + petBtn('gible', '圆陆鲨') + petBtn('shaymin', '谢米')
+      + petBtn('dreepy', '多龙梅西亚') + petBtn('dratini', '迷你龙') + petBtn('beldum', '铁哑铃') + petBtn('gible', '圆陆鲨')
       + '<span class="dev-tip">后面两只都是大器晚成（20/25 波进化，试验场用上面「🧬 进化」按钮推）</span></div>';
     /* 🌟 神兽三只（盖欧卡 / 固拉多 / 烈空坐）：**只有开发者版有**（用户要求「仅在开发者版更新」）——
        试验场本来就只属于开发者版，所以这一行跟着 `legendOn()` 一起出现/消失；
