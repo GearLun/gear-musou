@@ -7217,9 +7217,8 @@ function starAidEnsure() {
   if (p.starPick === undefined) {
     if (p.petOwned.indexOf('jirachi') >= 0) p.starPick = 'jirachi';
     else if (p.petOwned.indexOf('shaymin') >= 0) p.starPick = 'shaymin';
-    /* 🧪⚠️ **试验场里绝不弹这个面板**：试验场没有玩家去点它 → 面板一直挂着 → `choosing` 恒真 →
-       updateGame 永远 return = 用户报的「选幻之助战 / 一键满质变就卡死」。这里直接按默认（基拉祈）定夺；
-       想测谢米就点面板「🐾 伙伴」里的 🌸 谢米入队（或测试钩子 __musouStarPick('shaymin')）。 */
+    /* 🧪 试验场里也照常弹（面板现在**真的可点**：见 paintChoices 的 'star' 分支）——
+       以前空白不可点才是「卡死」的根因，已修。 */
     else if (p.lab) p.starPick = 'jirachi';
     else {
       /* 防死循环：面板最多弹 3 次（被关掉又没选 → 第 4 次直接按基拉祈定夺，绝不会一直挂住世界） */
@@ -10755,12 +10754,12 @@ function paintChoices(kind) {
   /* 转职 3 项 / 战法 4 项 / 选武器 3~4 项（开发者版本多一个「训练家」）/ 御三家 3 项 / 🐾 捕捉 2 项 / 🌟 神兽 3 项 */
   const n = (kind === 'job' || kind === 'ronin') ? Math.max(3, curChoices.length)
     : ((kind === 'weapon' || kind === 'starter' || kind === 'legend') ? Math.max(3, curChoices.length)
-      : (kind === 'catch' ? Math.max(2, curChoices.length) : 3));
+      : ((kind === 'catch' || kind === 'star') ? Math.max(2, curChoices.length) : 3));   // 🌟 star = 幻之宝可梦二选一（2 项）
   /* ⚠️ 一律扫到第 4 个按钮：**超出本次选项数的按钮要清空并隐藏** ——
      否则「选武器」面板的第 4 格（训练家）会在别的面板里留下残影，正式版还会多出一个空按钮 */
   for (let i = 0; i < 4; i++) {
     const b = $(kind === 'level' ? 'up-b' + i : kind === 'mut' ? 'mt-b' + i : kind === 'job' ? 'job-b' + i
-      : (kind === 'weapon' || kind === 'starter' || kind === 'catch' || kind === 'legend') ? 'wp-b' + i : kind === 'ronin' ? 'rn-b' + i : 'art-b' + i);
+      : (kind === 'weapon' || kind === 'starter' || kind === 'catch' || kind === 'legend' || kind === 'star') ? 'wp-b' + i : kind === 'ronin' ? 'rn-b' + i : 'art-b' + i);
     if (!b) continue;
     if (i >= n) { b.innerHTML = ''; b.disabled = true; b.style.display = 'none'; continue; }
     b.style.display = '';
