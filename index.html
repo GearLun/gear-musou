@@ -6454,21 +6454,23 @@ const PET_SKILL_EARTHQUAKE = {
 /* 🐲 龙爪：**攻击范围 / 频率完全照搬妙蛙草的「强力鞭打」**（r 375 · arc 0.95π · cd 1.5/1.5），
    只把特效换成龙系（蓝灰）· 伤害按用户要求 ×3 */
 const PET_SKILL_DRAGONCLAW = {
-  id: 'dragonclaw', name: '龙爪', icon: '🐲', kind: 'melee', cd: 1.5 / 1.5, range: 375, fxEl: 'DRAGON',
-  desc: '一记龙爪（范围与出手频率同「强力鞭打」= 375 / 1 秒）· 伤害 宝可梦攻击力 ×3 · ' + petCdText(1.5 / 1.5),
-  melee: { r: 375, arc: Math.PI * 0.95, mul: 3, fxK: 7.5, rot: -0.52 }
+  id: 'dragonclaw', name: '龙爪', icon: '🐲', kind: 'melee', cd: 1.5 / 1.5, range: 375, fxEl: 'GRASS',   // ⚠️ 特效 = 强力鞭打那套（GRASS melee 条带），只是染成蓝灰 —— 别换成 DRAGON 那套图
+  desc: '一记龙爪：**特效就是强力鞭打那套**（只把颜色染成蓝灰）· 范围与出手频率也同强力鞭打（375 / 1 秒）· 伤害 宝可梦攻击力 ×3 · ' + petCdText(1.5 / 1.5),
+  melee: { r: 375, arc: Math.PI * 0.95, mul: 3, fxK: 7.5, rot: -0.52, fxTint: '#9fb6c8' }   // 🩵 蓝灰
 };
-/* 🌎 地震☆：**和固拉多的「地震⭐」相同** —— 直接引用同一份 aura 载荷 */
+/* 🌎 地震☆：**和固拉多的「地震⭐」同款**（范围/节拍/不烧伤都一样），但**伤害下调 30%**（用户 2026-10 点名）——
+   所以是**克隆**一份再改 dmg，不是直接引用 */
 const PET_SKILL_EQ_STAR = {
   id: 'eqstar', name: '地震☆', icon: '💥', kind: 'aura', range: PET_SKILL_EARTHQUAKE_STAR.range, fxEl: 'GROUND', fxLife: 0.5,
-  desc: '和固拉多的「地震⭐」完全相同：范围 ' + Math.round(305 * 1.5 * 1.5) + ' · 每 0.5 秒结算 · 不会烧伤',
-  aura: PET_SKILL_EARTHQUAKE_STAR.aura
+  desc: '和固拉多的「地震⭐」同款：范围 ' + Math.round(305 * 1.5 * 1.5) + ' · 每 0.5 秒结算 · 不会烧伤 · **伤害下调 30%**',
+  /* ⚠️ 克隆一份（别直接引用固拉多那个对象，否则改这里会把固拉多本体一起改掉）· 伤害 = 地震⭐ × 0.7 */
+  aura: Object.assign({}, PET_SKILL_EARTHQUAKE_STAR.aura, { dmg: PET_SKILL_EARTHQUAKE_STAR.aura.dmg * 0.7 })
 };
 /* 🐲 二连劈☆：同龙爪，但**一次出手打两下**（间隔 0.2 秒）· 每下 ×3 */
 const PET_SKILL_DUALCHOP_STAR = {
-  id: 'dualchop2', name: '二连劈☆', icon: '⚔️', kind: 'melee', cd: 1.5 / 1.5, range: 375, fxEl: 'DRAGON',
-  desc: '龙爪强化：一次出手连劈两下（间隔 0.2 秒）· 每下 宝可梦攻击力 ×3 · ' + petCdText(1.5 / 1.5),
-  melee: { r: 375, arc: Math.PI * 0.95, mul: 3, hits: 2, gap: 0.2, fxK: 7.5, rot: -0.52 }
+  id: 'dualchop2', name: '二连劈☆', icon: '⚔️', kind: 'melee', cd: 1.5 / 1.5, range: 375, fxEl: 'GRASS',   // 同上：强力鞭打那套特效 + 蓝灰染色
+  desc: '龙爪强化：一次出手连劈两下（间隔 0.2 秒）· 每下 宝可梦攻击力 ×3 · 特效同龙爪（强力鞭打那套 · 蓝灰）· ' + petCdText(1.5 / 1.5),
+  melee: { r: 375, arc: Math.PI * 0.95, mul: 3, hits: 2, gap: 0.2, fxK: 7.5, rot: -0.52, fxTint: '#9fb6c8' }
 };
 const PET_SKILLS_GIBLE = [PET_SKILL_STOMP];
 const PET_SKILLS_GIBLE_1 = [PET_SKILL_EARTHQUAKE, PET_SKILL_DRAGONCLAW];
@@ -8219,7 +8221,8 @@ function petMeleeSwing(u, sk) {
     hitEnemy(e, dx / dd, dy / dd, 200, dmg);
     n++;
   }
-  fxPush(el, 'melee', u.x + Math.cos(a) * M.r * 0.45, u.y - 6 + Math.sin(a) * M.r * 0.45, M.fxK || 5, a + (M.rot || 0));
+  /* 🎨 `M.fxTint`：同一套条带换个颜色（龙爪 = 强力鞭打那套染成蓝灰）—— 第 10 个参数就是染色 */
+  fxPush(el, 'melee', u.x + Math.cos(a) * M.r * 0.45, u.y - 6 + Math.sin(a) * M.r * 0.45, M.fxK || 5, a + (M.rot || 0), null, 0, 0, M.fxTint || '');
   burst(u.x + Math.cos(a) * 26, u.y + Math.sin(a) * 26 - 6, 7, PET_FX_TINT[el], 240);
   dbgPetMelee += Math.max(1, n);
   tone(520, 90, 'square', 0.05, 0.04);
@@ -28365,7 +28368,7 @@ function skDump(s) {
     ghost: (s.shot && s.shot.ghost) ? 1 : 0,           // 🌑 幽灵系光球（暗影球：画成紫黑色）
     star: (s.shot && s.shot.star) ? 1 : 0,             // ⭐ 画成代码画的四角星（伊布·高速星星）
     def: s.id === PET_SKILL_DEF[Object.keys(PET_SKILLS).find(k => petSkillList(k).indexOf(s) >= 0)] ? 1 : 0,
-    melee: s.melee ? { r: s.melee.r, arc: +s.melee.arc.toFixed(3), mul: s.melee.mul, hits: s.melee.hits || 1, gap: s.melee.gap || 0 } : null,
+    melee: s.melee ? { r: s.melee.r, arc: +s.melee.arc.toFixed(3), mul: s.melee.mul, hits: s.melee.hits || 1, gap: s.melee.gap || 0, fxTint: s.melee.fxTint || '' } : null,
     shot: s.shot ? { n: s.shot.n, mul: s.shot.mul, boomR: s.shot.boomR || 0, boomMul: s.shot.boomMul || 0, pierce: s.shot.pierce || 0, homing: s.shot.homing || 0, spread: s.shot.spread || 0, spd: s.shot.spd, orbR: s.shot.orbR || 0, hitR: s.shot.hitR || 0, life: s.shot.life || 0, mini: s.shot.mini || 0, miniK: s.shot.miniK || 0, off: s.shot.off || 0, homingTurn: s.shot.homingTurn || 0 } : null,
     slam: s.slam ? { r: s.slam.r, mul: s.slam.mul } : null,
     spin: s.spin ? { dist: Math.round(s.spin.dist), spd: s.spin.spd, r: s.spin.r, mul: s.spin.mul } : null,
