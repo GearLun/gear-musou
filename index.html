@@ -8210,7 +8210,11 @@ function updatePetAlly(u, dt) {
 /* 🐾 近战横扫：以宝可梦为心、朝 `u.petAng` 的一整个扇形（`arc` 弧度、`r` 半径）里所有敌人各吃一次，
    挥击特效按属性铺在扇形中间。射程口径 = **战士初始普攻的 2 倍左右**（122×2 ≈ 244，与旧 Boss 版一致）。 */
 function petMeleeSwing(u, sk) {
-  const M = sk.melee, el = petFormElement(u), a = u.petAng;
+  /* ⚠️⚠️ **这里的属性必须是 `sk.fxEl || petFormElement(u)`**（用户 2026-10 点名纠正了两次）：
+     以前写死 `petFormElement(u)` → 烈咬陆鲨（地面）放「龙爪」时画的是**地面系**那套条带，
+     技能表里写什么 fxEl 都不生效（主人原话：「你用的还是地面系的特效改色，我要的是强力鞭打的草系特效改色」）。
+     现在与身周技 / 光束技同口径：技能写了 `fxEl` 就用它，没写才退回宝可梦自己的属性。 */
+  const M = sk.melee, el = sk.fxEl || petFormElement(u), a = u.petAng;
   const dmg = petHitDmg(u.petId, M.mul);
   let n = 0;
   for (const e of enemies) {
