@@ -10433,6 +10433,7 @@ function openStarPick() {
   const lv = $('wp-lv'); if (lv) lv.textContent = '幻之助战 · 幻之宝可梦二选一';
   const st = $('wp-stats'); if (st) st.innerHTML = '选择不同的幻之宝可梦，后续刷新的专属奇物也不同';
   rerollLeft = 0;
+  pickPanelOpen('star');   // ⚠️⚠️ 必须显式调用，否则 sc-weapon 不会被 show → 面板不可见却冻结世界（用户报的卡死）
   paintChoices('star');
 }
 function openLegendUp() {
