@@ -7219,7 +7219,6 @@ function starAidEnsure() {
     else if (p.petOwned.indexOf('shaymin') >= 0) p.starPick = 'shaymin';
     /* 🧪 试验场里也照常弹（面板现在**真的可点**：见 paintChoices 的 'star' 分支）——
        以前空白不可点才是「卡死」的根因，已修。 */
-    else if (p.lab) p.starPick = 'jirachi';
     else {
       /* 防死循环：面板最多弹 3 次（被关掉又没选 → 第 4 次直接按基拉祈定夺，绝不会一直挂住世界） */
       p.starShow = (p.starShow || 0) + 1;
@@ -27217,7 +27216,7 @@ window.__musouCapMut = (id) => { const d = MUTS.filter(m => m.id === id)[0]; if 
 /* 🧪 测试钩子：直接设定「幻之助战」二选一的结果 */
 /* 🧪 测试钩子：把「幻之助战」的二选一**重置成没选过**（并收回基拉祈/谢米），用来模拟「第一次拿到」 */
 window.__musouStarReset = () => {
-  p.starPick = undefined; p.starPend = 0;
+  p.starPick = undefined; p.starPend = 0; p.starShow = 0;
   p.petOwned = petOwned().filter(x => x !== 'jirachi' && x !== 'shaymin');
   allyUnits = allyUnits.filter(u => u.kind !== 'pet' && u.kind !== 'shinypet');
   petSummonSync();
