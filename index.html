@@ -5593,7 +5593,15 @@ function primalArtIcon() {
   const src = key && typeof PET_ITEM_IMG !== 'undefined' ? PET_ITEM_IMG[key] : '';
   return src ? '<img class="up-ic-img" src="' + src + '" alt="">' : '💠';
 }
-function artIcon(id) { return id === PRIMAL_ART ? primalArtIcon() : (ART_DEFS[id] ? ART_DEFS[id].icon : '❔'); }
+function artIcon(id) {
+  if (id === PRIMAL_ART) return primalArtIcon();
+  const d = ART_DEFS[id];
+  if (!d) return '❔';
+  /* 🖼️ 有 `img` 字段的（如 🌸 葛拉西蒂亚花）在 HTML 场景出**素材图**；canvas 飘字那边仍然用纯文本 icon */
+  if (d.img && typeof PET_ITEM_IMG !== 'undefined' && PET_ITEM_IMG[d.img])
+    return '<img class="up-ic-img" style="width:22px;height:22px;vertical-align:-4px" src="' + PET_ITEM_IMG[d.img] + '" alt="">';
+  return d.icon;
+}
 /* 🎴 原始回归的**内部详情**（钩子 / 测试读它；**卡片上只印用户给的那句风味文案** `ART_DEFS.primal.desc`）——
    按队里那只神兽现写（招式 / 特性都跟着它变） */
 function primalArtDesc() {
@@ -6412,15 +6420,14 @@ const PET_SKILL_DOOMWISH_STAR = {
    每道 = 谢米攻击力 ×4 · 出手间隔 1 秒；**天空谢米**换成 ☆ 版（**8 道** · 每道 **×6**）。
    ⚠️ 「随机陆续」用 `spread`（扇形内铺开）+ `gap`（一道道甩，不是同帧齐射）表达。 */
 const PET_SKILL_SEEDFLARE = {
-  id: 'seedflare', name: '种子闪光', icon: '🌿', kind: 'shot', cd: 1, range: 900, fxEl: 'GRASS',
-  desc: '正前方 60° 扇形里陆续甩出 5 道刀波，每道 谢米攻击力 ×4 · ' + petCdText(1),
-  /* ⚠️ 引擎的 shot 载荷用 `spread` = **每道之间的角度步长**（不是总弧度）：60° 扇形铺 5 道 ≈ (π/3)/5 */
-  shot: { n: 5, spread: Math.PI / 3 / 5, mul: 4, spd: 620, homing: 0, fxK: 3 }
+  id: 'seedflare', name: '种子闪光', icon: '🌿', kind: 'seed', cd: 1, range: 900, fxEl: 'GRASS',
+  desc: '正前方 60° 扇形内**随机**陆续甩出 5 道刀波（一道道飞出去）· 每道 谢米攻击力 ×4 · ' + petCdText(1),
+  seed: { n: 5, arc: Math.PI / 3, gap: 0.09, mul: 4, spd: 640, r: 36, fxK: 3 }
 };
 const PET_SKILL_SEEDFLARE_STAR = {
-  id: 'seedflare2', name: '种子闪光☆', icon: '🍀', kind: 'shot', cd: 1, range: 900, fxEl: 'GRASS',
-  desc: '种子闪光强化（天空谢米）：8 道刀波 · 每道 谢米攻击力 ×6 · ' + petCdText(1),
-  shot: { n: 8, spread: Math.PI / 3 / 8, mul: 6, spd: 620, homing: 0, fxK: 3 }
+  id: 'seedflare2', name: '种子闪光☆', icon: '🍀', kind: 'seed', cd: 1, range: 900, fxEl: 'GRASS',
+  desc: '种子闪光强化（天空谢米）：60° 扇形内随机陆续甩出 8 道刀波 · 每道 谢米攻击力 ×6 · ' + petCdText(1),
+  seed: { n: 8, arc: Math.PI / 3, gap: 0.07, mul: 6, spd: 640, r: 36, fxK: 3 }
 };
 /* 常驻两招：**能量球☆**（直接引用妙蛙花那一份）+ **帮助☆**（直接引用波克比那一份） */
 const PET_SKILL_ENERGYBALL_STAR_REF = PET_SKILLS_BULBA_2.filter(x => x.id === 'energyballstar')[0] || PET_SKILLS_BULBA_2[0];   // 能量球☆（妙蛙花那一份）
@@ -6920,6 +6927,51 @@ function petSkillOf(id) {
    ⚠️ 光束类（龙息 / 喷射火焰 / 水枪）把**这条光柱的坐标存在 `u.jetDraw` 里**，`drawPetWater()` 每帧照着它画 ——
    中途按 C 换招时若不清理，面板一关就会看到**龙息的光柱钉在原来的位置上**（用户报过这个 bug）。
    跳砸 / 猛冲的中间态同理（换了招还停在半空/冲刺动画里）。 */
+/* 🌿 种子闪光的**刀波**（用户点名：不是叶片弹体，是「类似刀波的攻击」）：
+   一道道飞出去 · 命中一次就消失 · 画成新月形（绿色刀刃 + 内层浅色高光）。 */
+let petWaves = [];
+let dbgPetWaves = 0;
+function spawnPetWave(u, SK, ang) {
+  const S = SK.seed;
+  petWaves.push({ id: u.petId, x: u.x + Math.cos(ang) * 24, y: u.y - 8 + Math.sin(ang) * 24, ang,
+    spd: S.spd, r: S.r || 34, mul: S.mul, el: SK.fxEl || petFormElement(u), life: 1.2, hits: new Set() });
+  fxPush(SK.fxEl || petFormElement(u), 'hit', u.x + Math.cos(ang) * 26, u.y - 8 + Math.sin(ang) * 26, (S.fxK || 3) * 0.6, ang);
+  dbgPetWaves++;
+}
+function updatePetWaves(dt) {
+  for (let i = petWaves.length - 1; i >= 0; i--) {
+    const w = petWaves[i];
+    w.life -= dt;
+    w.x += Math.cos(w.ang) * w.spd * dt;
+    w.y += Math.sin(w.ang) * w.spd * dt;
+    for (const e of enemies) {
+      if (e.dead || w.hits.has(e)) continue;
+      const dx = e.x - w.x, dy = e.y - w.y, dd = Math.hypot(dx, dy) || 1;
+      if (dd > w.r + e.r) continue;
+      w.hits.add(e);
+      hitEnemy(e, dx / dd, dy / dd, 120, petHitDmg(w.id, w.mul));
+      fxPush(w.el, 'hit', w.x, w.y, 2.5, w.ang);
+      w.life = 0;                       // 命中即消散（一刀一波）
+      break;
+    }
+    if (w.life <= 0 || w.x < -80 || w.y < -80 || w.x > W + 80 || w.y > H + 80) petWaves.splice(i, 1);
+  }
+}
+function drawPetWaves() {
+  for (const w of petWaves) {
+    ctx.save();
+    ctx.translate(w.x, w.y);
+    ctx.rotate(w.ang);
+    ctx.globalAlpha = Math.max(0, Math.min(1, w.life / 0.45));
+    ctx.strokeStyle = PET_FX_TINT[w.el] || '#bfe8a0';
+    ctx.lineWidth = 7;
+    ctx.beginPath(); ctx.ellipse(0, 0, 26, 46, 0, -Math.PI * 0.42, Math.PI * 0.42); ctx.stroke();
+    ctx.strokeStyle = '#f2ffe0';
+    ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.ellipse(-7, 0, 19, 37, 0, -Math.PI * 0.4, Math.PI * 0.4); ctx.stroke();
+    ctx.restore();
+  }
+}
 function petSkillReset(id) {
   for (const u of allyUnits) {
     if (u.kind !== 'pet' || (id && u.petId !== id)) continue;
@@ -6944,6 +6996,7 @@ function petSkillReset(id) {
     u.secDraw = null;
     u.dashSlammed = 0;                           // 🥊 意念头锤：收尾重压只做一次
     u.meleeQ = 0; u.meleeT = 0;                  // 🐲 二连劈☆：连击段数（换招必须收掉，否则会继续补刀）
+    u.sfQ = 0; u.sfT = 0;                        // 🌿 种子闪光：刀波队列（换招也要收掉）
     u.moonCd = 0; u.moonN = 0;                   // 🌙 月亮之力：出手节拍 / 已放出的月亮数（诊断）
     u.petA = 'idle'; u.petF = 0; u.petAF = 0;
   }
@@ -8255,6 +8308,31 @@ function updatePetAlly(u, dt) {
     return;
   }
   /* —— 🚀 跳砸类（火箭头锤 / 地球上投 / 巨浪冲撞）：跳向指针前方 → 落地一圈范围伤害 —— */
+  /* —— 🌿 种子闪光（谢米 / 天空谢米）：前方 60° 扇形内**随机**陆续甩出 n 道刀波 —— */
+  if (SK.kind === 'seed') {
+    const S = SK.seed;
+    if (u.sfQ > 0) {                       // 正在一道道甩：只推队列，不重新吃冷却
+      u.sfT -= dt;
+      petAnim(u, 'atk'); petTickFrame(u, dt, true);
+      if (u.sfT <= 0) {
+        u.sfQ--;
+        u.sfT = S.gap;
+        const half = (S.arc || Math.PI / 3) / 2;
+        spawnPetWave(u, SK, u.sfBase + rnd(-half, half));   // ← 扇形内随机方向
+      }
+      return;
+    }
+    u.atkT -= dt;
+    if (u.petA === 'atk') {
+      petTickFrame(u, dt, false);
+      if (u.petF >= PET_META[petForm(u)].atk.n - 1) petAnim(u, moving ? 'walk' : 'idle');
+    } else if (foe && u.atkT <= 0) {
+      u.atkT = SK.cd / petRateMul();
+      u.sfBase = petAimAng(u); u.sfQ = S.n; u.sfT = 0;
+      petAnim(u, 'atk', true);
+    }
+    return;
+  }
   if (SK.kind === 'slam') { updatePetSlam(u, dt, SK, foe, moving); return; }
   /* —— 🌡️ 身周持续伤害（热风 / 花瓣舞 / 冲浪，对标满级熔岩结界）：不索敌，每 tick 秒烧烤身周 r 内的敌人 ——
      ⚠️ **刚碰到的立刻结算一次**（和光束的 `jetPrev` 同一套）：冲浪时训练家会高速冲刺，若只按 0.5 秒整体节拍，
@@ -9412,7 +9490,7 @@ function updatePetPools(dt) {
   }
   petPools = petPools.filter(q => !q.dead);
 }
-function tickPetPools(dt) { updatePetPools(dt); updatePetTornadoes(dt); updatePetMeteors(dt); updatePetMoons(dt); }
+function tickPetPools(dt) { updatePetPools(dt); updatePetTornadoes(dt); updatePetMeteors(dt); updatePetMoons(dt); updatePetWaves(dt); }   // 🌿 刀波也在这里推进
 function drawPetPools() {
   for (const q of petPools) {
     const fade = Math.min(1, (q.life - q.t) / 1.2);
@@ -13417,7 +13495,8 @@ const ART_DEFS = {
   nohand:    { name:'骑士不徒手而亡', icon:'🗡', desc:'武器大师专属,将「木棍」视为「圣剑」！基础伤害30，拿到真圣剑时，提高圣剑20％的伤害！', start:1, w15:0 },
   /* 🧢 训练家专属奇物（用户本轮点名）：别人一律禁选 —— 见 roleBanArts 里的 `if (!r && !isTrainer())` */
   /* 🌸 葛拉西蒂亚花：图标用素材图（sucai\item\GRACIDEA_FLOWER.png → PET_ITEM_IMG，artIcon 见到同名 key 就出图） */
-  gracidea:  { name:'葛拉西蒂亚花', icon: ((typeof PET_ITEM_IMG !== 'undefined' && PET_ITEM_IMG.GRACIDEA_FLOWER) ? ('<img class="up-ic-img" style="width:22px;height:22px;vertical-align:-4px" src="' + PET_ITEM_IMG.GRACIDEA_FLOWER + '" alt="">') : '🌸'), desc:'训练家专属：将花朵送给谢米，会让谢米发生变化！（将谢米变化为天空谢米，并且立刻提高谢米20级！）', start:0, w15:0 },
+  gracidea:  { name:'葛拉西蒂亚花', icon:'🌸', img:'GRACIDEA_FLOWER',   // 🌸 图标：HTML 场景用素材图（artIcon 走 img），canvas 飘字仍用纯文本 icon
+    desc:'训练家专属：将花朵送给谢米，会让谢米发生变化！（将谢米变化为天空谢米，并且立刻提高谢米20级！）', start:0, w15:0 },
   wish:      { name:'千年之愿', icon:'🌠', desc:'训练家专属，基拉祈的等级提升 20 级（上限也 +20 → 满层 70 级），并且当基拉祈学会「破灭之愿」时，强化破灭之愿的技能效果！（升级为破灭之愿☆：范围 +50%、伤害 +50%）', start:0, w15:0 },
   /* 🌟 原始回归（训练家专属 · **第 25 波必刷**）：图标按队里那只神兽换成朱红 / 靛蓝 / 青绿宝珠（见 artIcon） */
   primal:    { name:'原始回归', icon:'💠', desc:'据说和丰缘地区的传说渊源颇深，散发着三色光辉的宝珠。', start:0, w15:0, primal:1 }
@@ -25564,7 +25643,9 @@ function drawGame() {
   drawPetPools();    // 💦 加农水炮留下的大水坑（画在地面层）
   drawPetTornadoes();   // 🌀 迷你龙的龙卷风（跟着一起画在地面层）
   drawPetMeteors();     // ☄️ 流星群的陨石（带落点预警圈）
-  drawPetMoons();       // 🌙 月亮之力（仙子伊布）的三个月亮
+  drawPetMoons();
+  drawPetWaves();       // 🌿 种子闪光的刀波
+  // 🌙 月亮之力（仙子伊布）的三个月亮
   drawPetSector();      // 🎀 魅惑之声的 120° 扇形
 
   for (const s of slashes) {
@@ -28497,7 +28578,8 @@ window.__musouTrainerInfo = () => {
     petShots: dbgPetShots, booms: dbgPetBooms, waterHits: dbgPetWaterHits, levels: dbgPetLevels, faints: dbgPetFaints,
     meleeHits: dbgPetMelee,
     petSectorTicks: dbgPetSectorTicks, petSectorHits: dbgPetSectorHits, petSectorCharms: dbgPetSectorCharms,
-    petMoons: dbgPetMoons, petMoonBooms: dbgPetMoonBooms, petMoonsLive: petMoons.length, slams: dbgPetSlam,   // 🐾 近战命中次数（抓击/藤鞭/砸地）· 🚀 跳砸/猛冲落地次数
+    petMoons: dbgPetMoons,
+  petWaves: dbgPetWaves, petMoonBooms: dbgPetMoonBooms, petMoonsLive: petMoons.length, slams: dbgPetSlam,   // 🐾 近战命中次数（抓击/藤鞭/砸地）· 🚀 跳砸/猛冲落地次数
     jetTicks: dbgJetTicks, auraTicks: dbgPetAura,
       petMoons: dbgPetMoons, petMoonBooms: dbgPetMoonBooms, petMoonsLive: petMoons.length, dashes: dbgPetDash,   // 💧 光束结算节拍 · 🌡️ 环绕结算次数 · ☄️ 猛冲次数
     beams: dbgPetBeams,   // ☀️ 日光束发射次数（一发光炮）
