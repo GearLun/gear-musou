@@ -678,6 +678,7 @@
     <div class="over-title">败 阵</div>
     <div class="stats" id="ov-stats"></div>
     <button class="btn" id="btn-restart">再 战</button>
+    <button class="btn" id="btn-over-home" style="margin-top:10px;background:#1b2740;border-color:#3a5a8a;color:#cfe6ff;">🏠 回 到 主 页</button>
     <div class="hint">按 R 也可重新开始</div>
    </div>
   </div>
@@ -689,6 +690,7 @@
     <div style="font-size:17px;color:#e6c9ff;letter-spacing:.2em;">终焉齿轮讨伐成功 · 《齿轮无双》30 层通关</div>
     <div class="stats" id="win-stats" style="line-height:2;"></div>
     <button class="btn" id="btn-win">再 来 亿 把</button>
+    <button class="btn" id="btn-win-home" style="margin-top:10px;background:#1b2740;border-color:#3a5a8a;color:#cfe6ff;">🏠 回 到 主 页</button>
     <div class="hint">按 R 也可再来一局</div>
    </div>
   </div>
@@ -7059,6 +7061,7 @@ function petSkillOf(id) {
 /* ⚡ 等离子闪电拳的**瞬移闪电**：{id, x1,y1,x2,y2, t, life} —— 技能结束时按 id 整批清掉（用户要求） */
 let petBolts = [];
 let dbgPetBlitz = 0;
+let dbgShinyGuard = 0;   // 🛡️ 触发「100 次保底」的次数
 /* ⚡ 等离子闪电拳的选目标（用户口径）：**法师 / 弓箭手优先**；这一类打完了 → 打其余存活的；
    都不够 15 个 → **循环**继续打还活着的（`u.blitzSeen` 记录本轮打过谁，优先没打过的）。 */
 function blitzPick(u) {
@@ -7516,6 +7519,26 @@ function shinyMutChance() {
   if (lv <= 0) return 0;
   return Math.min(SHINY_CHANCE_BASE + SHINY_CHANCE_PER * (SHINY_MUT_CAP - 1), SHINY_CHANCE_BASE + SHINY_CHANCE_PER * (lv - 1));
 }
+/* ✨ **刷闪连锁**：`meta.chain` = 有一次连锁机会（通关 / 无尽 30 关后给）；
+   `meta.chainP` = 选中的宝可梦 id（主页闪光图鉴里点选）；`meta.visit` = 每只的来访计数（保底用）。 */
+const CHAIN_GUARD = 100;   // 🛡️ 来访满 100 次 → 第 100 次**必定闪光**
+function chainReady() { return meta.chain ? 1 : 0; }
+function chainPickId() { return (meta.chainP && SHINY_SPECIES.indexOf(meta.chainP) >= 0) ? meta.chainP : ''; }
+function chainPickSet(id) {
+  if (SHINY_SPECIES.indexOf(id) < 0) return false;
+  meta.chainP = (meta.chainP === id) ? '' : id;
+  metaSave();
+  return true;
+}
+function chainVisitAdd(id) {
+  if (!meta.visit) meta.visit = {};
+  meta.visit[id] = Math.min(CHAIN_GUARD, (meta.visit[id] || 0) + 1);
+  metaSave();
+  return meta.visit[id];
+}
+function chainVisitN(id) { return (meta.visit && meta.visit[id]) || 0; }
+function chainVisitReset(id) { if (meta.visit) { meta.visit[id] = 0; metaSave(); } }
+function chainGrant() { if (!meta.chain) { meta.chain = 1; metaSave(); } }
 function shinyGot(id) { return !!(meta.shinyDex && meta.shinyDex[id]); }
 function shinyOn(id) { return !!(meta.shinyOn && meta.shinyOn[id]); }
 function shinyRecord(id) {
@@ -7584,8 +7607,12 @@ function updateShinyVisit(u, dt) {
 function shinyMutWaveEnd(wave, forceShiny) {
   const lv = shinyMutLv();
   if (lv <= 0) return 0;
-  const id = SHINY_SPECIES[Math.floor(Math.random() * SHINY_SPECIES.length)];
-  const shiny = (forceShiny === undefined) ? (Math.random() < shinyMutChance()) : !!forceShiny;
+  const chainId = (p.chainRun && p.chainId && SHINY_SPECIES.indexOf(p.chainId) >= 0) ? p.chainId : '';   // ✨ 连锁：只来访它
+  const id = chainId || SHINY_SPECIES[Math.floor(Math.random() * SHINY_SPECIES.length)];
+  const visitN = chainVisitAdd(id);              // 🛡️ 保底计数
+  const guard = visitN >= CHAIN_GUARD;
+  if (guard) { chainVisitReset(id); dbgShinyGuard++; }
+  const shiny = (forceShiny === undefined) ? (guard || Math.random() < shinyMutChance()) : !!forceShiny;
   const gold = shinyVisitGold();
   addCoins(gold);
   spawnShinyVisit(id, shiny);
@@ -10627,6 +10654,10 @@ function openWeaponUp() {
     id: w.id, icon: w.icon, name: w.name, desc: (CLASS_INTRO[w.id] || ''),
     apply() {
       p.weapon = w.id;
+      if (w.id === 'trainer' && chainReady() && chainPickId()) {   // 只有「有机会 + 选好了目标」才值得问一句
+        openChainConfirm();   // ✨ 先问「本次游戏将会消耗你的连锁机会，确定要开始冒险吗？」
+        return;
+      }
       if (w.id === 'trainer') {
         /* 🧢 训练家：**开局三只御三家一起上**（用户要求），第 5 波清剿后才三选一（另外两只离队，见 petStarterWaveEnd） */
         p.petKind = PET_STARTERS[0];
@@ -14916,6 +14947,17 @@ function renderPause() {
 $('btn-pause-resume').addEventListener('click', () => { $('sc-pause').classList.remove('show'); state = 'play'; });
 /* 🧢 宝可梦管理：面板里的「继续战斗」按钮 */
 $('pets-close').addEventListener('click', () => closePetPanel());
+/* 🏠 结算面板（败阵 / 通关）的「回到主页」：收面板 + 回主页刷新「继续」按钮 */
+function backToHomeFromOver() {
+  $('sc-over').classList.remove('show');
+  $('sc-win').classList.remove('show');
+  $('sc-start').classList.add('show');
+  state = 'title';
+  refreshContinue();
+}
+$('btn-over-home').addEventListener('click', backToHomeFromOver);
+$('btn-win-home').addEventListener('click', backToHomeFromOver);
+
 $('btn-pause-home').addEventListener('click', () => {
   saveGame(wave, 0);                       // 立刻存档（下一次出征前可「继续」）
   $('sc-pause').classList.remove('show');
@@ -15001,9 +15043,8 @@ $('cdx-body').addEventListener('click', (ev) => {
 function renderMeta() {
   const roleName = { warrior: '战士', archer: '弓箭手', mage: '法师' };
   let h = '';
-  h += '<div class="cdx-sec">💠 传承金币 · <b style="color:#ffd166;">' + meta.bank + '</b>' +
-       '<small style="color:#a9c39a;font-weight:400;margin-left:8px;">每局结束自动结算：本局总金币 ×1%（累计已带出 ' + meta.earned + ' · 共 ' + meta.runs + ' 局）</small></div>';
-  h += '<div class="cdx-sec">🌟 闪光套装（首次通关地狱模式解锁对应职业 · 纯外观：金色光环 + 头顶齿轮）</div>';
+  h += '<div class="cdx-sec">💠 传承金币</div>';   // 🧹 标题只留标题（用户要求：后面的附加内容全清）
+  h += '<div class="cdx-sec">🌟 闪光套装</div>';
   for (const c of CLASS_SETS) {
     const own = !!meta.sets[c.role], on = !!meta.use[c.role];
     h += '<div class="cdx-item"><span class="ic">' + c.icon + '</span><b style="color:' + c.col + '">' + c.name + '</b>' +
@@ -15021,7 +15062,7 @@ function renderMeta() {
       : '战士 / 弓箭手 / 法师 <b>三套闪光套装全部解锁</b> → 一次性 <b>+' + SET_ALL_REWARD + '</b> 传承金币') + '</small>' +
     '<span style="margin-left:auto;font-size:13px;color:' + (setAllGot ? '#a9c39a' : '#8d8a77') + ';">' +
     (setAllGot ? '✅ 已领取' : '🔒 已集齐 ' + setOwnN + '/' + CLASS_SETS.length) + '</span></div>';
-  h += '<div class="cdx-sec">✦ 技能树（局外永久加成 · 下一局「出征」时生效 · 升级价每级翻倍 20→40→80→160…；💰 私房钱是固定三档 1000/2000/3000）</div>';
+  h += '<div class="cdx-sec">✦ 技能树</div>';
   for (const n of META_TREE) {
     const lv = metaLv(n.id), mx = metaMaxed(n.id), cost = metaCost(n.id);
     const afford = !mx && meta.bank >= cost;
@@ -15082,15 +15123,31 @@ function renderShinyDex() {
   const box = $('shiny-body');
   if (!box) return;
   const got = SHINY_SPECIES.filter(shinyGot).length;
-  let h = '<div class="cdx-sec">✨ 已收录 <b style="color:#ffe08a;">' + got + '</b> / ' + SHINY_SPECIES.length + ' 只闪光宝可梦' +
+  const chainOn = chainReady();
+  const chainSel = chainPickId();
+  let h = '';
+  if (chainOn) {
+    h += '<div class="cdx-sec">🔗 刷闪连锁 <b style="color:#ffe08a;">可用 1 次</b>' + (chainSel ? ('<small style="color:#a9c39a;margin-left:8px;">已选：<b style="color:#ffe08a;">' + (SHINY_SPECIES_NAME[chainSel] || chainSel) + '</b> —— 下一局选「训练家」时会消耗它（其它职业不消耗）</small>') : '<small style="color:#a9c39a;margin-left:8px;">点下面任意一只「🔗 选为连锁」</small>') + '</div>';
+  } else {
+    h += '<div class="cdx-sec">🔗 刷闪连锁 <small style="color:#a9c39a;margin-left:8px;">通关一局（无尽 = 第 30 关）即可获得一次</small></div>';
+  }
+  h += '<div class="cdx-sec">✨ 已收录 <b style="color:#ffe08a;">' + got + '</b> / ' + SHINY_SPECIES.length + ' 只闪光宝可梦' +
     '<small style="color:#a9c39a;font-weight:400;margin-left:8px;">训练家质变「✨ 刷闪！」每波清剿后会有宝可梦来访 · 遇到闪光即永久收录</small></div>';
   if (!got) h += '<div class="cdx-item"><span class="ic">✨</span><b>还没有遇到任何闪光</b><small>选「训练家」开局并拿到质变「✨ 刷闪！」，每波清剿后留意来访的那只宝可梦</small></div>';
   for (const id of SHINY_SPECIES) {
     const has = shinyGot(id), on = shinyOn(id);
+    const vN = chainVisitN(id);
+    const vPct = Math.round(vN / CHAIN_GUARD * 100);
+    const picked = (chainSel === id);
     h += '<div class="cdx-item"><span class="ic"><img class="pets-ic" src="' + PET_HEAD[petFormKey(id)] + '" alt="" style="' + (has ? '' : 'filter:grayscale(1) brightness(.6);') + '"></span>' +
       '<b style="color:' + (has ? '#ffe08a' : '#8d8a77') + '">' + SHINY_SPECIES_NAME[id] + '</b>' +
-      '<small>' + (has ? '✅ 已收录闪光' : '<span style="color:#8d8a77;">未遇到闪光</span>') + '</small>' +
+      '<small>' + (has ? '✅ 已收录闪光' : '<span style="color:#8d8a77;">未遇到闪光</span>') +
+        '<br>🛡️ 保底 <b style="color:#8fd8ff;">' + vN + '</b>/' + CHAIN_GUARD +
+        '<span style="display:inline-block;width:110px;height:6px;border-radius:4px;background:#1b2740;border:1px solid #3a5a8a;margin-left:6px;vertical-align:1px;overflow:hidden;">' +
+        '<i style="display:block;height:100%;width:' + vPct + '%;background:linear-gradient(90deg,#7fd06a,#8fd8ff);"></i></span>' +
+        (picked ? ' <b style="color:#ffe08a;">🔗 本局连锁目标</b>' : '') + '</small>' +
       '<span style="margin-left:auto;">' +
+      (chainOn ? '<button class="reroll-btn" data-sact="chain" data-sid="' + id + '" style="font-size:13px;padding:4px 10px;margin-right:6px;">' + (picked ? '🔗 已选连锁' : '🔗 选为连锁') + '</button>' : '') +
       (has ? '<button class="reroll-btn" data-sact="on" data-sid="' + id + '" style="font-size:13px;padding:4px 10px;">' + (on ? '✅ 闪光外观' : '⚪ 普通外观') + '</button>'
            : '<button class="reroll-btn" data-sact="on" data-sid="' + id + '" disabled style="font-size:13px;padding:4px 10px;opacity:.45;">🔒 未收录</button>') +
       '</span></div>';
@@ -15103,6 +15160,20 @@ $('btn-shiny-close').addEventListener('click', () => $('sc-shiny').classList.rem
 $('shiny-body').addEventListener('click', (ev) => {
   const b = ev.target && ev.target.closest ? ev.target.closest('button[data-sact]') : null;
   if (!b || b.disabled) return;
+  if (b.getAttribute('data-sact') === 'chain') {   // 🔗 选为连锁目标
+    if (!chainReady()) return;
+    chainPickSet(b.getAttribute('data-sid'));
+    sfx.pick();
+    renderShinyDex();
+    return;
+  }
+  if (b.getAttribute('data-sact') === 'chain') {   // 🔗 选为连锁目标
+    if (!chainReady()) return;
+    chainPickSet(b.getAttribute('data-sid'));
+    sfx.pick();
+    renderShinyDex();
+    return;
+  }
   if (b.getAttribute('data-sact') === 'on') {
     shinyToggle(b.getAttribute('data-sid'));
     sfx.pick();
@@ -18130,6 +18201,7 @@ function loadGame() {
    重置 / 开局
    ============================================================ */
 function resetRun() {
+  p.chainRun = 0; p.chainId = '';   // ✨ 刷闪连锁只作用于一局
   /* 🌟 幻之助战：**每一局都要重新选**（上一局选了谁不能带进新的一局 —— 用户报过
      「回到主页再进试验场 / 放弃进度重开一局，第一次拿到幻之助战时面板不弹、被自动定了基拉祈」） */
   p.starPick = undefined; p.starPend = 0; p.starShow = 0;
@@ -18268,6 +18340,7 @@ function showOver() {
   state = 'over';
   hideAllPanels();
   $('sc-over').classList.add('show');
+  if ($('btn-over-home') && $('btn-over-home').style) $('btn-over-home').style.display = '';   // 🏠 回主页按钮
   const carry = metaBankRun();
   $('ov-stats').innerHTML =
     '击破 <b>' + kills + '</b> 人&nbsp;&nbsp;得分 <b>' + score + '</b>' +
@@ -18279,6 +18352,7 @@ function showOver() {
     '<br>质变被动：' + mutSummary();
 }
 function victory() {
+  chainGrant();   // ✨ 通关 → 下一局开始前能在闪光图鉴里选一只做连锁
   choosing = false;
   mutPending = 0;
   hideAllPanels();
@@ -19104,6 +19178,21 @@ function syncLabBar(force) {
 }
 /* 出征确认面板：列出存档进度 + 放弃后的结算 */
 let startConfirm = false;
+/* ✨ 刷闪连锁的出征确认（复用 #sc-confirm · 按钮处理里看 chainConfirm 分支） */
+let chainConfirm = false;
+function openChainConfirm() {
+  chainConfirm = true;
+  const body = $('confirm-body');
+  const pid = chainPickId();
+  const nm = SHINY_SPECIES_NAME[pid] || pid;
+  if (body) {
+    body.innerHTML = '<div class="cdx-sec">✨ 刷闪连锁</div>' +
+      '<div class="cdx-item"><span class="ic">🔗</span><b>本次游戏将会消耗你的连锁机会，确定要开始冒险吗？</b>' +
+      '<small>连锁目标：<b style="color:#ffe08a;">' + (nm || '（未选择）') + '</b> —— 这一局「刷闪！」来访的宝可梦只会是它</small></div>' +
+      '<div class="cdx-item"><span class="ic">🧢</span><b>消耗条件</b><small>只有选「训练家」才会消耗；选其它职业 / 分支不会消耗连锁机会</small></div>';
+  }
+  $('sc-confirm').classList.add('show');
+}
 function openStartConfirm() {
   const s = saveWaveInfo();
   if (!s) { doStartGame(0); return; }
@@ -19134,9 +19223,27 @@ function bankAbandonedSave() {
   return gain;
 }
 const confirmCancel = $('btn-confirm-cancel');
-if (confirmCancel) confirmCancel.addEventListener('click', () => { startConfirm = false; $('sc-confirm').classList.remove('show'); });
+  if (confirmCancel) confirmCancel.addEventListener('click', () => {
+    if (chainConfirm) {   // ✨ 取消 → 不消耗、不开局，回到武器选择
+      chainConfirm = false;
+      $('sc-confirm').classList.remove('show');
+      p.weaponPend = 1; openWeaponUp();
+      return;
+    }
+    startConfirm = false; $('sc-confirm').classList.remove('show');
+  });
 const confirmOk = $('btn-confirm-ok');
-if (confirmOk) confirmOk.addEventListener('click', () => { const gain = bankAbandonedSave(); doStartGame(gain); });
+  if (confirmOk) confirmOk.addEventListener('click', () => {
+    if (chainConfirm) {   // ✨ 刷闪连锁：确定 → 消耗机会，本局「刷闪！」只来访选中的那只
+      chainConfirm = false;
+      $('sc-confirm').classList.remove('show');
+      p.chainRun = 1; p.chainId = chainPickId();
+      if (meta.chain) { meta.chain = 0; metaSave(); }
+      doStartGame(0);
+      return;
+    }
+    const gain = bankAbandonedSave(); doStartGame(gain);
+  });
 
 $('btn-start').addEventListener('click', startGame);
 /* 🧪 Boss 试验场入口 + 状态条按钮 */
@@ -28829,7 +28936,7 @@ window.__musouTrainerInfo = () => {
     petSectorTicks: dbgPetSectorTicks, petSectorHits: dbgPetSectorHits, petSectorCharms: dbgPetSectorCharms,
     petMoons: dbgPetMoons,
   petWaves: dbgPetWaves,
-  petBlitz: dbgPetBlitz, petBoltsLive: petBolts.length, zeraLv: zeraoraLv(), zeraArt: artGot(ZERA_ART) ? 1 : 0, petMoonBooms: dbgPetMoonBooms, petMoonsLive: petMoons.length, slams: dbgPetSlam,   // 🐾 近战命中次数（抓击/藤鞭/砸地）· 🚀 跳砸/猛冲落地次数
+  petBlitz: dbgPetBlitz, petBoltsLive: petBolts.length, chain: chainReady(), chainPick: chainPickId(), chainRun: p.chainRun ? 1 : 0, zeraLv: zeraoraLv(), zeraArt: artGot(ZERA_ART) ? 1 : 0, petMoonBooms: dbgPetMoonBooms, petMoonsLive: petMoons.length, slams: dbgPetSlam,   // 🐾 近战命中次数（抓击/藤鞭/砸地）· 🚀 跳砸/猛冲落地次数
     jetTicks: dbgJetTicks, auraTicks: dbgPetAura,
       petMoons: dbgPetMoons, petMoonBooms: dbgPetMoonBooms, petMoonsLive: petMoons.length, dashes: dbgPetDash,   // 💧 光束结算节拍 · 🌡️ 环绕结算次数 · ☄️ 猛冲次数
     beams: dbgPetBeams,   // ☀️ 日光束发射次数（一发光炮）
