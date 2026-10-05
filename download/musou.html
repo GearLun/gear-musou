@@ -15119,6 +15119,22 @@ window.__musouShinyInfo = () => ({
   got: SHINY_SPECIES.filter(shinyGot), on: Object.assign({}, meta && meta.shinyOn || {}),
   cap: SHINY_HP_MUL
 });
+/* 🥚 彩蛋（用户要求）：闪光图鉴里按「小火龙 → 伊布 → 基拉祈 → 烈空坐」的顺序点**头像**
+   → 立刻 +1 次「刷闪连锁」机会。点错顺序就从第一个重新数（点小火龙算重新开始）。 */
+const CHAIN_EGG = ['charm', 'eevee', 'jirachi', 'rayquaza'];
+let chainEggI = 0, chainEggFlash = 0;
+function chainEggClick(id) {
+  if (id !== CHAIN_EGG[chainEggI]) { chainEggI = (id === CHAIN_EGG[0]) ? 1 : 0; return false; }
+  chainEggI++;
+  if (chainEggI < CHAIN_EGG.length) { if (sfx && sfx.pick) sfx.pick(); return false; }
+  chainEggI = 0;
+  chainGrant();                 // ✨ 立刻给一次连锁机会（就算已经有也不叠加）
+  chainEggFlash = 1;
+  metaSave();
+  if (sfx && sfx.musou) sfx.musou(); else if (sfx && sfx.pick) sfx.pick();
+  renderShinyDex();
+  return true;
+}
 function renderShinyDex() {
   const box = $('shiny-body');
   if (!box) return;
@@ -15131,6 +15147,7 @@ function renderShinyDex() {
   } else {
     h += '<div class="cdx-sec">🔗 刷闪连锁 <small style="color:#a9c39a;margin-left:8px;">通关一局（无尽 = 第 30 关）即可获得一次</small></div>';
   }
+  if (chainEggFlash > 0) { chainEggFlash = 0; h += '<div class="cdx-sec">🎉 <b style="color:#ffe08a;">彩蛋触发：刷闪连锁机会 +1！</b></div>'; }
   h += '<div class="cdx-sec">✨ 已收录 <b style="color:#ffe08a;">' + got + '</b> / ' + SHINY_SPECIES.length + ' 只闪光宝可梦' +
     '<small style="color:#a9c39a;font-weight:400;margin-left:8px;">训练家质变「✨ 刷闪！」每波清剿后会有宝可梦来访 · 遇到闪光即永久收录</small></div>';
   if (!got) h += '<div class="cdx-item"><span class="ic">✨</span><b>还没有遇到任何闪光</b><small>选「训练家」开局并拿到质变「✨ 刷闪！」，每波清剿后留意来访的那只宝可梦</small></div>';
@@ -15139,7 +15156,8 @@ function renderShinyDex() {
     const vN = chainVisitN(id);
     const vPct = Math.round(vN / CHAIN_GUARD * 100);
     const picked = (chainSel === id);
-    h += '<div class="cdx-item"><span class="ic"><img class="pets-ic" src="' + PET_HEAD[petFormKey(id)] + '" alt="" style="' + (has ? '' : 'filter:grayscale(1) brightness(.6);') + '"></span>' +
+    const eggAble = CHAIN_EGG.indexOf(id) >= 0;
+    h += '<div class="cdx-item"><span class="ic"><img class="pets-ic"' + (eggAble ? ' data-egg="' + id + '"' : '') + ' src="' + PET_HEAD[petFormKey(id)] + '" alt="" style="' + (eggAble ? 'cursor:pointer;' : '') + (has ? '' : 'filter:grayscale(1) brightness(.6);') + '"></span>' +
       '<b style="color:' + (has ? '#ffe08a' : '#8d8a77') + '">' + SHINY_SPECIES_NAME[id] + '</b>' +
       '<small>' + (has ? '✅ 已收录闪光' : '<span style="color:#8d8a77;">未遇到闪光</span>') +
         '<br>🛡️ 保底 <b style="color:#8fd8ff;">' + vN + '</b>/' + CHAIN_GUARD +
@@ -15158,6 +15176,8 @@ function openShinyDex() { metaLoad(); renderShinyDex(); $('sc-shiny').classList.
 $('btn-shiny-dex').addEventListener('click', openShinyDex);
 $('btn-shiny-close').addEventListener('click', () => $('sc-shiny').classList.remove('show'));
 $('shiny-body').addEventListener('click', (ev) => {
+  const im = ev.target && ev.target.closest ? ev.target.closest('img[data-egg]') : null;   // 🥚 先看头像彩蛋
+  if (im) { chainEggClick(im.getAttribute('data-egg')); return; }
   const b = ev.target && ev.target.closest ? ev.target.closest('button[data-sact]') : null;
   if (!b || b.disabled) return;
   if (b.getAttribute('data-sact') === 'chain') {   // 🔗 选为连锁目标
