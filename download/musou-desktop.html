@@ -5614,6 +5614,7 @@ const PRIMAL = {
   sunBurnT: 1.5, sunDmgMul: 1.1,                     // ☀️ 终结之地：保持烧伤 + 受伤 ×1.1
   deltaTick: 1.0, deltaPct: 0.20, deltaBossDiv: 40,  // 🌀 德尔塔气流：每秒 20%（Boss ÷40）
   deltaPush: 300,                                    // 强制位移速度（px/s）→ 每秒约 300px
+  deltaStreakStep: 2,                                // 🌀 德尔塔气流的**风痕密度**（2 = 每隔一条画一条 = 原特效数量的 1/2，用户 2026-10 要求）
   deltaVMax: 420,                                    // ⚠️ 风速叠加到 vx/vy 上的**上限**（防无限累加把敌人甩飞 / 画面卡死）
 };
 let primalWeather = '';              // 当前场景天气：'' / 'seasource' / 'desolateland' / 'deltastream'（渲染用）
@@ -6037,10 +6038,12 @@ function drawPrimalWeather() {
     ctx.fillRect(X, Y, VW, VH);
     ctx.lineWidth = 2.4;
     const seg = [[1300, 'rgba(220,255,230,0.50)', 30], [760, 'rgba(150,240,190,0.42)', 56]];
+    const dStep = Math.max(1, PRIMAL.deltaStreakStep | 0);   // 🌀 特效数量 = 原来的 1/dStep（用户要求减半 → 2）
     for (const g of seg) {
       ctx.strokeStyle = g[1];
       ctx.beginPath();
-      for (const q of primalWx) {
+      for (let qi = 0; qi < primalWx.length; qi += dStep) {
+        const q = primalWx[qi];
         const x = (q.x + t * g[0] * q.k) % VW;
         const y = (q.y + Math.sin(t * 2 + x * 0.01) * 12) % VH;
         ctx.moveTo(X + x, Y + y);
@@ -28959,7 +28962,7 @@ window.__musouPrimalInfo = () => {
     weather: primalWeather, ticks: dbgPrimalTicks, hit: dbgPrimalHit, pushed: dbgPrimalPushed, t1: +primalT1.toFixed(3),
     dmgMul: PRIMAL_DMG_MUL, sunMul: PRIMAL.sunDmgMul,
     seaTick: PRIMAL.seaTick, seaPct: PRIMAL.seaPct, seaBossDiv: PRIMAL.seaBossDiv,
-    deltaTick: PRIMAL.deltaTick, deltaPct: PRIMAL.deltaPct, deltaBossDiv: PRIMAL.deltaBossDiv, deltaPush: PRIMAL.deltaPush, deltaVMax: PRIMAL.deltaVMax,
+    deltaTick: PRIMAL.deltaTick, deltaPct: PRIMAL.deltaPct, deltaBossDiv: PRIMAL.deltaBossDiv, deltaPush: PRIMAL.deltaPush, deltaVMax: PRIMAL.deltaVMax, deltaStreakStep: PRIMAL.deltaStreakStep,
     balls: Object.assign({}, PRIMAL_ART_IMG), icon: primalArtIcon(), desc: primalArtDesc(),
     /* 卡片上印的那句（用户点名）—— 钩子单独给出来，冒烟好钉死「卡片文案 = 风味那句」 */
     card: ART_DEFS[PRIMAL_ART].desc,
