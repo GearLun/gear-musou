@@ -6536,19 +6536,19 @@ const PET_SKILL_SWIFT_STAR = {
 const PET_SKILL_DOOMWISH = {
   id: 'doomwish', name: '破灭之愿', icon: '🌠', kind: 'meteor', cd: 4.0, range: 900, fxEl: 'PSYCHIC',
   desc: '基拉祈 50 级解锁：原地蓄力 0.5 秒，再朝至多五个敌人的位置各砸下一颗愿望星 —— ' +
-    '落点半径 ' + Math.round(150 * 1.5) + '（与流星群一致）· 伤害为流星群的 70% · ' + petCdText(4.0),
+    '落点半径 ' + Math.round(150 * 1.5) + '（与流星群一致）· 伤害 宝可梦攻击力 ×6 · ' + petCdText(4.0),
   /* 数值口径（用户逐轮改过三次，别再手抄）：
      · 流星群 = `4.0 × 2.5`，落点半径 `150 × 1.5`
      · 破灭之愿原本再 ×1.5 → 上一轮按要求降为 2/3 → 本轮**范围降到与流星群一致**、**伤害再降 30%**
        → `r = 150 × 1.5`（同流星群）· `mul = 4.0 × 2.5 × 1.5 × 2/3 × 0.7 = 7` */
-  meteor: { charge: 0.5, n: 5, r: 150 * 1.5, mul: 4.0 * 2.5 * 1.5 * 2 / 3 * 0.7, fall: 0.5, moveSpd: 420, fxEl: 'PSYCHIC' }
+  meteor: { charge: 0.5, n: 5, r: 150 * 1.5, mul: 6, fall: 0.5, moveSpd: 420, fxEl: 'PSYCHIC' }   // ⭐ 伤害 = 宝可梦攻击力 ×6（用户 2026-10 口径）
 };
 /* 🌠✨ **破灭之愿☆**：奇物「千年之愿」带来的升级版（基拉祈已学会破灭之愿时自动生效）
-   —— 范围 +50%（150×1.5×1.5 = 337.5）· 伤害 +50%（7 × 1.5 = 10.5），其余（蓄力/颗数/特效）与破灭之愿相同 */
+   —— 范围 +50%（150×1.5×1.5 = 337.5）· **伤害 = 宝可梦攻击力 ×9**（用户 2026-10 口径），其余（蓄力/颗数/特效）与破灭之愿相同 */
 const PET_SKILL_DOOMWISH_STAR = {
   id: 'doomwish2', name: '破灭之愿☆', icon: '🌠', kind: 'meteor', cd: 4.0, range: 900, fxEl: 'PSYCHIC',
-  desc: '千年之愿强化：范围 +50% · 伤害 +50%（' + petCdText(4.0) + '）',
-  meteor: { charge: 0.5, n: 5, r: 150 * 1.5 * 1.5, mul: 4.0 * 2.5 * 1.5 * 2 / 3 * 0.7 * 1.5, fall: 0.5, moveSpd: 420, fxEl: 'PSYCHIC' }
+  desc: '千年之愿强化：范围 +50% · 伤害 宝可梦攻击力 ×9（' + petCdText(4.0) + '）',
+  meteor: { charge: 0.5, n: 5, r: 150 * 1.5 * 1.5, mul: 9, fall: 0.5, moveSpd: 420, fxEl: 'PSYCHIC' }
 };
 /* 🌸 谢米（#492 · 幻之宝可梦）：**目前只有占位技「飞叶快刀」**（用户说明：后续再补专属技能）——
    直接引用妙蛙种子那一份定义（飞叶快刀 = 一次 5 片追踪叶片 · 伤害与出手间隔同款）。
@@ -6562,27 +6562,27 @@ const PET_SKILL_DOOMWISH_STAR = {
    · 每一次都是**瞬移**到目标身边近战，路径上留下**闪电特效**（数组 petBolts），**技能一结束全部消失** */
 const PET_SKILL_PLASMAFIST = {
   id: 'plasmafist', name: '等离子闪电拳', icon: '⚡', kind: 'blitz', cd: 1, range: 900, fxEl: 'ELECTRIC',
-  desc: '瞬移连打：优先打法师 / 弓箭手，2 秒内按顺序最多打 12 个敌人（不足就继续打还活着的）· 每拳 宝可梦攻击力 ×3 · ' + petCdText(1),
-  blitz: { dur: 2, max: 12, mul: 3, gap: 0.1, r: 46, fxK: 4 / 3 }   // ⚡ 受击闪电特效 = 原来的 1/3（用户要求）· 次数 12
+  desc: '瞬移连打：优先打法师 / 弓箭手，2 秒内按顺序最多打 12 个敌人（不足就继续打还活着的）· 每拳 宝可梦攻击力 ×3.5 · ' + petCdText(1),
+  blitz: { dur: 2, max: 12, mul: 3.5, gap: 0.1, r: 46, fxK: 4 / 3 }   // ⚡ 伤害 ×3 → ×3.5（用户要求）   // ⚡ 受击闪电特效 = 原来的 1/3（用户要求）· 次数 12
 };
 
 /* ⚡ **等离子闪电拳☆**（奇物「风来城的闪光」带来的升级版）：
    攻击次数 **12 → 18** · 每次伤害 **×3 → ×4**（其余口径与本体一致） */
 const PET_SKILL_PLASMAFIST_STAR = {
   id: 'plasmafist2', name: '等离子闪电拳☆', icon: '⚡', kind: 'blitz', cd: 1, range: 900, fxEl: 'ELECTRIC',
-  desc: '等离子闪电拳强化（风来城的闪光）：瞬移连打最多 18 个敌人 · 每拳 宝可梦攻击力 ×4 · ' + petCdText(1),
-  blitz: { dur: 2, max: 18, mul: 4, gap: 0.1, r: 46, fxK: 4 / 3 }
+  desc: '等离子闪电拳强化（风来城的闪光）：瞬移连打最多 18 个敌人 · 每拳 宝可梦攻击力 ×5 · ' + petCdText(1),
+  blitz: { dur: 2, max: 18, mul: 5, gap: 0.1, r: 46, fxK: 4 / 3 }   // ⚡ ☆ 版 ×4 → ×5
 };
 
 const PET_SKILL_SEEDFLARE = {
   id: 'seedflare', name: '种子闪光', icon: '🌿', kind: 'seed', cd: 1, range: 900, fxEl: 'GRASS',
   desc: '正前方 60° 扇形内**随机**陆续甩出 5 道刀波（一道道飞出去）· 每道 谢米攻击力 ×4 · ' + petCdText(1),
-  seed: { n: 5, arc: Math.PI / 3, gap: 0.09, mul: 4, spd: 640, r: 36, fxK: 3 }
+  seed: { n: 5, arc: Math.PI / 3, gap: 0.09, mul: 4, spd: 640 * 1.5, r: 36, fxK: 3 }   // 🌿 刀波速度 ×1.5（用户要求）
 };
 const PET_SKILL_SEEDFLARE_STAR = {
   id: 'seedflare2', name: '种子闪光☆', icon: '🍀', kind: 'seed', cd: 1, range: 900, fxEl: 'GRASS',
   desc: '种子闪光强化（天空谢米）：60° 扇形内随机陆续甩出 8 道刀波 · 每道 谢米攻击力 ×6 · ' + petCdText(1),
-  seed: { n: 8, arc: Math.PI / 3, gap: 0.07, mul: 6, spd: 640, r: 36, fxK: 3 }
+  seed: { n: 8, arc: Math.PI / 3, gap: 0.07, mul: 6, spd: 640 * 1.5, r: 36, fxK: 3 }   // 🌿 同上（天空谢米）
 };
 /* 常驻两招：**能量球☆**（直接引用妙蛙花那一份）+ **帮助☆**（直接引用波克比那一份） */
 const PET_SKILL_ENERGYBALL_STAR_REF = PET_SKILLS_BULBA_2.filter(x => x.id === 'energyballstar')[0] || PET_SKILLS_BULBA_2[0];   // 能量球☆（妙蛙花那一份）
@@ -7087,6 +7087,18 @@ function petEvoSucc(id, sid) {
   return d ? d.id : sid;
 }
 /* 这只宝可梦**当前选用**的技能（没选过 / 存档里的 id 不认识 → 默认技） */
+/* 🎛️ 面板高亮用：**列表里当前真正生效的那一项** id。
+   ⚠️ 「奇物 / 形态带来的升级版」（基拉祈的破灭之愿☆ 等）并不在技能表里，
+   直接用 petSkillOf().id 去比会永远比不中 → 按钮没有高亮（用户报过的 bug）。
+   这里退回「`evo` 指向它的那一项」，即玩家看到的那张牌。 */
+function petSkillSelId(id) {
+  const list = petSkillList(id);
+  const cur = petSkillOf(id);
+  if (!cur) return '';
+  for (const s of list) if (s.id === cur.id) return cur.id;
+  for (const s of list) if (s.evo === cur.id) return s.id;   // 被升级版取代的那一项
+  return cur.id;
+}
 function petSkillOf(id) {
   const list = petSkillList(id);
   let want = petEvoSucc(id, (p.petSkill || {})[id] || PET_SKILL_DEF[id]);
@@ -7111,14 +7123,18 @@ let dbgShinyGuard = 0;   // 🛡️ 触发「100 次保底」的次数
 function blitzPick(u) {
   const alive = enemies.filter(e => !e.dead);
   if (!alive.length) return null;
-  const ranged = alive.filter(e => e.type === 'mage' || e.type === 'archer');
+  /* ⚡ 跳过**打不到**的目标（战将腾空 / 光明掠夺者隐身 / 假人 invT…）：以前会白费一次出拳（玩家说的丢伤害）。
+     ⚠️ 但如果敌人**全都**处于无敌（例如 Boss 演出帧），就照常打 —— 否则技能会卡在不出手。 */
+  const hittable = alive.filter(e => !enemyInvuln(e));
+  const pool = hittable.length ? hittable : alive;
+  const ranged = pool.filter(e => e.type === 'mage' || e.type === 'archer');
   const seen = u.blitzSeen || (u.blitzSeen = new Set());
   const freshR = ranged.filter(e => !seen.has(e));
   if (freshR.length) return blitzNearest(u, freshR);
-  const freshAll = alive.filter(e => !seen.has(e));
+  const freshAll = pool.filter(e => !seen.has(e));
   if (freshAll.length) return blitzNearest(u, freshAll);
   seen.clear();                                  // 一轮打完 → 重新循环（「继续攻击还存活的敌人」）
-  return blitzNearest(u, ranged.length ? ranged : alive);
+  return blitzNearest(u, ranged.length ? ranged : pool);
 }
 function blitzNearest(u, arr) {
   let best = arr[0], bd = 1e9;
@@ -7165,7 +7181,7 @@ let dbgPetWaves = 0;
 function spawnPetWave(u, SK, ang) {
   const S = SK.seed;
   petWaves.push({ id: u.petId, x: u.x + Math.cos(ang) * 24, y: u.y - 8 + Math.sin(ang) * 24, ang,
-    spd: S.spd, r: S.r || 34, mul: S.mul, el: SK.fxEl || petFormElement(u), life: 1.2, hits: new Set() });
+    spd: S.spd, r: S.r || 34, mul: S.mul, el: SK.fxEl || petFormElement(u), life: 1.2 * 1.5, hits: new Set() });   // 🌿 距离 ×1.5 = life ×1.5（速度也 ×1.5，够飞的更远）
   fxPush(SK.fxEl || petFormElement(u), 'hit', u.x + Math.cos(ang) * 26, u.y - 8 + Math.sin(ang) * 26, (S.fxK || 3) * 0.6, ang);
   dbgPetWaves++;
 }
@@ -7180,7 +7196,7 @@ function updatePetWaves(dt) {
       const dx = e.x - w.x, dy = e.y - w.y, dd = Math.hypot(dx, dy) || 1;
       if (dd > w.r + e.r) continue;
       w.hits.add(e);                    // ⚠️ 同一道刀波对同一只敌人**只结算一次**（穿透靠这个去重）
-      hitEnemy(e, dx / dd, dy / dd, 120, petHitDmg(w.id, w.mul));
+      hitEnemy(e, dx / dd, dy / dd, 120, petHitDmg(w.id, w.mul, null));
       fxPush(w.el, 'hit', w.x, w.y, 2.5, w.ang);
       /* 🌿 **无限穿透**：不 break、不消散，继续往前飞，把后面的敌人也割一遍（用户点名） */
     }
@@ -7350,16 +7366,29 @@ function petMiracleSave(u) {
    唯一出口是 `petDmgScale(id)`：① `petHitDmg()`（乘倍率那一类的全走它）
    ② 固定伤害/身周伤害（龙息 12 · 龙卷风 5/15 · 热风 234 · 冲浪 468）在**结算处**各乘一次。
    ⚠️ 别再往技能表里手改数字（那样面板文案、冒烟的比例断言全要跟着改）；要调口径只动这两个常量 */
-const PET_DMG_SCALE = 0.5;          // 非御三家：×0.5
-const PET_STARTER_DMG_SCALE = 0.7;  // 御三家（妙蛙种子 / 小火龙 / 杰尼龟三条线）：×0.7
-function petDmgScale(id) { return PET_STARTERS.indexOf(id) >= 0 ? PET_STARTER_DMG_SCALE : PET_DMG_SCALE; }
+/* ⚖️ **降伤口径**（用户 2026-10：取消「全局系数」的写法，改由**技能自己**取口径）：
+   非御三家 ×0.5 · 御三家三条线 ×0.7 —— **数值与旧口径完全一致**，只是不再藏在全局里。
+   想单独调某一招：在它的 payload 里加 `dmgScale: 0.8`（例如 `melee: { …, dmgScale: 0.8 }`），
+   结算时优先用它，见 petDmgScaleOf()。 */
+const PET_SKILL_DMG_SCALE = { starter: 0.7, other: 0.5 };
+function petDmgScale(id) { return PET_STARTERS.indexOf(id) >= 0 ? PET_SKILL_DMG_SCALE.starter : PET_SKILL_DMG_SCALE.other; }
+/* 这一招实际用的系数：技能自带 dmgScale 优先（A/B/M 任一载荷上都认） */
+function petDmgScaleOf(id, sk) {
+  if (sk) {
+    for (const k of ['dmgScale', 'atk', 'shot', 'melee', 'dash', 'strike', 'slam', 'aura', 'beam', 'meteor', 'thunder', 'moons', 'seed', 'blitz', 'sector', 'jet', 'slash', 'tornado', 'spin']) {
+      const v = k === 'dmgScale' ? sk.dmgScale : (sk[k] && sk[k].dmgScale);
+      if (typeof v === 'number' && v > 0) return v;
+    }
+  }
+  return petDmgScale(id);
+}
 /* 🧢 **训练家之魂**（训练家专属质变，用户要求：「提高所有宝可梦造成的伤害，满级时增加 50%」）：
    +10%/层（满 5 层 = ×1.5）。⚠️ 与 ⚖️ 降伤口径**分开算** —— `petDmgScale` 是固定的口径常量，
    质变这种「本局成长」不能塞进去（面板读数、冒烟的比例断言都按它算）。
    生效点**五处**：`petHitDmg / petHitDmgBase` ＋ 三处固定/身周伤害（龙卷风 flat · 光束 flat · 身周 aura.dmg）。 */
 const PET_SOUL_PER = 0.10;
 function petSoulMul() { return 1 + PET_SOUL_PER * ((p.mut && p.mut.trainsoul) || 0); }
-function petHitDmg(id, mul) {
+function petHitDmg(id, mul, sk) {
   let m = mul;
   if (petShellOn(id)) m *= petShellDmg;      // 🥚 破壳：伤害 +50%
   if (petHelpCharge[id]) {                   // 🤝 波克比·帮助：这一只的**下一次**攻击 +50%（用掉就没了）
@@ -7367,10 +7396,10 @@ function petHitDmg(id, mul) {
     delete petHelpCharge[id];
     dbgPetHelpUsed++;
   }
-  return Math.max(1, Math.round(petSummonDmg(id) * m * petDmgScale(id) * petSoulMul() * petPrimalMul(id)));
+  return Math.max(1, Math.round(petSummonDmg(id) * m * petDmgScaleOf(id, sk) * petSoulMul() * petPrimalMul(id)));
 }
 /* 纯函数版（**不消耗帮助蓄力 / 不看破壳状态**）：只给读数与测试钩子用 —— 实际结算一律走 petHitDmg */
-function petHitDmgBase(id, mul) { return Math.max(1, Math.round(petSummonDmg(id) * mul * petDmgScale(id) * petSoulMul() * petPrimalMul(id))); }
+function petHitDmgBase(id, mul, sk) { return Math.max(1, Math.round(petSummonDmg(id) * mul * petDmgScaleOf(id, sk) * petSoulMul() * petPrimalMul(id))); }
 /* 🤝 波克比「帮助」：给**全部宝可梦**挂上「下次攻击 +50%」的蓄力（每只各一次，用掉即消耗）
    —— 用 map 存倍率，键 = 物种 id；换局 / 换人（resetRun）由 petHelpClear() 清干净 */
 let petHelpCharge = {};
@@ -7950,7 +7979,7 @@ function petMeteorCast(u, sk) {
     if (have.has(e)) continue;
     have.add(e);
     petMeteors.push({ x: e.x, y: e.y, t: M.fall, life: M.fall, r: M.r,
-      dmg: petHitDmg(u.petId, M.mul), el: petFormElement(u), owner: u.petId,
+      dmg: petHitDmg(u.petId, M.mul, sk), el: petFormElement(u), owner: u.petId,
       /* 🗡 断崖之剑（固拉多）：同样是「蓄力 → 落点范围伤害」，但**画面是地刺从地面长出来**（`spike`），
          不是陨石砸下来 —— 绘制与粒子都在 updatePetMeteors / drawPetMeteors 里按这个标记分叉 */
       spike: M.spike ? 1 : 0,
@@ -8472,7 +8501,7 @@ function updatePetAlly(u, dt) {
       for (const [e] of hits) {
         if (!nowTick && prev.has(e)) continue;
         /* ⚖️ 固定伤害（龙息 12）也吃宝可梦降伤口径；走倍率的那些本来就过 petHitDmg */
-        const hd = J.flat ? Math.max(1, Math.round(J.flat * petDmgScale(u.petId) * petSoulMul())) : petHitDmg(u.petId, J.mul);
+        const hd = J.flat ? Math.max(1, Math.round(J.flat * petDmgScale(u.petId) * petSoulMul())) : petHitDmg(u.petId, J.mul, SK);
         hitEnemy(e, Math.cos(u.petAng), Math.sin(u.petAng), 90, hd);
         if (J.slowK !== undefined) { e.slowK = J.slowK; e.slowT = Math.max(e.slowT || 0, J.slowT || 1); }
         dbgPetWaterHits++;
@@ -8559,7 +8588,7 @@ function updatePetAlly(u, dt) {
       for (const e of inside) {
         if (!nowTick && prev.has(e)) continue;           // 只对「整拍」或「刚进扇形」的敌人结算
         const dx = e.x - u.x, dy = e.y - u.y, dd = Math.hypot(dx, dy) || 1;
-        const hd = petHitDmg(u.petId, S.mul);
+        const hd = petHitDmg(u.petId, S.mul, SK);
         /* 💗 **被魅惑之声击败 → 5% 夺舍**：这一击本来就够致命、掷中 5%、且目标不是 Boss 时，
            直接把它变成友军（`charmConvert` 与牌皇夺舍牌**共用同一份结果**）——伤害就不结算了。 */
         if (e.hp - hd <= 0 && Math.random() < S.charm && sylveonCharmOk(e)) {
@@ -8607,27 +8636,28 @@ function updatePetAlly(u, dt) {
     if (u.blitzT > 0) {
       u.blitzT -= dt;
       petAnim(u, 'atk'); petTickFrame(u, dt, true);
-      if (u.blitzT <= 0) {                    // ⚡ 技能结束 → 路径上的闪电特效**全部消失**
+      u.blitzGap -= dt;
+      /* ⚡ 补拍：`blitzGap` **累加**而不是重置，掉帧时把上一帧欠下的拍数补上（每帧最多 4 拍）。
+         以前写 `u.blitzGap = B.gap` + `if` → 卡顿那一帧的余量直接丢掉，帧率一低就打不满 12 次（玩家反馈的丢伤害）。 */
+      let blitzGuard = 0;
+      while (u.blitzGap <= 0 && u.blitzN < B.max && u.blitzT > 0 && blitzGuard++ < 4) {
+        const tg = blitzPick(u);
+        if (!tg) { u.blitzGap = Math.max(u.blitzGap, 0); break; }   // 场上没人 → 等下一帧，不空转
+        u.blitzN++;
+        u.blitzGap += B.gap;                                        // ⚠️ 累加，不丢余量
+        const ox = u.x, oy = u.y;
+        const ang = Math.atan2(tg.y - oy, tg.x - ox);
+        u.x = tg.x - Math.cos(ang) * (B.r * 0.55);   // 瞬移到它身边
+        u.y = tg.y - Math.sin(ang) * (B.r * 0.55);
+        u.petAng = ang; u.petDir = petDir(ang);
+        petBoltPush(u.petId, ox, oy, u.x, u.y);      // 路径闪电
+        dbgPetBlitz++;
+        hitEnemy(tg, Math.cos(ang), Math.sin(ang), 200, petHitDmg(u.petId, B.mul, SK));
+        fxPush(SK.fxEl || petFormElement(u), 'melee', u.x + Math.cos(ang) * 18, u.y - 6 + Math.sin(ang) * 18, B.fxK || 4, ang);
+      }
+      if (u.blitzT <= 0) {                    // ⚡ 技能结束（放在出手之后：最后一拍不再被吞）→ 路径闪电全部消失
         petBoltsClear(u.petId);
         petAnim(u, moving ? 'walk' : 'idle');
-        return;
-      }
-      u.blitzGap -= dt;
-      if (u.blitzGap <= 0 && u.blitzN < B.max) {
-        const tg = blitzPick(u);
-        u.blitzGap = B.gap;
-        if (tg) {
-          u.blitzN++;
-          const ox = u.x, oy = u.y;
-          const ang = Math.atan2(tg.y - oy, tg.x - ox);
-          u.x = tg.x - Math.cos(ang) * (B.r * 0.55);   // 瞬移到它身边
-          u.y = tg.y - Math.sin(ang) * (B.r * 0.55);
-          u.petAng = ang; u.petDir = petDir(ang);
-          petBoltPush(u.petId, ox, oy, u.x, u.y);      // 路径闪电
-          dbgPetBlitz++;
-          hitEnemy(tg, Math.cos(ang), Math.sin(ang), 200, petHitDmg(u.petId, B.mul));
-          fxPush(SK.fxEl || petFormElement(u), 'melee', u.x + Math.cos(ang) * 18, u.y - 6 + Math.sin(ang) * 18, B.fxK || 4, ang);
-        }
       }
       return;
     }
@@ -8681,7 +8711,7 @@ function updatePetAlly(u, dt) {
     u.auraPrev = inside;
     const auraHit = (e) => {
       const dx = e.x - u.x, dy = e.y - u.y, dd = Math.hypot(dx, dy) || 1;
-      hitEnemy(e, dx / dd, dy / dd, 90, A.mul !== undefined ? petHitDmg(u.petId, A.mul)   // 🦈 重踏/地震：走「X× 宝可梦攻击力」的倍率口径
+      hitEnemy(e, dx / dd, dy / dd, 90, A.mul !== undefined ? petHitDmg(u.petId, A.mul, SK)   // 🦈 重踏/地震：走「X× 宝可梦攻击力」的倍率口径
         : Math.max(1, Math.round(A.dmg * petDmgScale(u.petId) * petSoulMul())));   // ⚖️ 身周伤害也吃降伤口径（+ 🧢 训练家之魂）
       /* 🔥 附带灼烧 —— 🌋 地震⭐（固拉多）标了 `A.noBurn`：**只掉血不点火**（用户要求「不会烧伤」） */
       if (!A.noBurn) {
@@ -8753,7 +8783,7 @@ function petMeleeSwing(u, sk) {
      技能表里写什么 fxEl 都不生效（主人原话：「你用的还是地面系的特效改色，我要的是强力鞭打的草系特效改色」）。
      现在与身周技 / 光束技同口径：技能写了 `fxEl` 就用它，没写才退回宝可梦自己的属性。 */
   const M = sk.melee, el = sk.fxEl || petFormElement(u), a = u.petAng;
-  const dmg = petHitDmg(u.petId, M.mul);
+  const dmg = petHitDmg(u.petId, M.mul, sk);
   let n = 0;
   for (const e of enemies) {
     if (e.dead) continue;
@@ -8838,7 +8868,7 @@ function updatePetSlam(u, dt, sk, foe, moving) {
 }
 function petSlamLand(u, sk) {
   const S = sk.slam, el = petFormElement(u);
-  const dmg = petHitDmg(u.petId, S.mul);
+  const dmg = petHitDmg(u.petId, S.mul, null);
   u.slamX = u.x; u.slamY = u.y;   // 落点 = **实际落地的位置**（骑乘时训练家驮着一起跳，落点跟着他走）
   u.slamP = 'land'; u.slamT = S.land; u.jumpZ = 0;
   let n = 0;
@@ -8908,7 +8938,7 @@ function updatePetDash(u, dt, sk, foe, moving) {
     /* ☄️ `path:1`（蓄能焰袭）：**沿途撞到的敌人各吃一次**（每只整段冲刺只吃一次，见 u.dashHit） */
     if (D.path) {
       if (!u.dashHit) u.dashHit = new Set();
-      const pd = petHitDmg(u.petId, D.mul);
+      const pd = petHitDmg(u.petId, D.mul, null);
       for (const e of enemies) {
         if (e.dead || u.dashHit.has(e)) continue;
         const dx = e.x - u.x, dy = e.y - u.y, dd = Math.hypot(dx, dy) || 1;
@@ -8952,7 +8982,7 @@ function updatePetDash(u, dt, sk, foe, moving) {
     petAnim(u, 'jump'); petTickFrame(u, dt, true);
     if (u.dashT <= 0) {
       u.jumpZ = 0;
-      const sd = petHitDmg(u.petId, S.mul);
+      const sd = petHitDmg(u.petId, S.mul, null);
       let n = 0;
       for (const e of enemies) {
         if (e.dead) continue;
@@ -9083,7 +9113,7 @@ const PET_SLASH_FX_OD = 0.55;      // 落点：扇形半径的 55%（视觉正�
 const PET_SLASH_TINT = '#ff7a24';   // 橙红（火焰色）
 function petSlashSwing(u, sk) {
   const S = sk.slash, el = sk.fxEl || petFormElement(u);
-  const dmg = petHitDmg(u.petId, S.mul);
+  const dmg = petHitDmg(u.petId, S.mul, null);
   const a = u.petAng;
   let n = 0;
   for (const e of enemies) {
@@ -9198,7 +9228,7 @@ function updatePetStrike(u, dt, sk, foe, moving) {
       u.strikeP = S.returnHome ? 'back' : '';
       u.strikeT = 0;
       u.petDir = petDir(Math.atan2(tgt.y - u.y, tgt.x - u.x));
-      const sHit = petHitDmg(u.petId, S.mul);
+      const sHit = petHitDmg(u.petId, S.mul, null);
       hitEnemy(tgt, (tgt.x - u.x) / d, (tgt.y - u.y) / d, 420, sHit);
       rings.push({ x: tgt.x, y: tgt.y, r: 10, vr: 620, life: 0.26, max: 0.26, color: '#ffe9a8', width: 4 });
       burst(tgt.x, tgt.y, 10, '#ffe9a8', 320);
@@ -9277,7 +9307,7 @@ function updatePetTornadoSkill(u, dt, sk, foe, moving) {
 const DASH_FX_R_BASE = 315;
 function petDashLand(u, sk) {
   const D = sk.dash, el = petFormElement(u);
-  const dmg = petHitDmg(u.petId, D.mul);
+  const dmg = petHitDmg(u.petId, D.mul, null);
   const fk = (D.fxK || 6) * (D.r / DASH_FX_R_BASE);   // 特效随判定半径等比放大
   u.dashP = 'land'; u.dashT = 0.24; u.jumpZ = 0;
   let n = 0;
@@ -9560,7 +9590,7 @@ function petFireBeam(u, sk) {
   const B = sk.beam, el = sk.fxEl || petFormElement(u), PAL = petBeamPal(sk);
   /* 🌊 根源波动☆（原始盖欧卡）：**身体三处 → 同一个落点**的三道光柱（单独一条实现，见下） */
   if (B.tri) { petFireTriBeam(u, sk); return; }
-  const dmg = petHitDmg(u.petId, B.mul);
+  const dmg = petHitDmg(u.petId, B.mul, null);
   const mz = { x: u.x + Math.cos(u.petAng) * 16, y: u.y - 8 + Math.sin(u.petAng) * 16 };
   const hitSet = new Set();
   const segs = [];
@@ -9619,7 +9649,7 @@ function petFireBeam(u, sk) {
    钩子读数：`__musouPetBeams()` 里的 `segs` 会是 3 段，`__musouTrainerInfo().pools` 只 +1。 */
 function petFireTriBeam(u, sk) {
   const B = sk.beam, el = sk.fxEl || petFormElement(u), PAL = petBeamPal(sk);
-  const dmg = petHitDmg(u.petId, B.mul);
+  const dmg = petHitDmg(u.petId, B.mul, null);
   const WALL = 26;
   const dx = Math.cos(u.petAng), dy = Math.sin(u.petAng);
   const px = -dy, py = dx;
@@ -9733,7 +9763,7 @@ function updatePetSpin(u, dt, sk, foe, moving) {
       const dx = e.x - u.x, dy = e.y - u.y, dd = Math.hypot(dx, dy) || 1;
       if (dd > S.r + e.r) continue;
       u.spinHit.add(e);
-      hitEnemy(e, dx / dd, dy / dd, 260, petHitDmg(u.petId, S.mul));
+      hitEnemy(e, dx / dd, dy / dd, 260, petHitDmg(u.petId, S.mul, null));
       fxPush(petFormElement(u), 'hit', e.x, e.y, 2.4);
       burst(e.x, e.y, 8, PET_FX_TINT[petFormElement(u)], 300);
       dbgPetMelee++;
@@ -10969,9 +10999,10 @@ function buildPetPanel() {
       + (id === 'jirachi' ? '<span class="pets-dex">Lv' + jirachiLv() + '</span>' : '')   // ⭐ 基拉祈的等级只跟「星之助战」走
       + '<span class="pets-hp">' + (u ? (u.faintT > 0 ? '昏厥 ' + Math.ceil(u.faintT) + 's' : '生命 ' + Math.round(u.hp) + ' / ' + u.maxhp) : '待命')
       + (sk.range > 0 ? ' · 伤害 ' + petHitDmgBase(id, 1) + ' · 射程 ' + sk.range : ' · 辅助（不打人）') + '</span></div><div class="pets-skills">';
+    const selId = petSkillSelId(id);   // 🎛️ 当前生效的那一项（含「☆ 升级版」这类不在表里的情形）
     for (const s of petSkillList(id)) {
       /* ⚠️ 卡片里**只有技能名**（用户要求：面板里删掉所有技能介绍）—— 别再往按钮里塞 `s.desc` */
-      h += '<button class="pets-skill' + (s.id === sk.id ? ' on' : '') + '" data-petskill="' + id + ':' + s.id + '">'
+      h += '<button class="pets-skill' + (s.id === selId ? ' on' : '') + '" data-petskill="' + id + ':' + s.id + '">'
         + '<b>' + s.icon + ' ' + s.name + '</b></button>';
     }
     /* 🌟 原始回归的特性：**只显示、不可点**（没有 data-petskill → 点不动，符合「不可选为使用」） */
@@ -29004,7 +29035,8 @@ window.__musouTrainerInfo = () => {
     ridePet: (function () { const m = petMountE(); return m ? m.petId : ''; })(), rideHpMul: PET_RIDE_HP_MUL,
     petShots: dbgPetShots, booms: dbgPetBooms, waterHits: dbgPetWaterHits, levels: dbgPetLevels, faints: dbgPetFaints,
     meleeHits: dbgPetMelee,
-    petSectorTicks: dbgPetSectorTicks, petSectorHits: dbgPetSectorHits, petSectorCharms: dbgPetSectorCharms,
+    petSectorTicks: dbgPetSectorTicks,
+    petBlitz: dbgPetBlitz,   // ⚡ 等离子闪电拳的出拳次数（掉帧回归测试用） petSectorHits: dbgPetSectorHits, petSectorCharms: dbgPetSectorCharms,
     petMoons: dbgPetMoons,
   petWaves: dbgPetWaves,
   petBlitz: dbgPetBlitz, petBoltsLive: petBolts.length, chain: chainReady(), chainPick: chainPickId(), chainRun: p.chainRun ? 1 : 0, zeraLv: zeraoraLv(), zeraArt: artGot(ZERA_ART) ? 1 : 0, petMoonBooms: dbgPetMoonBooms, petMoonsLive: petMoons.length, slams: dbgPetSlam,   // 🐾 近战命中次数（抓击/藤鞭/砸地）· 🚀 跳砸/猛冲落地次数
