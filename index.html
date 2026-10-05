@@ -11337,7 +11337,7 @@ const SHINY_TEXT_LIFE = 1.8;     // 巨大飘字停留多久（秒）
    （用户后来点名「固拉多，盖欧卡，烈空坐，也会进入刷闪的名单中」——
     它们的 `PET_FR[形态][1]` 闪光条带本来就随生成器一起出好了，所以直接列进来即可）。
    ⚠️ 加物种必须同步 `SHINY_SPECIES_NAME`（面板/横幅按 id 取中文名），否则横幅会显示英文 id。 */
-const SHINY_SPECIES = ['bulba', 'charm', 'squirt', 'eevee', 'charcadet', 'dreepy', 'dratini', 'beldum', 'gible', 'shaymin', 'jirachi', 'toge', 'kyogre', 'groudon', 'rayquaza'];   // 🥊 铁哑铃 / 🦈 圆陆鲨（用户 2026-10 点名加进刷闪名单）
+const SHINY_SPECIES = ['bulba', 'charm', 'squirt', 'eevee', 'charcadet', 'dreepy', 'dratini', 'beldum', 'gible', 'shaymin', 'zeraora', 'jirachi', 'toge', 'kyogre', 'groudon', 'rayquaza'];   // 🥊 铁哑铃 / 🦈 圆陆鲨（用户 2026-10 点名加进刷闪名单）
 const SHINY_HP_MUL = 5;   // 🟢 闪光词条·绿身体：血量倍率（本轮由 2 倍提高到 5 倍）
 const CARD_ONLY_MUTS = ['deck', 'wild', 'possess', 'multishot'];   // 🃏 牌皇专属四件套（传统弓/士兵/其它职业都拿不到）
 /* 🃏 牌皇专属质变的数值（放在 MUTS 之前：MUTS 数组字面量里要引用这些 cap）
@@ -15071,7 +15071,7 @@ $('meta-body').addEventListener('click', (ev) => {
    遇到过的显示头像 + 「✅ 闪光外观 / ⚪ 普通外观」切换；没遇到过的显示 🔒 与获取提示。
    收录与启用都写进局外存档（`meta.shinyDex` / `meta.shinyOn`）→ **换局、读档都在**，只有删档才清。
    启用的效果：训练家出战时那一只（**含进化后的形态**，按物种 id 记）走 `PET_FR[形态][1]` 闪光贴图。 */
-const SHINY_SPECIES_NAME = { bulba: '妙蛙种子', charm: '小火龙', squirt: '杰尼龟', eevee: '伊布', charcadet: '炭小侍', dreepy: '多龙梅西亚', dratini: '迷你龙', beldum: '铁哑铃', gible: '圆陆鲨', shaymin: '谢米', jirachi: '基拉祈', toge: '波克比', kyogre: '盖欧卡', groudon: '固拉多', rayquaza: '烈空坐' };
+const SHINY_SPECIES_NAME = { bulba: '妙蛙种子', charm: '小火龙', squirt: '杰尼龟', eevee: '伊布', charcadet: '炭小侍', dreepy: '多龙梅西亚', dratini: '迷你龙', beldum: '铁哑铃', gible: '圆陆鲨', shaymin: '谢米', zeraora: '捷拉奥拉', jirachi: '基拉祈', toge: '波克比', kyogre: '盖欧卡', groudon: '固拉多', rayquaza: '烈空坐' };
 
 /* 🧪 测试钩子：刷闪名单与已收录的闪光（图鉴用同一份表） */
 window.__musouShinyInfo = () => ({
