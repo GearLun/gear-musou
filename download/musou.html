@@ -30021,18 +30021,23 @@ const PET_SKILL_TABLE = {
 function petFormNameOf(id) {
   try {
     const key = petFormKey(id);
-    const arr = PET_FORM_NAME[key];
+    const arr = (typeof PET_FORM_NAME !== 'undefined') ? PET_FORM_NAME[key] : null;
     if (arr && arr.length) { const st = petStageOf(id); return arr[Math.min(st, arr.length - 1)] || arr[0]; }
   } catch (e) {}
-  return (PET_SUMMON[id] && PET_SUMMON[id].name) || id;
+  try { return (PET_SUMMON[id] && PET_SUMMON[id].name) || id; } catch (e2) { return id; }
 }
 /* 查表：命中就返回用户写的最终倍率（null = 没写） */
 function petUserMul(id, sk) {
-  if (!sk || !sk.name) return null;
-  const t = PET_SKILL_TABLE[petFormNameOf(id)];
-  if (!t) return null;
-  const v = t[sk.name];
-  return (typeof v === "number" && v > 0) ? v : null;
+  /* ⚠️⚠️ 这里**绝对不能抛异常**：它在技能更新循环里被调用，
+     抛出去会打断整个技能流程（用户报过：基拉祈的破灭之愿连陨石动画都没了 ✗） */
+  try {
+    if (!sk || !sk.name) return null;
+    if (typeof PET_SKILL_TABLE === 'undefined' || !PET_SKILL_TABLE) return null;
+    const t = PET_SKILL_TABLE[petFormNameOf(id)];
+    if (!t) return null;
+    const v = t[sk.name];
+    return (typeof v === "number" && v > 0) ? v : null;
+  } catch (e) { return null; }
 }
 
 </script>
