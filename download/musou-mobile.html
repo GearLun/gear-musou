@@ -7481,7 +7481,13 @@ function starAidEnsure() {
       }
     }
   }
-  const pick = p.starPick === 'shaymin' ? 'shaymin' : 'jirachi';
+  /* ⚠️⚠️ 必须**三只一起认**：以前写的是 `starPick === 'shaymin' ? 'shaymin' : 'jirachi'`，
+     选了捷拉奥拉就落到 'jirachi' → 队伍里会多出一只基拉祈（用户报过两次的 bug）。 */
+  const pick = ['jirachi', 'shaymin', 'zeraora'].indexOf(p.starPick) >= 0 ? p.starPick : 'jirachi';
+  /* 幻之宝可梦**只能有一只**：另外两只从队伍与场上清掉（面板里也做了，这里是每帧的兜底） */
+  const isStarPet = x => ['jirachi', 'shaymin', 'zeraora'].indexOf(x) >= 0;
+  if (p.petOwned) p.petOwned = p.petOwned.filter(x => x === pick || !isStarPet(x));
+  allyUnits = allyUnits.filter(u => !(u.kind === 'pet' && u.petId !== pick && isStarPet(u.petId)));
   if (p.petOwned.indexOf(pick) < 0) petGrant(pick);
 }
 function starAidSync() {
@@ -27554,12 +27560,17 @@ window.__musouCapMut = (id) => { const d = MUTS.filter(m => m.id === id)[0]; if 
 /* 🧪 测试钩子：把「幻之助战」的二选一**重置成没选过**（并收回基拉祈/谢米），用来模拟「第一次拿到」 */
 window.__musouStarReset = () => {
   p.starPick = undefined; p.starPend = 0; p.starShow = 0;
+  if (choosing && curKind === 'star') { choosing = false; curKind = 'level'; curChoices = []; }   // 关掉已弹出的二选一面板（否则会被自动点掉）
   p.petOwned = petOwned().filter(x => x !== 'jirachi' && x !== 'shaymin');
   allyUnits = allyUnits.filter(u => u.kind !== 'pet' && u.kind !== 'shinypet');
   petSummonSync();
   return p.petOwned.slice();
 };
-window.__musouStarPick = (id) => { p.starPick = id; p.starPend = 0; starAidEnsure(); petSummonSync(); return p.starPick; };
+window.__musouStarPick = (id) => {
+  p.starPick = id; p.starPend = 0;
+  if (choosing && curKind === 'star') { choosing = false; curKind = 'level'; curChoices = []; }   // 关掉面板，免得被自动点掉
+  starAidEnsure(); petSummonSync(); return p.starPick;
+};
 /* 🧪 测试钩子：直接发一件奇物 */
 window.__musouArtGive = (id) => { if (!ART_DEFS[id]) return false; artGain(id); petSummonSync(); return artGot(id); };
 /* 🧪 测试钩子：读某只宝可梦当前形态 key / 中文名（天空谢米那条要用） */
