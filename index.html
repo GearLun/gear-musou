@@ -6391,7 +6391,7 @@ function isTrainer() { return isArcher() && p.weapon === 'trainer'; }
    `range` = 索敌距离；`cd` = 出手间隔。 */
 /* 🧬 每次进化：**生命上限 ×1.5 · 伤害 ×1.5**（两段进化叠成 ×2.25）—— 与技能自身的强化乘算
    （例：一段进化后「劈开」单跳 = 基础 1.5 × 技能 1.5 = 2.25 倍） */
-const PET_EVO_STAT_MUL = 1.5;
+const PET_EVO_STAT_MUL = 1.3;   // 🧬 进化加成 ×1.5 → ×1.3（用户 2026-10）
 function petEvoMul(st) { return Math.pow(PET_EVO_STAT_MUL, st === undefined ? petStage() : st); }
 /* 卡片上直接写上**实际出手间隔**（= 基础间隔 ÷ 攻击频率倍率），这样「频率 ×2」在面板里看得见、也不会随改数值变成假话 */
 function petCdText(cd, fixed) { return '每 ' + (+(cd / (fixed ? 1 : PET_ATK_RATE)).toFixed(2)) + ' 秒一次'; }
