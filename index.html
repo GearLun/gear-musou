@@ -7880,7 +7880,7 @@ function spawnPetTornado(u, ang, T) {
   petTornadoes.push({
     x: u.x + Math.cos(ang) * (T.dist || 150), y: u.y + Math.sin(ang) * (T.dist || 150),
     ang, t: T.life, life: T.life, r: T.r, tick: 0, period: T.tick,
-    dmg: petHitDmg(u.petId, T.mul !== undefined ? T.mul : 0, null),   // ⚖️ 固定伤害也吃降伤口径（+ 🧢 训练家之魂）
+    dmg: petHitDmg(u.petId, T.mul !== undefined ? T.mul : 0, (typeof SK !== 'undefined' && SK) ? SK : null),   // ⚖️ 固定伤害也吃降伤口径（+ 🧢 训练家之魂）
     spd: T.spd, spin: rnd(0, TAU), el: petFormElement(u)
   });
   dbgPetTornadoes++;
@@ -8734,7 +8734,7 @@ function updatePetAlly(u, dt) {
     const auraHit = (e) => {
       const dx = e.x - u.x, dy = e.y - u.y, dd = Math.hypot(dx, dy) || 1;
       hitEnemy(e, dx / dd, dy / dd, 90, A.mul !== undefined ? petHitDmg(u.petId, A.mul, SK)   // 🦈 重踏/地震：走「X× 宝可梦攻击力」的倍率口径
-        : petHitDmg(u.petId, A.mul !== undefined ? A.mul : 0, null));   // ⚖️ 身周伤害也吃降伤口径（+ 🧢 训练家之魂）
+        : petHitDmg(u.petId, A.mul !== undefined ? A.mul : 0, (typeof SK !== 'undefined' && SK) ? SK : null));   // ⚖️ 身周伤害也吃降伤口径（+ 🧢 训练家之魂）
       /* 🔥 附带灼烧 —— 🌋 地震⭐（固拉多）标了 `A.noBurn`：**只掉血不点火**（用户要求「不会烧伤」） */
       if (!A.noBurn) {
         if (e.burnT === undefined) { e.burnT = 0; e.burnI = 0; }
