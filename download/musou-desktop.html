@@ -6486,7 +6486,7 @@ const PET_SKILLS_SQUIRT_2 = [
     jet: { secs: 5, rest: 0, len: 300 * 1.35 * 1.35, w: 30, tick: 0.5, mul: 1.125 * 1.5 } },
   { id: 'surf', name: '冲浪', icon: '🌊', kind: 'aura', range: 125, spdMul: 2.0,
     desc: '身周掀起巨浪（半径 125 = 1 级熔岩结界的范围）：碰到就结算一次、之后每 0.5 秒 234 点并灼烧（本轮伤害降到原来的 1/2）· 移速 +100%；电脑端会像骑士那样朝鼠标指针方向持续冲刺（手机端按摇杆方向冲）',
-    aura: { r: 125, tick: 0.5, dmg: 312 * 1.5 / 2, fxK: 5 } },
+    aura: { r: 125, tick: 0.5, fxK: 5 } },
   { id: 'shellbreak', name: '破壳', icon: '🥚', kind: 'shell',
     desc: '不自动攻击：训练家每次闪避时破壳 —— 自损一半生命，换来 30 秒 伤害 +50% · 移速 +80%（5 秒 CD · 不叠加、只刷新时间）',
     shell: { cd: 5, dur: 30, hpCost: 0.5, dmgMul: 1.5, spdMul: 1.8 } },
@@ -6791,7 +6791,7 @@ const PET_SKILLS_DREEPY_2 = [PET_SKILL_DRAGONARROW, PET_SKILL_SHADOWBALL_STAR];
 const PET_SKILLS_DRATINI = [
   { id: 'tornado', name: '龙卷风', icon: '🌪️', kind: 'tornado', cd: 2.6, range: 520, def: 1, evo: 'tornadostar',
     desc: '在身前放出一道持续 3 秒的龙卷风：一边缓慢向前移动、一边每 0.5 秒对范围内的敌人造成 15 点伤害（本轮翻到 3 倍）· ' + petCdText(2.6),
-    tornado: { life: 3, spd: 70, r: 95, tick: 0.5, flat: 5 * 3, dist: 150 } }
+    tornado: { life: 3, spd: 70, r: 95, tick: 0.5, dist: 150 } }
 ];
 /* 🌀 龙卷风⭐（哈克龙）：**存在时间延长 1 秒**（3 → 4）· **伤害仍是龙卷风的 3 倍**（15 → 45）
    ⚠️ 这两条数值是**成对的**：龙卷风本轮翻到 3 倍（5 → 15），这一份也跟着 ×3 才不会出现
@@ -6901,7 +6901,7 @@ const PET_SKILLS = {
         shot: { n: 1, spread: 0, spd: 860, mul: 1.5, homing: 0, fxK: 1.3, boomR: 129, boomMul: 1.2 } },
       { id: 'breath', name: '龙息', icon: '🐉', kind: 'jet', range: 380, fixedTick: 1, fxEl: 'DRAGON',
         desc: '一道龙息：每 0.5 秒 12 点伤害，命中减速 50%（类似水法师 · 喷 4 秒歇 0.6 秒）',
-        jet: { secs: 4, rest: 0.6, len: 320, w: 26, tick: 0.5, flat: 12, slowK: 0.5, slowT: 1.2 } }
+        jet: { secs: 4, rest: 0.6, len: 320, w: 26, tick: 0.5, slowK: 0.5, slowT: 1.2 } }
     ],
     [
       { id: 'toss', name: '地球上投', icon: '🌍', kind: 'slam', cd: 0.87, range: 460,
@@ -6909,7 +6909,7 @@ const PET_SKILLS = {
         slam: { r: 210, mul: 6.0 * 2, air: 0.42, land: 0.26, dash: 84, jumpH: 40, fxK: 6 } },
       { id: 'heat', name: '热风', icon: '🌡️', kind: 'aura', range: 305 * 1.5, fxLife: 0.5,
         desc: '身周热风：每 0.5 秒 234 点（熔岩结界满级 18 倍）· 范围再 ×1.5（半径 ' + Math.round(305 * 1.5) + '）',
-        aura: { r: 305 * 1.5, tick: 0.5, dmg: 234, fxK: 5 } },
+        aura: { r: 305 * 1.5, tick: 0.5, fxK: 5 } },
       { id: 'flame', name: '喷射火焰', icon: '☄️', kind: 'jet', range: 480,
         desc: '龙息强化：伤害 ×3 · 距离再 ×1.2（= 水枪的 1.8 倍）· 不休息',
         jet: { secs: 5, rest: 0, len: 540, w: 30, tick: 0.5, mul: 1.5 } },
@@ -6964,7 +6964,7 @@ const PET_SKILL_DEF = { bulba: 'leaf', charm: 'spark', squirt: 'jet', toge: 'hel
 const PET_SKILLS_VAPOREON = [
   { id: 'vsurf', name: '冲浪', icon: '🌊', kind: 'aura', range: 125, spdMul: 2.0, def: 1,
     desc: '身周掀起巨浪（半径 125 = 1 级熔岩结界的范围）：碰到就结算一次、之后每 0.5 秒 234 点并灼烧（本轮伤害降到原来的 1/2，与水箭龟的冲浪同款）· 移速 +100%（电脑端会朝鼠标指针持续冲刺）',
-    aura: { r: 125, tick: 0.5, dmg: 312 * 1.5 / 2, fxK: 5 } },
+    aura: { r: 125, tick: 0.5, fxK: 5 } },
   { id: 'aquaring', name: '水流环', icon: '💧', kind: 'heal', cd: 1, fixedTick: 1, range: 0, support: 1, follow: 1,
     desc: '和「生命水滴」相同：所有宝可梦立刻回复 10% 最大生命 · 选它时水伊布会跟着训练家走',
     heal: { pct: 0.1 } }
@@ -7013,7 +7013,7 @@ const PET_SKILLS_ARMAROUGE = [
     beam: { w: 200, len: 760, mul: 3.0 * 2 * 1.5, pal: 'FIRE' } },
   { id: 'expandforce', name: '广域战力', icon: '🔮', kind: 'aura', range: 305 * 1.5, fxEl: 'PSYCHIC', fxLife: 0.5,
     desc: '展开超能力场（同热风的实现）：身周每 0.5 秒结算一次 · 范围 ×1.5（半径 ' + Math.round(305 * 1.5) + '）· 伤害只有热风的一半 · 特效是粉紫色',
-    aura: { r: 305 * 1.5, tick: 0.5, dmg: 234 / 2, fxK: 5 } }
+    aura: { r: 305 * 1.5, tick: 0.5, fxK: 5 } }
 ];
 /* 形态 key → 技能表（`petSkillList` 先查这里）· 形态 key → 默认技 */
 /* 🎀 **仙子伊布（#700 · 妖精）** —— 用户逐条点名（2026-10）：
@@ -7326,7 +7326,6 @@ function petHeadLoad() {
    `trainerLevelUp` 的横幅文案、`__musouTrainerInfo()` 的 dmgBonus/hpBonus/musouBonus，以及冒烟 S42。
    ⚠️ **伤害的升级加成不乘进化倍率**（「先乘倍率再加等级」）→ 每级恒定 +0.5（二段 ×2.25 也一样）；
    ⚠️ 「等级」走 `petLevelOf(id)`：⭐ 基拉祈只认星之助战的层数（jirachiLv），其余才是训练家强化等级 */
-const PET_BASE_DMG_SCALE = 0.9;   // ⚖️ 保留给测试读数；实际已收进 petAtkBase()（不再参与结算）
 /* 生命上限的「未打折」基础值（测试钩子 `__musouTrainerInfo().pets[].hpRaw` 读它来折算骑乘惩罚） */
 function petSummonHpBase(id) {
   return Math.max(1, Math.round((PET_SUMMON[id].hp + 1 * petLevelOf(id)) * petEvoMul(petStageOf(id))));
@@ -7340,7 +7339,6 @@ function petSummonHp(id) {
 }
 /* ⚔️ **宝可梦攻击力基值（整数）**：把「基础 −10%」与「训练家口径」一次性收在这里 ——
    口径：御三家三条线 ×0.7 · 其余 ×0.5（用户 2026-10 口径；想调只改这一处） */
-const PET_ATK_SCALE = { starter: 1, other: 1 };   // 🚫 已废除（恒为 1）
 function petAtkBase(id) {
   return Math.max(1, Math.round(PET_SUMMON[id].dmg));   // ⚔️ 整数基础 = 物种原始基础（「基础 −10%」已删除，用户要求）
 }
@@ -7372,7 +7370,7 @@ function petMiracleSave(u) {
   return true;
 }
 /* ⚖️ 宝可梦伤害口径（用户要求）：**所有宝可梦的伤害降到现在的一半**，**御三家只降到 70%**。
-   唯一出口是 `petDmgScale(id)`：① `petHitDmg()`（乘倍率那一类的全走它）
+   唯一出口是 `1`：① `petHitDmg()`（乘倍率那一类的全走它）
    ② 固定伤害/身周伤害（龙息 12 · 龙卷风 5/15 · 热风 234 · 冲浪 468）在**结算处**各乘一次。
    ⚠️ 别再往技能表里手改数字（那样面板文案、冒烟的比例断言全要跟着改）；要调口径只动这两个常量 */
 /* ⚖️ **降伤口径**（用户 2026-10：取消「全局系数」的写法，改由**技能自己**取口径）：
@@ -7380,17 +7378,7 @@ function petMiracleSave(u) {
    想单独调某一招：在它的 payload 里加 `dmgScale: 0.8`（例如 `melee: { …, dmgScale: 0.8 }`），
    结算时优先用它，见 petDmgScaleOf()。 */
 const PET_SKILL_DMG_SCALE = { starter: 0.7, other: 0.5 };
-function petDmgScale(id) { return PET_STARTERS.indexOf(id) >= 0 ? PET_SKILL_DMG_SCALE.starter : PET_SKILL_DMG_SCALE.other; }
 /* 这一招实际用的系数：技能自带 dmgScale 优先（A/B/M 任一载荷上都认） */
-function petDmgScaleOf(id, sk) {
-  if (sk) {
-    for (const k of ['dmgScale', 'atk', 'shot', 'melee', 'dash', 'strike', 'slam', 'aura', 'beam', 'meteor', 'thunder', 'moons', 'seed', 'blitz', 'sector', 'jet', 'slash', 'tornado', 'spin']) {
-      const v = k === 'dmgScale' ? sk.dmgScale : (sk[k] && sk[k].dmgScale);
-      if (typeof v === 'number' && v > 0) return v;
-    }
-  }
-  return petDmgScale(id);
-}
 /* 🧢 **训练家之魂**（训练家专属质变，用户要求：「提高所有宝可梦造成的伤害，满级时增加 50%」）：
    +10%/层（满 5 层 = ×1.5）。⚠️ 与 ⚖️ 降伤口径**分开算** —— `petDmgScale` 是固定的口径常量，
    质变这种「本局成长」不能塞进去（面板读数、冒烟的比例断言都按它算）。
@@ -7401,7 +7389,6 @@ function petSoulMul() { return 1 + PET_SOUL_PER * ((p.mut && p.mut.trainsoul) ||
    贪狼之牙(每层 +1%) × 哈根(猫神祝福 +20%) × 磨刀(波初 30 秒 +50%) × 金币的力量(每 1000 金币 +6%) × 护盾猛击(有盾时 +10%/层) */
 /* ⚖️ **技能倍率口径**（御三家 0.7 / 其余 0.5）：表里显示的倍率已经乘过它，
    所以结算里也要乘一次 —— 两边永远一致（用户要求：表里的数 = 游戏里的数） */
-function petSkillMul(id) { return 1; }   // 🚫 「口径 0.5 / 0.7」**已废除**（用户多次强调）—— 恒为 1，等于不存在
 function artDmgMul() {
   let b = 1 + (p.fangN || 0) * 0.01;
   if (artGot('hagen')) b *= 1.2;
@@ -7420,10 +7407,10 @@ function petHitDmg(id, mul, sk) {
   }
   const u = petUserMul(id, sk);   // 📋 优先用「独立技能数值表」里用户写的数
   if (u !== null) return Math.max(1, Math.round(petSummonDmg(id) * u * petSoulMul() * petPrimalMul(id) * artDmgMul()));
-  return Math.max(1, Math.round(petSummonDmg(id) * m * petSkillMul(id) * petSoulMul() * petPrimalMul(id) * artDmgMul()));
+  return Math.max(1, Math.round(petSummonDmg(id) * m * petSoulMul() * petPrimalMul(id) * artDmgMul()));
 }
 /* 纯函数版（**不消耗帮助蓄力 / 不看破壳状态**）：只给读数与测试钩子用 —— 实际结算一律走 petHitDmg */
-function petHitDmgBase(id, mul, sk) { const u = petUserMul(id, sk); if (u !== null) return Math.max(1, Math.round(petSummonDmg(id) * u * petSoulMul() * petPrimalMul(id) * artDmgMul())); return Math.max(1, Math.round(petSummonDmg(id) * mul * petSkillMul(id) * petSoulMul() * petPrimalMul(id) * artDmgMul())); }
+function petHitDmgBase(id, mul, sk) { const u = petUserMul(id, sk); if (u !== null) return Math.max(1, Math.round(petSummonDmg(id) * u * petSoulMul() * petPrimalMul(id) * artDmgMul())); return Math.max(1, Math.round(petSummonDmg(id) * mul * petSoulMul() * petPrimalMul(id) * artDmgMul())); }
 /* 🤝 波克比「帮助」：给**全部宝可梦**挂上「下次攻击 +50%」的蓄力（每只各一次，用掉即消耗）
    —— 用 map 存倍率，键 = 物种 id；换局 / 换人（resetRun）由 petHelpClear() 清干净 */
 let petHelpCharge = {};
@@ -29012,7 +28999,7 @@ window.__musouTrainerInfo = () => {
     id: u.petId, hp: Math.round(u.hp), maxhp: u.maxhp, dmg: petSummonDmg(u.petId),
     hpRaw: petSummonHpBase(u.petId),   // 🧢 未打折的生命上限（骑乘的那只是 maxhp = round(hpRaw × rideHpMul)）
     shiny: u.petShiny ? 1 : 0,         // ✨ 闪光图鉴启用的那只走闪光贴图（进化后同样是闪光，因为按物种 id 查）
-    hitDmg: petHitDmgBase(u.petId, 1), dmgScale: petDmgScale(u.petId),   // ⚖️ 降伤口径（御三家 0.7 / 其余 0.5）
+    hitDmg: petHitDmgBase(u.petId, 1), dmgScale: 1,   // ⚖️ 降伤口径（御三家 0.7 / 其余 0.5）
     x: Math.round(u.x), y: Math.round(u.y), d: Math.round(Math.hypot(u.x - p.x, u.y - p.y)),
     atk: +Math.max(0, u.atkT || 0).toFixed(3),   // 出手冷却：刚出手那一帧 = 本次出手间隔（无双期间应 ÷1.5）
     faint: +Math.max(0, u.faintT || 0).toFixed(2), jet: +Math.max(0, u.jetT || 0).toFixed(2), rest: +Math.max(0, u.restT || 0).toFixed(2),
