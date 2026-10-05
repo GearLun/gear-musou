@@ -456,7 +456,7 @@
       <div class="load-tip">游戏正在加载中，请稍后,若长时间无法加载，请刷新网页。</div>
       <div class="load-bar"><i id="load-fill"></i></div>
     </div>
-    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.0.1</small></div>
+    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.0.2</small></div>
     <div class="keys" id="keys-desk">
       <span><b>WASD</b> / <b>方向键</b></span><span>移动</span>
       <span><b>自动攻击</b></span><span id="kbd-atk-d">自动挥砍，无需按键</span>
@@ -5163,14 +5163,19 @@ function petEvoByLevel(id) { return !PET_WAVE_EVO[id] && !PET_ITEM_EVO[id]; }
    ⚠️ 所以它的属性用 `jirachiLv()` **顶替** `p.trainLv`（训练家升级**不给它**加成），见 `petLevelOf()` */
 const JIRACHI_TOP_LV = 50;
 const WISH_LV_BONUS = 20;      // 🌠 奇物·千年之愿：基拉祈**当前等级与等级上限都 +20**（满层 50 → 70）
-function jirachiLv() { return Math.round(JIRACHI_TOP_LV * ((p.mut && p.mut.starhelp) || 0) / STARHELP_CAP) + (artGot('wish') ? WISH_LV_BONUS : 0); }
+/* 🌟 幻之宝可梦（幻之助战三选一）：**统一的三只名单 + 等级口径**（以前 jirachiLv / shayminLv / zeraoraLv
+   是三份一模一样的公式，改一处要改三处 → 现在收成一张表 + 一个函数）。
+   等级 = 幻之助战层数 × 10（满 5 层 = 50 级）+ 自己那件专属奇物的 +20 级。 */
+const STAR_PETS = ['jirachi', 'shaymin', 'zeraora'];
+const ZERA_ART = 'windflash';      // ⚡ 捷拉奥拉的专属奇物「风来城的闪光」（另外两件是 'wish' / 'gracidea'）
+const STAR_ART = { jirachi: 'wish', shaymin: 'gracidea', zeraora: ZERA_ART };   // 各自的专属奇物（拿到就 +20 级）
+const STAR_LV_BONUS = 20;                                                          // 专属奇物的等级加成
+function starLv(id) { return Math.round(JIRACHI_TOP_LV * ((p.mut && p.mut.starhelp) || 0) / STARHELP_CAP) + (artGot(STAR_ART[id]) ? STAR_LV_BONUS : 0); }
+function jirachiLv() { return starLv('jirachi'); }
 /* 每只宝可梦的「等级」：⭐ 基拉祈只认质变层数 · 其余都吃训练家强化等级（升级 +0.5 伤害 / +1 生命） */
 /* 🌸 谢米：和基拉祈同一套「按幻之助战层数」的等级口径（10/20/30/40/50）· **拿到葛拉西蒂亚花立刻 +20 级** */
-const ZERA_ART = 'windflash';      // ⚡ 奇物「风来城的闪光」（训练家专属 · 选了捷拉奥拉才刷）
-const ZERA_ART_LV = 20;            // ⚡ 拿到它：捷拉奥拉**立刻 +20 级**（用户要求）
-const SHAYMIN_FLOWER_LV = 20;
-function shayminLv() { return Math.round(JIRACHI_TOP_LV * ((p.mut && p.mut.starhelp) || 0) / STARHELP_CAP) + (artGot('gracidea') ? SHAYMIN_FLOWER_LV : 0); }
-function zeraoraLv() { return Math.round(JIRACHI_TOP_LV * ((p.mut && p.mut.starhelp) || 0) / STARHELP_CAP) + (artGot(ZERA_ART) ? ZERA_ART_LV : 0); }
+function shayminLv() { return starLv('shaymin'); }
+function zeraoraLv() { return starLv('zeraora'); }
 function petLevelOf(id) {
   if (id === 'jirachi') return jirachiLv();
   if (id === 'shaymin') return shayminLv();
@@ -7459,10 +7464,8 @@ function starAidFirstPend() {
    ⚠️ 两个都在队里时以谢米优先（花是给谢米用的，而千年之愿只认基拉祈）。 */
 function starChoice() {
   const own = p.petOwned || [];
-  if (own.indexOf('shaymin') >= 0) return 'shaymin';
-  if (own.indexOf('jirachi') >= 0) return 'jirachi';
-  if (p.starPick === 'zeraora') return 'zeraora';
-  return (p.starPick === 'shaymin' || p.starPick === 'jirachi') ? p.starPick : '';
+  for (const id of STAR_PETS) if (own.indexOf(id) >= 0) return id;   // 以队伍里实际有谁为准（谢米优先，见 STAR_PETS 顺序）
+  return STAR_PETS.indexOf(p.starPick) >= 0 ? p.starPick : '';
 }
 function starAidEnsure() {
   if (!isTrainer() || !((p.mut && p.mut.starhelp) > 0)) return;
@@ -7487,9 +7490,9 @@ function starAidEnsure() {
   }
   /* ⚠️⚠️ 必须**三只一起认**：以前写的是 `starPick === 'shaymin' ? 'shaymin' : 'jirachi'`，
      选了捷拉奥拉就落到 'jirachi' → 队伍里会多出一只基拉祈（用户报过两次的 bug）。 */
-  const pick = ['jirachi', 'shaymin', 'zeraora'].indexOf(p.starPick) >= 0 ? p.starPick : 'jirachi';
+  const pick = STAR_PETS.indexOf(p.starPick) >= 0 ? p.starPick : 'jirachi';
   /* 幻之宝可梦**只能有一只**：另外两只从队伍与场上清掉（面板里也做了，这里是每帧的兜底） */
-  const isStarPet = x => ['jirachi', 'shaymin', 'zeraora'].indexOf(x) >= 0;
+  const isStarPet = x => STAR_PETS.indexOf(x) >= 0;
   if (p.petOwned) p.petOwned = p.petOwned.filter(x => x === pick || !isStarPet(x));
   allyUnits = allyUnits.filter(u => !(u.kind === 'pet' && u.petId !== pick && isStarPet(u.petId)));
   if (p.petOwned.indexOf(pick) < 0) petGrant(pick);
@@ -7539,6 +7542,12 @@ function chainVisitAdd(id) {
 }
 function chainVisitN(id) { return (meta.visit && meta.visit[id]) || 0; }
 function chainVisitReset(id) { if (meta.visit) { meta.visit[id] = 0; metaSave(); } }
+/* 🐞 一局结束 → 连锁的「本局」状态与已消耗的选择都清掉（否则图鉴会一直写着「本局连锁目标」） */
+function chainRunClear() {
+  if (!p.chainRun && !meta.chainP) return;
+  p.chainRun = 0; p.chainId = '';
+  if (meta.chainP) { meta.chainP = ''; metaSave(); }
+}
 function chainGrant() { if (!meta.chain) { meta.chain = 1; metaSave(); } }
 function shinyGot(id) { return !!(meta.shinyDex && meta.shinyDex[id]); }
 function shinyOn(id) { return !!(meta.shinyOn && meta.shinyOn[id]); }
@@ -10767,7 +10776,7 @@ function openStarPick() {
   addRing(p.x, p.y, '#ffb0e0', 9);
   sfx.musou ? sfx.musou() : sfx.mut();
   bigBanner('🌟 幻 之 宝 可 梦 · 三 选 一', '队伍中加入一只幻之宝可梦！他们会在 50 级时学会新的技能！');
-  curChoices = ['jirachi', 'shaymin', 'zeraora'].map(id => {
+  curChoices = STAR_PETS.map(id => {
     const S2 = PET_SUMMON[id], sk = petSkillList(id), dex = PET_DEX[petFormKey(id)];
     return {
       id, icon: '<img class="up-ic-img" src="' + PET_HEAD[petFormKey(id)] + '" alt="">',
@@ -10779,7 +10788,7 @@ function openStarPick() {
       apply() {
         p.starPick = id;
         /* ⚠️ 幻之宝可梦**只能有一只**：把另一只从队伍与场上清掉（用户报过「基拉祈和谢米一起进队」） */
-        const others = ['jirachi', 'shaymin', 'zeraora'].filter(x => x !== id);   // 三选一：另外两只都要清掉
+        const others = STAR_PETS.filter(x => x !== id);   // 三选一：另外两只都要清掉
         if (p.petOwned) p.petOwned = p.petOwned.filter(x => others.indexOf(x) < 0);
         allyUnits = allyUnits.filter(u => !(u.kind === 'pet' && others.indexOf(u.petId) >= 0));
         const ok = petGrant(id, true);
@@ -14950,6 +14959,7 @@ $('btn-pause-resume').addEventListener('click', () => { $('sc-pause').classList.
 $('pets-close').addEventListener('click', () => closePetPanel());
 /* 🏠 结算面板（败阵 / 通关）的「回到主页」：收面板 + 回主页刷新「继续」按钮 */
 function backToHomeFromOver() {
+  chainRunClear();   // 🐞 回主页 = 这一局结束：清掉连锁的本局状态
   $('sc-over').classList.remove('show');
   $('sc-win').classList.remove('show');
   $('sc-start').classList.add('show');
@@ -15156,7 +15166,7 @@ function renderShinyDex() {
     const has = shinyGot(id), on = shinyOn(id);
     const vN = chainVisitN(id);
     const vPct = Math.round(vN / CHAIN_GUARD * 100);
-    const picked = (chainSel === id);
+    const picked = (p.chainRun && p.chainId === id);   // 🐞 只有**本局真的在用**连锁才显示「本局连锁目标」（失效后不再显示）
     const eggAble = CHAIN_EGG.indexOf(id) >= 0;
     h += '<div class="cdx-item"><span class="ic"><img class="pets-ic"' + (eggAble ? ' data-egg="' + id + '"' : '') + ' src="' + PET_HEAD[petFormKey(id)] + '" alt="" style="' + (eggAble ? 'cursor:pointer;' : '') + (has ? '' : 'filter:grayscale(1) brightness(.6);') + '"></span>' +
       '<b style="color:' + (has ? '#ffe08a' : '#8d8a77') + '">' + SHINY_SPECIES_NAME[id] + '</b>' +
@@ -18373,7 +18383,8 @@ function showOver() {
     '<br>质变被动：' + mutSummary();
 }
 function victory() {
-  chainGrant();   // ✨ 通关 → 下一局开始前能在闪光图鉴里选一只做连锁
+  chainRunClear();   // 🐞 通关 = 这一局结束：清掉连锁的本局状态
+  chainGrant();      // ✨ 通关 → 下一局开始前能在闪光图鉴里选一只做连锁
   choosing = false;
   mutPending = 0;
   hideAllPanels();
