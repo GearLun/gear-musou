@@ -888,6 +888,22 @@
    草·割无双  MUSOU MOW  —  无双割草 正式版 v1.0
    纯 Canvas 2D + WebAudio 程序化音效，无任何外部资源
    ============================================================ */
+/* ============================================================
+   📑 板块索引（改动前先在这里定位，别满文件翻）：
+   · 🐾 宝可梦素材表 / 属性特效 …… 搜 `const PET_PNG` / `const PET_FX_TW`（由 tools/pet-build.js 生成）
+   · 🌟 幻之宝可梦（幻之助战三选一）…… 搜 `STAR_PETS` / `starLv` / `openStarPick` / `starAidEnsure`
+   · 🎒 奇物 ……………………………… 搜 `const ART_DEFS` / `artPickPool` / `artIcon`
+   · 🎚️ 质变 ……………………………… 搜 `const MUTS` / `mutBanSet` / `tryOpen`
+   · ⚔️ 敌人与 Boss …………………… 搜 `const ETYPES` / `spawnEnemy` / `tickEnemy` / `const LAB_BOSSES`
+   · 🌟 丰缘之战 ……………………… 搜 `const HOENN` / `tickHoennAI` / `hoennCastAscent`
+   · 🧢 训练家与宝可梦 AI …………… 搜 `updatePetAlly` / `petSummonSync` / `PET_CATCHES`
+   · ✨ 刷闪 / 闪光图鉴 / 连锁 ……… 搜 `SHINY_SPECIES` / `chainReady` / `renderShinyDex`
+   · 💾 局外存档 ………………………… 搜 `SAVE_LAYOUT` / `saveDigits` / `metaSave`
+   · 🛠 试验场 / 开发者面板 ………… 搜 `openBossLab` / `devToolsRefresh` / `__musouDevInfo`
+   · 🎨 渲染主循环 …………………… 搜 `function drawGame` / `function frame` / `drawHUD`
+   ⚠️ 通用约定：宠物「出手节拍」一律走 `petAtkTick()`；刀光拖尾走 `drawSlashStreak()`；
+      幻之宝可梦只留一只走 `starPetOnly()`；三只的等级口径走 `starLv(id)`。
+   ============================================================ */
 (() => {
 const cv = document.getElementById('game');
 const ctx = cv.getContext('2d');
@@ -7164,6 +7180,31 @@ function drawPetWaves() {
     ctx.restore();
   }
 }
+/* 🐾 **宠物「出手节拍」统一收口**（原来 15 个技能分支各抄了一遍这 5 行）：
+   等冷却 → 若正在播攻击动画就推帧、放完回走/待机（**这一帧不出手**）→ 否则冷却好了就返回 true。 */
+/* 🗡️ 出手时那道星轨似的刀光拖尾（原来两处逐字节相同，收成一个函数；想调形状只改这里） */
+function drawSlashStreak(len, w, wob, headX, headY, wobF, rot) {
+  const L2 = len === undefined ? 30 : len, W2 = w === undefined ? 8 : w;
+  const WO = wob === undefined ? 5 : wob, F = wobF === undefined ? 10 : wobF;
+  ctx.beginPath();
+  for (let i = 0; i <= 4; i++) {
+    const t = i / 4;
+    const xx = -Math.cos(p.face) * (W2 + t * L2);
+    const yy = Math.sin(p.face) * (W2 + t * L2) + Math.sin(time * F + i * 0.8) * t * WO;
+    if (i === 0) ctx.moveTo(-Math.cos(p.face) * (headX === undefined ? 6 : headX), headY === undefined ? 6 : headY);
+    else ctx.lineTo(xx, yy + (headY === undefined ? 6 : headY));
+  }
+  ctx.stroke();
+}
+function petAtkTick(u, dt, moving) {
+  u.atkT -= dt;
+  if (u.petA === 'atk') {
+    petTickFrame(u, dt, false);
+    if (u.petF >= PET_META[petForm(u)].atk.n - 1) petAnim(u, moving ? 'walk' : 'idle');
+    return false;
+  }
+  return u.atkT <= 0;
+}
 function petSkillReset(id) {
   for (const u of allyUnits) {
     if (u.kind !== 'pet' || (id && u.petId !== id)) continue;
@@ -7492,9 +7533,7 @@ function starAidEnsure() {
      选了捷拉奥拉就落到 'jirachi' → 队伍里会多出一只基拉祈（用户报过两次的 bug）。 */
   const pick = STAR_PETS.indexOf(p.starPick) >= 0 ? p.starPick : 'jirachi';
   /* 幻之宝可梦**只能有一只**：另外两只从队伍与场上清掉（面板里也做了，这里是每帧的兜底） */
-  const isStarPet = x => STAR_PETS.indexOf(x) >= 0;
-  if (p.petOwned) p.petOwned = p.petOwned.filter(x => x === pick || !isStarPet(x));
-  allyUnits = allyUnits.filter(u => !(u.kind === 'pet' && u.petId !== pick && isStarPet(u.petId)));
+  starPetOnly(pick);   // 🌟 每帧兜底：只能有一只幻之宝可梦
   if (p.petOwned.indexOf(pick) < 0) petGrant(pick);
 }
 function starAidSync() {
@@ -7526,6 +7565,13 @@ function shinyMutChance() {
 /* ✨ **刷闪连锁**：`meta.chain` = 有一次连锁机会（通关 / 无尽 30 关后给）；
    `meta.chainP` = 选中的宝可梦 id（主页闪光图鉴里点选）；`meta.visit` = 每只的来访计数（保底用）。 */
 const CHAIN_GUARD = 100;   // 🛡️ 来访满 100 次 → 第 100 次**必定闪光**
+/* 🌟 **幻之宝可梦只能有一只**：把「不是 pick」的那两只从队伍与场上清掉。
+   面板作答与每帧兜底都调它 —— 这两处以前各写一遍，漏改就会「选捷拉奥拉却混进基拉祈」（用户报过两次）。 */
+function starPetOnly(pick) {
+  const isStarPet = x => STAR_PETS.indexOf(x) >= 0;
+  if (p.petOwned) p.petOwned = p.petOwned.filter(x => x === pick || !isStarPet(x));
+  allyUnits = allyUnits.filter(u => !(u.kind === 'pet' && u.petId !== pick && isStarPet(u.petId)));
+}
 function chainReady() { return meta.chain ? 1 : 0; }
 function chainPickId() { return (meta.chainP && SHINY_SPECIES.indexOf(meta.chainP) >= 0) ? meta.chainP : ''; }
 function chainPickSet(id) {
@@ -8444,11 +8490,8 @@ function updatePetAlly(u, dt) {
       }
       return;
     }
-    u.atkT -= dt;
-    if (u.petA === 'atk') {
-      petTickFrame(u, dt, false);
-      if (u.petF >= PET_META[petForm(u)].atk.n - 1) petAnim(u, moving ? 'walk' : 'idle');
-    } else if (foe && u.atkT <= 0) {
+    if (!petAtkTick(u, dt, moving)) { /* 出手中 / 冷却没好 */ }
+    if (foe && u.atkT <= 0) {
       u.atkT = petSkillCd(SK) / petRateMul();                               // ⚡ 基础频率 ×2 · 🧢 无双再 ×1.5
       u.petAng = petAimAng(u);                                     // 挥击方向 = 指针方向
       u.petDir = petDir(u.petAng);
@@ -8522,11 +8565,8 @@ function updatePetAlly(u, dt) {
      爆炸半径 = 破灭之愿★ 的大小（337.5）· 爆炸伤害 = 宝可梦伤害 ×10 · 出手间隔 1 秒 */
   if (SK.kind === 'moons') {
     const MB = SK.moons;
-    u.atkT -= dt;
-    if (u.petA === 'atk') {
-      petTickFrame(u, dt, false);
-      if (u.petF >= PET_META[petForm(u)].atk.n - 1) petAnim(u, moving ? 'walk' : 'idle');
-    } else if (foe && u.atkT <= 0) {
+    if (!petAtkTick(u, dt, moving)) { /* 出手中 / 冷却没好 */ }
+    if (foe && u.atkT <= 0) {
       u.atkT = petSkillCd(SK) / petRateMul();     // ⚡ 基础频率 ×2 · 🧢 无双再 ×1.5（cd 1 秒）
       u.petAng = petAimAng(u);
       u.petDir = petDir(u.petAng);
@@ -8569,11 +8609,8 @@ function updatePetAlly(u, dt) {
       }
       return;
     }
-    u.atkT -= dt;
-    if (u.petA === 'atk') {
-      petTickFrame(u, dt, false);
-      if (u.petF >= PET_META[petForm(u)].atk.n - 1) petAnim(u, moving ? 'walk' : 'idle');
-    } else if (foe && u.atkT <= 0) {
+    if (!petAtkTick(u, dt, moving)) { /* 出手中 / 冷却没好 */ }
+    if (foe && u.atkT <= 0) {
       u.atkT = SK.cd / petRateMul();
       u.blitzT = B.dur; u.blitzGap = 0; u.blitzN = 0; u.blitzSeen = new Set();
       petAnim(u, 'atk', true);
@@ -8594,11 +8631,8 @@ function updatePetAlly(u, dt) {
       }
       return;
     }
-    u.atkT -= dt;
-    if (u.petA === 'atk') {
-      petTickFrame(u, dt, false);
-      if (u.petF >= PET_META[petForm(u)].atk.n - 1) petAnim(u, moving ? 'walk' : 'idle');
-    } else if (foe && u.atkT <= 0) {
+    if (!petAtkTick(u, dt, moving)) { /* 出手中 / 冷却没好 */ }
+    if (foe && u.atkT <= 0) {
       u.atkT = SK.cd / petRateMul();
       u.sfBase = petAimAng(u); u.sfQ = S.n; u.sfT = 0;
       petAnim(u, 'atk', true);
@@ -10789,8 +10823,7 @@ function openStarPick() {
         p.starPick = id;
         /* ⚠️ 幻之宝可梦**只能有一只**：把另一只从队伍与场上清掉（用户报过「基拉祈和谢米一起进队」） */
         const others = STAR_PETS.filter(x => x !== id);   // 三选一：另外两只都要清掉
-        if (p.petOwned) p.petOwned = p.petOwned.filter(x => others.indexOf(x) < 0);
-        allyUnits = allyUnits.filter(u => !(u.kind === 'pet' && others.indexOf(u.petId) >= 0));
+        starPetOnly(id);   // 🌟 只留这一只（另外两只从队伍与场上清掉）
         const ok = petGrant(id, true);
         p.starPend = 0;
         petHeadLoad();
@@ -21008,15 +21041,7 @@ function drawArcherPlayer() {
   ctx.fillRect(-9, -24, 18, 5);
   // 围巾（青碧色飘动）
   ctx.strokeStyle = '#2ba08f'; ctx.lineWidth = 4; ctx.lineCap = 'round';
-  ctx.beginPath();
-  for (let i = 0; i <= 4; i++) {
-    const t = i / 4;
-    const xx = -Math.cos(p.face) * (8 + t * 30);
-    const yy = Math.sin(p.face) * (8 + t * 30) + Math.sin(time * 10 + i * 0.8) * t * 5;
-    if (i === 0) ctx.moveTo(-Math.cos(p.face) * 6, 6);
-    else ctx.lineTo(xx, yy + 6);
-  }
-  ctx.stroke();
+  drawSlashStreak();   // 🗡️ 刀光拖尾（统一函数）
   // 背后箭袋（露出三支箭羽）
   ctx.save();
   ctx.translate(-Math.cos(p.face) * 11, -Math.sin(p.face) * 11);
@@ -23071,15 +23096,7 @@ function drawPlayer() {
   ctx.fillRect(-9, -24, 18, 5);           // 发带
   // 围巾飘动
   ctx.strokeStyle = '#d84a32'; ctx.lineWidth = 4; ctx.lineCap = 'round';
-  ctx.beginPath();
-  for (let i = 0; i <= 4; i++) {
-    const t = i / 4;
-    const xx = -Math.cos(p.face) * (8 + t * 30);
-    const yy = Math.sin(p.face) * (8 + t * 30) + Math.sin(time * 10 + i * 0.8) * t * 5;
-    if (i === 0) ctx.moveTo(-Math.cos(p.face) * 6, 6);
-    else ctx.lineTo(xx, yy + 6);
-  }
-  ctx.stroke();
+  drawSlashStreak();   // 🗡️ 刀光拖尾（统一函数）
   /* ---------- 挥刀动作特效（哈姆杀所有 → 黑洞般的暗色刀光） ---------- */
   const Lb = (30 + effRangeBonus() * 42 + (musou ? 12 : 0)) * effRangeShopMul();
   const darkFx = hamuOn();
