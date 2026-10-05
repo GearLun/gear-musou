@@ -6638,8 +6638,8 @@ const PET_SKILL_ZENHEADBUTT = {
   id: 'zenheadbutt', name: '意念头锤', icon: '🧠', kind: 'dash', cd: 3.0, range: 520, fxEl: 'PSYCHIC', fxLife: 0.5,
   desc: '同「龙之俯冲☆」连冲三段（起手蓄力 0.5 秒 · 每段 4× 宝可梦攻击），三段冲完**再跳起来重压**一圈：'
     + '半径 ' + Math.round(150 * 1.5 * 1.5) + '（= 破灭之愿☆ 的大小）· 重压伤害 6× 宝可梦攻击 · ' + petCdText(3.0),
-  dash: { dist: 320, spd: 2400, r: 70, mul: 4, path: 1, times: 3, charge: 0.5, fxK: 4,
-    slam: { r: 150 * 1.5 * 1.5, mul: 6, air: 0.5, jumpH: 52, fxK: 8 } }
+  dash: { dist: 320, spd: 2400, r: 70, mul: 2, path: 1, times: 3, charge: 0.5,   // 冲刺：攻击力 ×2（用户指定） fxK: 4,
+    slam: { r: 150 * 1.5 * 1.5, mul: 3, air: 0.5, jumpH: 52, fxK: 8 } }   // 下砸：攻击力 ×3（用户指定）
 };
 
 const PET_SKILLS_BELDUM = [PET_SKILL_TAKEDOWN];
@@ -7338,7 +7338,7 @@ function petSummonHp(id) {
 }
 /* ⚔️ **宝可梦攻击力基值（整数）**：把「基础 −10%」与「训练家口径」一次性收在这里 ——
    口径：御三家三条线 ×0.7 · 其余 ×0.5（用户 2026-10 口径；想调只改这一处） */
-const PET_ATK_SCALE = { starter: 0.7, other: 0.5 };
+const PET_ATK_SCALE = { starter: 1, other: 1 };   // 🚫 已废除（恒为 1）
 function petAtkBase(id) {
   return Math.max(1, Math.round(PET_SUMMON[id].dmg * 0.9));   // ⚔️ 整数基础 = 物种原始 × 0.9（基础 −10%）；口径只乘在技能倍率上（petSkillMul）
 }
@@ -7399,7 +7399,7 @@ function petSoulMul() { return 1 + PET_SOUL_PER * ((p.mut && p.mut.trainsoul) ||
    贪狼之牙(每层 +1%) × 哈根(猫神祝福 +20%) × 磨刀(波初 30 秒 +50%) × 金币的力量(每 1000 金币 +6%) × 护盾猛击(有盾时 +10%/层) */
 /* ⚖️ **技能倍率口径**（御三家 0.7 / 其余 0.5）：表里显示的倍率已经乘过它，
    所以结算里也要乘一次 —— 两边永远一致（用户要求：表里的数 = 游戏里的数） */
-function petSkillMul(id) { return PET_STARTERS.indexOf(id) >= 0 ? PET_ATK_SCALE.starter : PET_ATK_SCALE.other; }
+function petSkillMul(id) { return 1; }   // 🚫 「口径 0.5 / 0.7」**已废除**（用户多次强调）—— 恒为 1，等于不存在
 function artDmgMul() {
   let b = 1 + (p.fangN || 0) * 0.01;
   if (artGot('hagen')) b *= 1.2;
