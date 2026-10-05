@@ -29855,6 +29855,84 @@ window.__musouMageStrike = () => { // 测试钩子：法师朝场地中心方向
 };
 })();
 
+/* ══════════════════════════════════════════════════════════════════════
+   📋 **技能倍率覆盖表（用户手写 · 改数值只改这一张表）**
+   · 来源：docs/宝可梦技能数值表.csv 的「新倍率」列（用户 2026-10 手写，共 56 条）
+   · 加载时按**技能名**覆盖每张技能表里的 `mul` → 表里的数 = 游戏里的数
+   · ⚠️ 固定值招式（龙息/热风/冲浪/地震…）走 `flat`/`dmg`，不吃 mul，这里跳过
+   ══════════════════════════════════════════════════════════════════════ */
+const PET_MUL_OVERRIDE = {
+  "藤鞭": 1.143,
+  "飞叶快刀": 0.429,
+  "强力鞭打": 1.714,
+  "魔法叶": 0.714,
+  "能量球": 2.143,
+  "疯狂植物": 2.143,
+  "花瓣舞": 0.857,
+  "能量球☆": 2.857,
+  "日光束": 4.286,
+  "抓击": 1.143,
+  "火苗": 1,
+  "劈开": 1.714,
+  "火焰轮": 1.714,
+  "龙息": 0.714,
+  "地球上投": 11.429,
+  "热风": 1.571,
+  "喷射火焰": 1.429,
+  "闪焰冲锋": 12.857,
+  "火箭头锤": 1.429,
+  "水枪": 0.571,
+  "泡沫光线": 0.714,
+  "高速旋转": 2.143,
+  "水炮": 1.429,
+  "冲浪": 1.714,
+  "加农水炮": 4.286,
+  "帮助": 0.6,
+  "帮助☆": 1,
+  "高速星星": 0.4,
+  "电光一闪": 2,
+  "蓄能焰袭": 1.6,
+  "急速折返": 5,
+  "暗影球": 4,
+  "龙箭": 3,
+  "暗影球☆": 5,
+  "龙卷风": 0.6,
+  "龙卷风☆": 1,
+  "龙之俯冲": 3,
+  "流星群": 5,
+  "龙之俯冲☆": 4,
+  "猛撞": 2,
+  "猛撞☆": 4,
+  "子弹拳": 2,
+  "子弹拳☆": 3,
+  "重踏": 0.8,
+  "地震": 1.2,
+  "龙爪": 2.4,
+  "地震☆": 1.6,
+  "二连劈☆": 3,
+  "高速星星☆": 1.6,
+  "破灭之愿": 5,
+  "种子闪光": 3.6,
+  "打雷☆": 12,
+  "等离子闪电拳": 3,
+  "根源波动": 4,
+  "断崖之剑": 6,
+  "画龙点睛": 16,
+};
+(function applyMulOverride() {
+  const seen = new Set();
+  const walk = (o) => {
+    if (!o || typeof o !== 'object' || seen.has(o)) return;
+    seen.add(o);
+    if (o.name && PET_MUL_OVERRIDE[o.name] !== undefined && o.mul !== undefined) o.mul = PET_MUL_OVERRIDE[o.name];
+    for (const k in o) if (o[k] && typeof o[k] === Q + "object" + Q) walk(o[k]);
+  };
+  walk(PET_SKILLS);
+  for (const nm of ['PET_SKILLS_SHAYMIN', 'PET_SKILLS_SHAYMIN_2', 'PET_SKILL_SEEDFLARE', 'PET_SKILL_SEEDFLARE_STAR', 'PET_SKILL_PLASMAFIST', 'PET_SKILL_PLASMAFIST_STAR', 'PET_SKILL_THUNDERPUNCH_STAR', 'PET_SKILL_THUNDER_STAR', 'PET_SKILL_DOOMWISH', 'PET_SKILL_DOOMWISH_STAR', 'PET_SKILL_MOONBLAST', 'PET_SKILL_DISARMING']) {
+    try { walk(eval(nm)); } catch (e) {}
+  }
+})();
+
 </script>
 <script>if("serviceWorker" in navigator){addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){})})}</script>
 </body>
