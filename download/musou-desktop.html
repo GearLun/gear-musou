@@ -7339,7 +7339,7 @@ function petSummonHp(id) {
    口径：御三家三条线 ×0.7 · 其余 ×0.5（用户 2026-10 口径；想调只改这一处） */
 const PET_ATK_SCALE = { starter: 1, other: 1 };   // 🚫 已废除（恒为 1）
 function petAtkBase(id) {
-  return Math.max(1, Math.round(PET_SUMMON[id].dmg * 0.9));   // ⚔️ 整数基础 = 物种原始 × 0.9（基础 −10%）；口径只乘在技能倍率上（petSkillMul）
+  return Math.max(1, Math.round(PET_SUMMON[id].dmg));   // ⚔️ 整数基础 = 物种原始基础（「基础 −10%」已删除，用户要求）
 }
 function petSummonDmg(id) { return Math.max(1, Math.round((petAtkBase(id) + 0.5 * petLevelOf(id)) * petEvoMul(petStageOf(id)))); }   // ⚔️ 用户口径：(整数基础 + 0.5×等级) × 进化倍率
 /* 🥚 破壳 buff（水箭龟专属）：训练家闪避时触发 —— 30 秒内 伤害 ×1.5 / 移速 ×1.8；**不叠加，只刷新时间** */
