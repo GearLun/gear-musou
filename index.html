@@ -7067,6 +7067,15 @@ function petSkillClone(list) {
   return out;
 }
 function petSkillList(id) {
+  /* 🧬 单一数据源：V2 里有的直接用（每只宝可梦独立副本 ✓） */
+  try {
+    const v2 = (typeof PET_SKILLS_V2 !== 'undefined') ? (PET_SKILLS_V2[petFormKey(id)] || PET_SKILLS_V2[id]) : null;
+    if (v2 && v2.length) {
+      const st = petStageOf(id);
+      const list = v2[Math.min(st, v2.length - 1)] || v2[0];
+      if (list && list.length) return list;
+    }
+  } catch (e) {}
   /* ⚡ 捷拉奥拉：50 级前两招；50 级加「等离子闪电拳」——拿到「风来城的闪光」时那一招换成 ☆ 版（18 次 · ×4） */
   if (id === 'zeraora') {
     const list = zeraoraLv() >= JIRACHI_TOP_LV ? PET_SKILLS.zeraora[1].slice() : PET_SKILLS.zeraora[0].slice();
@@ -30050,6 +30059,28 @@ function petUserMul(id, sk) {
     return (typeof v === "number" && v > 0) ? v : null;
   } catch (e) { return null; }
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   🧬 **宝可梦技能系统 · 单一数据源（PET_SKILLS_V2）**
+   · 启动时从旧表读出 → 每只宝可梦 / 每个段位一份**深拷贝**（互不共享 → 无联动 ✓）
+   · 数值仍以用户的 PET_SKILL_TABLE 为准（结算时查表 ✓）
+   · 旧表（PET_SKILLS / PET_SKILLS_* / PET_SKILLS_FORM）自此只作原料，运行时只读 V2 ✓
+   ══════════════════════════════════════════════════════════════════════ */
+const PET_SKILLS_V2 = (() => {
+  const out = {};
+  const clone = (o) => { const c = Object.assign({}, o); for (const k in c) { const v = c[k]; if (v && typeof v === 'object') c[k] = Object.assign({}, v); } return c; };
+  try {
+    const src = (typeof PET_SKILLS !== "undefined" && PET_SKILLS) ? PET_SKILLS : {};
+    for (const id in src) {
+      const stages = src[id];
+      if (!Array.isArray(stages)) continue;
+      out[id] = stages.map((list) => (Array.isArray(list) ? list.map(clone) : []));
+    }
+    const F = (typeof PET_SKILLS_FORM !== "undefined" && PET_SKILLS_FORM) ? PET_SKILLS_FORM : {};
+    for (const k in F) { const l = F[k]; if (Array.isArray(l)) out[k] = [l.map(clone)]; }
+  } catch (e) { /* 建表失败 → 全部走老路径 ✓ */ }
+  return out;
+})();
 
 </script>
 <script>if("serviceWorker" in navigator){addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){})})}</script>
