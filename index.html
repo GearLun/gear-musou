@@ -5189,6 +5189,9 @@ function petItemForm(id) { return (p.petEvoPick && p.petEvoPick[id]) || ''; }
 function petItemStage(id) { return petItemForm(id) ? 1 : 0; }
 /* **这一只**现在几段：大器晚成看波次 · 道具进化看有没有用过道具 · 其余（御三家 / 波克比）看等级 */
 function petStageOf(id) {
+  /* 🌟 幻之宝可梦（基拉祈 / 谢米 / 捷拉奥拉）：**默认视为已经进化过一次**（用户 2026-10）
+     → 攻击力 / 生命吃 1 段进化加成 ×1.3；谢米的天空形态算**再一次**（2 段 ×1.69） */
+  if (STAR_PETS.indexOf(id) >= 0) return (id === 'shaymin' && shayminSkyOn()) ? 2 : 1;
   if (id === 'shaymin' && shayminSkyOn()) return 1;   // 🌸 变天空谢米 = 一次进化（属性 ×1.5）
   if (PET_WAVE_EVO[id]) return petWaveStage(id);
   if (PET_ITEM_EVO[id]) return petItemStage(id);
