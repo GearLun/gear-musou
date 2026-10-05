@@ -5082,7 +5082,7 @@ const PET_SPECIES = {
     skillW: [4, 3, 3]
   },
   /* 🐣 波克比（图鉴 175）：**辅助型**，自己不打人 —— 两招都是支援技（帮助 / 生命水滴），
-     走 PET_SKILLS.toge 那张表；这里的 shot/melee 只是兜底参数（正常路径用不到） */
+     走 `PET_SKILLS_V2.toge` 那张表；这里的 shot/melee 只是兜底参数（正常路径用不到） */
   toge: {
     key: 'toge', element: 'NORMAL', label: '波克比',
     scale: 1.67, keep: 200, walkSpd: 150,
@@ -5231,7 +5231,7 @@ function petSkillStage(id) {
   if (id === 'shaymin') return shayminLv() >= JIRACHI_TOP_LV ? 1 : 0;
   if (id === 'zeraora') return zeraoraLv() >= JIRACHI_TOP_LV ? 1 : 0;   // ⚡ 50 级学「等离子闪电拳」那一档
   if (id === 'toge') return p.lvl >= PET_EVO_LV[1] ? 2 : (p.lvl >= PET_EVO_LV[0] ? 1 : 0);
-  if (id === 'jirachi') return jirachiLv() >= JIRACHI_TOP_LV ? (PET_SKILLS.jirachi.length - 1) : 0;
+  if (id === 'jirachi') return jirachiLv() >= JIRACHI_TOP_LV ? (JIRACHI_SKILL_STAGES - 1) : 0;
   return petStageOf(id);
 }
 /* 🌸 天空谢米（492-1）：拿到奇物「葛拉西蒂亚花」且谢米在队伍里 → 形态换成 shaymin1
@@ -5659,16 +5659,16 @@ const PET_BLITZ_CD_MUL = 0.7;
      它们自己**不进化**（单形态，`PET_FORM[id]` 只有一个成员）→ 倍率直接乘进基础值里。
    · ⚠️ **只在开发者版能拿到**（用户要求「以下内容仅在开发者版更新」）：`legendOn()` = 开发者开关打开；
      正式版 `devSet()` 恒返回 0 → 拿不到，试验场面板里那行「🌟 神兽」也不会渲染，读档时还会把它们摘掉。
-   · 招式：**各有两招专属技能**（`PET_SKILLS_KYOGRE / _GROUDON / _RAYQUAZA`，数值都「直接引用已有并已修改过的技能」，
+   · 招式：**各有两招专属技能**（见 `PET_SKILLS_V2.kyogre / .groudon / .rayquaza`，数值都「直接引用已有并已修改过的技能」，
      见下面那一段技能表的注释）。
    ⚠️ 素材同目录下**带 `-0001` 后缀**的那一套（382/383/384 各一份）**是另一种形态**（不是闪光版，
       用户说明：暂时用不到、后续再安排）→ 生成器里**没有**引用它们，别顺手加进来。
    ============================================================ */
 const PET_LEGEND = ['kyogre', 'groudon', 'rayquaza'];
 function legendOn() { return devOnNow(); }   // 只有开发者版本（开发者开关打开）才拿得到
-const PET_LEGEND_MUL = 1.5 * 1.5 * 1.5;      // = 3.375「进化过三次」（1.5 就是 PET_EVO_STAT_MUL）
-const PET_LEGEND_HP = Math.round(60 * PET_LEGEND_MUL);    // 203 = 御三家基准生命 60 × 3.375
-const PET_LEGEND_DMG = Math.round(8 * PET_LEGEND_MUL);    // 27  = 御三家基准伤害 8 × 3.375
+const PET_LEGEND_MUL = 1.3 * 1.3 * 1.3;      // = 2.197「进化过三次」= PET_EVO_STAT_MUL³（⚠️ 手抄的：那个常量定义在后面，引用会踩 TDZ；冒烟 S51 会核对两者相等）
+const PET_LEGEND_HP = Math.round(60 * PET_LEGEND_MUL);    // 御三家基准生命 60 × 1.3³
+const PET_LEGEND_DMG = Math.round(8 * PET_LEGEND_MUL);    // 御三家基准伤害 8 × 1.3³
 /* ============================================================
    🌟 **原始回归**（奇物 · 训练家专属 · 第 25 波**必刷**）
    用户原话：「训练家职业在 25 波结束时，必定刷新新的专属奇物：原始回归！
@@ -5676,7 +5676,7 @@ const PET_LEGEND_DMG = Math.round(8 * PET_LEGEND_MUL);    // 27  = 御三家基�
    当玩家选择奇物时，神兽会进入原始回归形态 —— 素材中 -1 的编号就为他们原始回归后的模型和头像。
    原始回归后的神兽拥有新的技能和新的特性，并且宝可梦本身的攻击会提高 20%）」
    · 形态：`PET_PRIMAL` 把「物种 id」映射到**带 -1 编号素材**的形态 key（`kyogre1 / groudon1 / rayquaza1`，见 pet-build.js）
-   · 招式：换成 `PET_SKILLS_*_PRIMAL` 那套 ☆ 招式（挂在 `PET_SKILLS_FORM` 上，换形态即生效）
+   · 招式：换成 `PET_FORMSKILL_*_PRIMAL` 那套 ☆ 招式（V2 里挂在 `kyogre1 / groudon1 / rayquaza1` 三条形态记录上，换形态即生效）
    · 特性：**被动、不进技能表 → 面板里不可选**（始源之海 / 终结之地 / 德尔塔气流），每帧由 `tickPrimalAbilities()` 结算
    · 攻击：这一只造成的伤害 **×1.2**（`petPrimalMul`，在 `petHitDmg/petHitDmgBase` 里乘）
    ⚠️ 三只的图标是**素材图**（`PET_ITEM_IMG` 里的 RED_ORB / BLUE_ORB / GREEN_ORB），由 `artIcon()` 动态取。
@@ -6293,7 +6293,7 @@ const PET_SUMMON = {
     jet: { secs: 5, rest: 2, len: 300, w: 26, tick: 0.5, mul: 0.5, follow: 2.2 }   // 持续 5 秒 → 休息 2 秒
   },
   /* 🐣 波克比（图鉴编号 **175**）：**辅助宝可梦** —— 自己没有任何输出，
-     两招（帮助 / 生命水滴）都是给全队上状态的支援技，见 PET_SKILLS_TOGE */
+     两招（帮助 / 生命水滴）都是给全队上状态的支援技，见 `PET_SKILLS_V2.toge` */
   toge: {
     name: '波克比', element: 'NORMAL', icon: '🐣', scale: 1.67, r: 10, hp: 45, dmg: 1, spd: 240,
     range: 0, atkCd: 1, atkName: '帮助', support: 1
@@ -6314,7 +6314,7 @@ const PET_SUMMON = {
      它**不是捕捉 / 进化来的** —— 训练家专属质变「星之助战」把它加进队伍，而且
      **等级只跟质变层数走**（`jirachiLv()`：满 5 层 = 45 级的面板，见 `petLevelOf()`）→
      所以它的基础值写小一点，靠虚拟等级顶上去；属性 PSYCHIC（超能，正好用那套粉紫特效）。
-     招式：高速星星☆ / 生命水滴☆ / 破灭之愿（45 级解锁，见 PET_SKILLS_JIRACHI） */
+     招式：高速星星☆ / 生命水滴☆ / 破灭之愿（45 级解锁，见 `PET_SKILLS_V2.jirachi`） */
   jirachi: {
     name: '基拉祈', element: 'PSYCHIC', icon: '⭐', scale: 1.67, r: 11, hp: 60, dmg: 10, spd: 240,
     range: 860, atkCd: 1.7, atkName: '高速星星☆',
@@ -6364,7 +6364,7 @@ const PET_SUMMON = {
   },
   /* —— 🌟 神兽三只（**只在开发者版能拿到**，见 `PET_LEGEND` / `legendOn()`）——
      生命 / 伤害 = `PET_LEGEND_HP` / `PET_LEGEND_DMG`（= 一只「进化过三次」的宝可梦：御三家基准 ×3.375）。
-     三只都**不进化**（单形态），招式见 `PET_SKILLS_KYOGRE / PET_SKILLS_GROUDON / PET_SKILLS_RAYQUAZA`（各两招）。
+     三只都**不进化**（单形态），招式见 `PET_SKILLS_V2.kyogre / groudon / rayquaza`（各两招）。
      属性按原作：盖欧卡 水 · 固拉多 地面（本作新嵌了 GROUND 那套特效）· 烈空坐 龙。
      体型由各自的图集尺寸决定（`scale` 仍与其它宝可梦同款 1.67，但它们的帧本来就更大 → 看着更威猛）。 */
   kyogre: {
@@ -6405,7 +6405,7 @@ function petSkillTickMul(sk) { return (sk && sk.fixedTick ? 1 : PET_ATK_RATE) * 
    所以统一走这里兜底（缺 cd 当作 2 秒），并且冒烟里有一条「所有该有 cd 的招式 cd 必须 > 0」的断言。 */
 function petSkillCd(sk) { const c = +(sk && sk.cd); return (isFinite(c) && c > 0) ? c : 2; }
 /* ============================================================
-   🧢 每只宝可梦的**三段技能表**：PET_SKILLS[id][stage]（0 未进化 / 1 一段 / 2 二段）
+   🧢 每只宝可梦的**三段技能表**：`PET_SKILLS_V2[id].skills[stage]`（0 未进化 / 1 一段 / 2 二段 · 取值统一走 `petSkillBase()`）
    ⚠️ 目前**只有小火龙线**有「进化换招」（用户逐条点名的那一串）：
       抓击→劈开→地球上投 · 火苗→火焰轮→热风 · 龙息→喷射火焰 · 新学闪焰冲锋。
       🐸 妙蛙种子 / 💧 杰尼龟 两条线**保持最开始的两招不变**（藤鞭+飞叶快刀 / 火箭头锤+水枪），
@@ -6415,100 +6415,24 @@ function petSkillCd(sk) { const c = +(sk && sk.cd); return (isFinite(c) && c > 0
         `'aura'` 身周持续伤害 · `'dash'` 猛冲落地范围伤害
    ============================================================ */
 /* 🐸 妙蛙种子线 · 0 段（妙蛙种子）：最开始的两招 */
-const PET_SKILLS_BULBA = [
-  { id: 'whip', name: '藤鞭', icon: '🌿', kind: 'melee', cd: 1.5, range: 250, evo: 'powerwhip',
-    desc: '近身横扫一鞭（射程 ≈ 2 倍战士普攻）· ' + petCdText(1.5),
-    melee: { r: 250, arc: Math.PI * 0.95, mul: 1.2, fxK: 6.5, rot: -0.52 } },
-  { id: 'leaf', name: '飞叶快刀', icon: '🍃', kind: 'shot', cd: 1.7, range: 860, def: 1, evo: 'magicleaf',
-    desc: '一次甩出 5 片飞叶，会自动追踪敌人（默认 · 射程 860）· ' + petCdText(1.7),
-    shot: { n: 5, spread: 0.34, spd: 460, mul: 0.5, homing: 1, fxK: 1.5 } }
-];
 /* 🐸 1 段（妙蛙草）：藤鞭→强力鞭打（伤害/范围 +50% · 出手间隔 ×2/3）· 飞叶快刀→魔法叶（一次 8 片 · 伤害 +50% · 出手间隔 ×2/3）·
    新学 **能量球**（穿透绿球，像牌皇的蓝色穿透牌：**同一只敌人只吃一次**，伤害与魔法叶相同）
    ⚠️ cd 一律写成 `上一段 / 1.5` 的表达式 —— 手写四舍五入（0.67）会和「快 50%」的断言差 0.003 而被冒烟判红 */
-const PET_SKILLS_BULBA_1 = [
-  { id: 'powerwhip', name: '强力鞭打', icon: '🪢', kind: 'melee', cd: 1.5 / 1.5, range: 375, evo: 'frenzy',
-    desc: '藤鞭强化：范围 +50%（375）· 伤害 +50% · 出手间隔加快 50% · ' + petCdText(1.5 / 1.5),
-    melee: { r: 375, arc: Math.PI * 0.95, mul: 1.8, fxK: 7.5, rot: -0.52 } },
-  { id: 'magicleaf', name: '魔法叶', icon: '🍀', kind: 'shot', cd: 1.7 / 1.5, range: 860, evo: 'petal',
-    desc: '飞叶快刀强化：一次 8 片追踪叶片 · 伤害 +50% · 出手间隔加快 50% · ' + petCdText(1.7 / 1.5),
-    shot: { n: 8, spread: 0.26, spd: 480, mul: 0.75, homing: 1, fxK: 1.7 } },
-  { id: 'energyball', name: '能量球', icon: '🟢', kind: 'shot', cd: 1.7 / 1.5, range: 520, evo: 'energyballstar', orb: 1,
-    desc: '一颗穿透的绿色光球（不走叶片贴图 · 同牌皇的蓝色穿透牌）· 同一只敌人只吃一次 · 伤害是魔法叶的 `2 × 1.5` 倍（本轮再 ×1.5）· ' + petCdText(1.7 / 1.5),
-    shot: { n: 1, spread: 0, spd: 620, mul: 0.75 * 2 * 1.5, homing: 0, pierce: 1, orb: 1, orbR: 39, hitR: 24, fxK: 2.4 } }
-];
 /* 🐸 2 段（妙蛙花）：强力鞭打→疯狂植物（再 +50% 伤害/范围 · 间隔再快 50%）· 魔法叶→花瓣舞（**扇形 12 片**追踪叶片）·
    能量球→能量球⭐（**扇形同时 3 颗** · 伤害 +50%）· 新学 **日光束**（宽 200px 的贯穿光束，同光法师满级「术有专攻」） */
-const PET_SKILLS_BULBA_2 = [
-  { id: 'frenzy', name: '疯狂植物', icon: '🌳', kind: 'melee', cd: 1.5 / 1.5 / 1.5, range: 563,
-    desc: '强力鞭打强化：范围 +50%（562.5）· 伤害 +50% · 出手间隔加快 50% · ' + petCdText(1.5 / 1.5 / 1.5),
-    melee: { r: 562.5, arc: Math.PI * 0.95, mul: 2.7, fxK: 9, rot: -0.52 } },
-  { id: 'petal', name: '花瓣舞', icon: '🌸', kind: 'shot', cd: 1.7 / 1.5 / 1.5, range: 860,
-    desc: '魔法叶强化：扇形一次 12 片追踪花瓣 · 伤害 +50% · 出手间隔加快 50% · ' + petCdText(1.7 / 1.5 / 1.5),
-    shot: { n: 12, spread: 0.13, spd: 500, mul: 1.125, homing: 1, fxK: 2 } },
-  { id: 'energyballstar', name: '能量球☆', icon: '💚', kind: 'shot', cd: 1.7 / 1.5 / 1.5, range: 520, orb: 1,
-    desc: '能量球强化：扇形同时发射 3 颗穿透光球 · 伤害 +50%（能量球本轮再 ×1.5 → 这一招也跟着增强）· ' + petCdText(1.7 / 1.5 / 1.5),
-    shot: { n: 3, spread: 0.22, spd: 620, mul: 0.75 * 2 * 1.5 * 1.5, homing: 0, pierce: 1, orb: 1, orbR: 39, hitR: 24, fxK: 2.8 } },
-  /* ☀️ 日光束：**和光法师的「术有专攻」光炮一模一样的实现** —— 从自己射出一条 200px 宽的贯穿光柱，
-     瞬间对线上的敌人各结算**一次高额伤害**（不是持续喷），撞墙反射一次；只是颜色是绿的、由宝可梦来放。
-     ⚠️ 长度别写成光法师那种「横跨整屏」（hypot(W,H)×1.35）：那样光柱永远顶到最远的墙，而 3200×1800 的场地
-     远大于 1280×720 的视野 → 反弹点在屏幕外，加上垂直撞墙时折返段与去程**完全共线**，玩家会以为「根本没反弹」。
-     760px = 略大于半个屏幕宽：撞墙一定发生在眼前（看得见折角 + 撞墙闪光），没墙时就是一根利落的短光柱。 */
-  { id: 'solbeam', name: '日光束', icon: '☀️', kind: 'beam', cd: 1.2, range: 900, fxEl: 'GRASS',
-    desc: '一发光炮（与光法师满级「术有专攻」同款：200px 宽的贯穿光束 · 瞬间一次高额伤害 · 撞墙折返一次 · 本轮伤害 +50%）· ' + petCdText(1.2),
-    beam: { w: 200, len: 760, mul: 3.0 * 1.5 } }
-];
 /* 💧 杰尼龟线 · 0 段（杰尼龟）：最开始的两招 */
-const PET_SKILLS_SQUIRT = [
-  { id: 'slam', name: '火箭头锤', icon: '🚀', kind: 'slam', cd: 2.2, range: 340, evo: 'spin',
-    desc: '跳起来砸向前方一小片（半径 ≈ Boss 泰山压顶的一半）· ' + petCdText(2.2),
-    slam: { r: 105, mul: 1.5, air: 0.42, land: 0.26, dash: 78, jumpH: 34, fxK: 5 } },
-  { id: 'jet', name: '水枪', icon: '💧', kind: 'jet', range: 320, def: 1, evo: 'bubble',
-    desc: '连喷 5 秒 / 歇 2 秒 · ' + petTickText(0.5),
-    jet: { secs: 5, rest: 2, len: 300, w: 26, tick: 0.5, mul: 0.5 } }
-];
 /* 💧 1 段（卡咪龟）：水枪→泡沫光线（射程 +35% · 伤害 +50% · 休息减半）· 火箭头锤→高速旋转 · 新学缩入壳中 */
-const PET_SKILLS_SQUIRT_1 = [
-  { id: 'bubble', name: '泡沫光线', icon: '🫧', kind: 'jet', range: 320 * 1.35, evo: 'hydropump',
-    desc: '水枪强化：射程 +35%（' + Math.round(320 * 1.35) + '）· 伤害 +50% · 休息时间减半（1 秒）· ' + petTickText(0.5),
-    jet: { secs: 5, rest: 1, len: 300 * 1.35, w: 26, tick: 0.5, mul: 0.75 } },
-  { id: 'spin', name: '高速旋转', icon: '🌀', kind: 'spin', cd: 2.0, range: 900,
-    desc: '把卡咪龟自己发射出去：撞到的敌人各吃一次伤害 · 撞墙无限反弹 · 飞满 ' + Math.round(320 * 1.35 * 2) + 'px 后飞回训练家身边 · ' + petCdText(2.0),
-    spin: { dist: 320 * 1.35 * 2, spd: 900, r: 62, mul: 2.0 } },
-  { id: 'withdraw', name: '缩入壳中', icon: '🛡️', kind: 'rest',
-    desc: '不攻击：每秒回复自身 20% 最大生命，并给训练家 +5 点护盾',
-    rest: { tick: 1, heal: 0.2, shield: 5 } }
-];
 /* 💧 2 段（水箭龟）：泡沫光线→水炮（射程再 +35% · 伤害 +50% · 取消休息）· 高速旋转→冲浪 · 缩入壳中→破壳 · 新学加农水炮 */
-const PET_SKILLS_SQUIRT_2 = [
-  { id: 'hydropump', name: '水炮', icon: '🚿', kind: 'jet', range: 320 * 1.35 * 1.35,
-    desc: '泡沫光线强化：射程 +35%（' + Math.round(320 * 1.35 * 1.35) + '）· 伤害 +50%（水箭龟全技能再 ×1.5）· 取消休息（一直喷）· ' + petTickText(0.5),
-    jet: { secs: 5, rest: 0, len: 300 * 1.35 * 1.35, w: 30, tick: 0.5, mul: 1.125 * 1.5 } },
-  { id: 'surf', name: '冲浪', icon: '🌊', kind: 'aura', range: 125, spdMul: 2.0,
-    desc: '身周掀起巨浪（半径 125 = 1 级熔岩结界的范围）：碰到就结算一次、之后每 0.5 秒 234 点并灼烧（本轮伤害降到原来的 1/2）· 移速 +100%；电脑端会像骑士那样朝鼠标指针方向持续冲刺（手机端按摇杆方向冲）',
-    aura: { r: 125, tick: 0.5, fxK: 5 } },
-  { id: 'shellbreak', name: '破壳', icon: '🥚', kind: 'shell',
-    desc: '不自动攻击：训练家每次闪避时破壳 —— 自损一半生命，换来 30 秒 伤害 +50% · 移速 +80%（5 秒 CD · 不叠加、只刷新时间）',
-    shell: { cd: 5, dur: 30, hpCost: 0.5, dmgMul: 1.5, spdMul: 1.8 } },
-  { id: 'cannon', name: '加农水炮', icon: '💦', kind: 'shot', cd: 2.4, range: 620,
-    desc: '巨大的水炮（子弹伤害再翻倍 · 水箭龟全技能基础伤害 ×1.5）：命中处留下大水坑，坑内敌人每秒受伤并减速 50% · ' + petCdText(2.4),
-    shot: { n: 1, spread: 0, spd: 1120, mul: 1.5 * 1.5 * 2, homing: 0, fxK: 3.2,
-            pool: { r: 300, life: 8, tick: 1, mul: 1.0 * 1.5, slowK: 0.5, slowT: 0.6 } } }
-];
 /* 🐣 波克比（图鉴编号 175）的两招 —— **辅助技**（`kind:'help'` / `kind:'heal'`）：
    · 自己不掉血、也不打人，全部效果都作用在「训练家的宝可梦队伍」上
    · ⚠️ 用户要求「每个技能的使用间隔都为 1 秒」→ `cd: 1` 且标 `fixedTick: 1`
      （**不吃 PET_ATK_RATE ×2 那道基础频率**，否则实际会变成 0.5 秒一次；只有无双号令的 ×1.5 还算数）
    · `support: 1` = 冷却好了就放，**不需要敌人**（见 updatePetAlly 的支援技分支） */
-const PET_SKILLS_TOGE = [
-  { id: 'help', name: '帮助', icon: '🤝', kind: 'help', cd: 1, fixedTick: 1, range: 0, def: 1, support: 1, evo: 'helpstar',
-    desc: '使用后，全部宝可梦下次攻击的伤害 +30% · ' + petCdText(1, 1),
-    help: { mul: 1.3 } },
-  { id: 'lifedew', name: '生命水滴', icon: '💧', kind: 'heal', cd: 1, fixedTick: 1, range: 0, support: 1, evo: 'lifedewstar',
-    desc: '所有宝可梦立刻回复 10% 最大生命 · ' + petCdText(1, 1),
-    heal: { pct: 0.1 } }
-];
 /* 🤝 帮助☆（波克比 **20 级**自动换上来）：伤害增幅 **30% → 50%**（用户要求两档都下调） */
+/* 💧 生命水滴（波克比 0 段第二招 · 20 级那一档还留着它）：所有宝可梦立刻回复 10% 最大生命 */
+const PET_SKILL_LIFEDEW = { id: 'lifedew', name: '生命水滴', icon: '💧', kind: 'heal', cd: 1, fixedTick: 1, range: 0, support: 1, evo: 'lifedewstar',
+    desc: '所有宝可梦立刻回复 10% 最大生命 · ' + petCdText(1, 1),
+    heal: { pct: 0.1 } };
 const PET_SKILL_HELP_STAR = {
   id: 'helpstar', name: '帮助☆', icon: '🤝', kind: 'help', cd: 1, fixedTick: 1, range: 0, support: 1,
   desc: '使用后，全部宝可梦下次攻击的伤害 +50%（帮助的强化版）· ' + petCdText(1, 1),
@@ -6523,8 +6447,8 @@ const PET_SKILL_LIFEDEW_STAR = {
 };
 /* 🐣 波克比**不进化，但 20 / 30 级换招**（用户逐条点名）：20 级 帮助→帮助☆ · 30 级 生命水滴→生命水滴☆
    → 段位由 `petSkillStage('toge')` 按角色等级给（PET_FORM.toge 只有一段，不能靠进化段位） */
-const PET_SKILLS_TOGE_1 = [PET_SKILL_HELP_STAR, PET_SKILLS_TOGE[1]];        // 20 级：帮助☆ + 生命水滴
-const PET_SKILLS_TOGE_2 = [PET_SKILL_HELP_STAR, PET_SKILL_LIFEDEW_STAR];    // 30 级：帮助☆ + 生命水滴☆
+        // 20 级：帮助☆ + 生命水滴
+    // 30 级：帮助☆ + 生命水滴☆
 /* ⭐ 基拉祈（图鉴 385，训练家质变「星之助战」招来）：三招 —— 用户逐条点名
    · 高速星星☆ = 伊布的「高速星星」但**一次 8 颗 · 伤害翻三倍**（同基础伤害 × mul 0.5×3）
    · 生命水滴☆ = 与波克比 30 级同一份定义（20%/秒 + 跟随）
@@ -6555,7 +6479,7 @@ const PET_SKILL_DOOMWISH_STAR = {
 };
 /* 🌸 谢米（#492 · 幻之宝可梦）：**目前只有占位技「飞叶快刀」**（用户说明：后续再补专属技能）——
    直接引用妙蛙种子那一份定义（飞叶快刀 = 一次 5 片追踪叶片 · 伤害与出手间隔同款）。
-   ⚠️ 等主人给了新技能表，把这两行换成 PET_SKILLS_SHAYMIN_1 / _2 即可（50 级那一档走 petSkillStage）。 */
+   ⚠️ 50 级那一档（种子闪光）走 `petSkillStage()`；两张表都在文件末尾的 `PET_SKILLS_V2.shaymin` 里。 */
 /* 🌿 **种子闪光**（谢米 50 级解锁 · 用户点名）：正前方 **60° 扇形**里陆续甩出 **5 道刀波**，
    每道 = 谢米攻击力 ×4 · 出手间隔 1 秒；**天空谢米**换成 ☆ 版（**8 道** · 每道 **×6**）。
    ⚠️ 「随机陆续」用 `spread`（扇形内铺开）+ `gap`（一道道甩，不是同帧齐射）表达。 */
@@ -6588,12 +6512,12 @@ const PET_SKILL_SEEDFLARE_STAR = {
   seed: { n: 8, arc: Math.PI / 3, gap: 0.07, mul: 6, spd: 640 * 1.5, r: 36, fxK: 3 }   // 🌿 同上（天空谢米）
 };
 /* 常驻两招：**能量球☆**（直接引用妙蛙花那一份）+ **帮助☆**（直接引用波克比那一份） */
-const PET_SKILL_ENERGYBALL_STAR_REF = PET_SKILLS_BULBA_2.filter(x => x.id === 'energyballstar')[0] || PET_SKILLS_BULBA_2[0];   // 能量球☆（妙蛙花那一份）
+const PET_SKILL_ENERGYBALL_STAR_REF = { id: 'energyballstar', name: '能量球☆', icon: '💚', kind: 'shot', cd: 1.7 / 1.5 / 1.5, range: 520, orb: 1,
+    desc: '能量球强化：扇形同时发射 3 颗穿透光球 · 伤害 +50%（能量球本轮再 ×1.5 → 这一招也跟着增强）· ' + petCdText(1.7 / 1.5 / 1.5),
+    shot: { n: 3, spread: 0.22, spd: 620, mul: 0.75 * 2 * 1.5 * 1.5, homing: 0, pierce: 1, orb: 1, orbR: 39, hitR: 24, fxK: 2.8 } };   // 能量球☆（妙蛙花那一份 · 谢米共用）
 const PET_SKILL_HELP_STAR_REF = PET_SKILL_HELP_STAR;   // 帮助☆（波克比那一份）
-const PET_SKILLS_SHAYMIN = [PET_SKILL_ENERGYBALL_STAR_REF, PET_SKILL_HELP_STAR_REF];
-const PET_SKILLS_SHAYMIN_2 = [PET_SKILL_ENERGYBALL_STAR_REF, PET_SKILL_HELP_STAR_REF, PET_SKILL_SEEDFLARE];
-const PET_SKILLS_JIRACHI = [PET_SKILL_SWIFT_STAR, PET_SKILL_LIFEDEW_STAR];                  // 未满 50 级
-const PET_SKILLS_JIRACHI_2 = [PET_SKILL_SWIFT_STAR, PET_SKILL_LIFEDEW_STAR, PET_SKILL_DOOMWISH];   // 50 级：解锁破灭之愿
+                  // 未满 50 级
+   // 50 级：解锁破灭之愿
 /* ⚡ 电光一闪（伊布 / 多龙梅西亚共用同一份定义 —— 用户说多龙梅西亚的这招「和伊布一样」）：
    照搬 6~10 波成年哈吉咪的索敌扑击（950px/s 冲过去撞一下） */
 const PET_SKILL_QUICKATTACK = {
@@ -6602,12 +6526,6 @@ const PET_SKILL_QUICKATTACK = {
   strike: { spd: 950, mul: 2.0, r: 28 }
 };
 /* 🐶 伊布（图鉴 133）的两招（第 15 波捕捉）：高速星星 = 完全照搬「飞叶快刀」· 电光一闪 */
-const PET_SKILLS_EEVEE = [
-  { id: 'swift', name: '高速星星', icon: '⭐', kind: 'shot', cd: 1.7, range: 860, def: 1,
-    desc: '一次射出 5 颗自动追踪的星星（伤害与出手间隔同「飞叶快刀」）· ' + petCdText(1.7),
-    shot: { n: 5, spread: 0.34, spd: 460, mul: 0.5, homing: 1, fxK: 1.5, star: 1 } },
-  PET_SKILL_QUICKATTACK
-];
 /* 🥊 **铁哑铃线（#374 / #375 / #376 · 钢）** —— 用户逐条点名（2026-10）：
    大器晚成 · **第 11 波与迷你龙 / 多龙梅西亚三选一** · 波次进化（20 / 25 波各一段）。
    · 铁哑铃 **猛撞**：蓄力 0.5 秒 → 冲出去，**沿途撞到的敌人各吃 3× 宝可梦攻击**（`path: 1` 去重）。
@@ -6640,15 +6558,11 @@ const PET_SKILL_ZENHEADBUTT = {
   id: 'zenheadbutt', name: '意念头锤', icon: '🧠', kind: 'dash', cd: 3.0, range: 520, fxEl: 'PSYCHIC', fxLife: 0.5,
   desc: '同「龙之俯冲☆」连冲三段（起手蓄力 0.5 秒 · 每段 4× 宝可梦攻击），三段冲完**再跳起来重压**一圈：'
     + '半径 ' + Math.round(150 * 1.5 * 1.5) + '（= 破灭之愿☆ 的大小）· 重压伤害 6× 宝可梦攻击 · ' + petCdText(3.0),
-  dash: { dist: 320, spd: 2400, r: 70, mul: 2, path: 1, times: 3, charge: 0.5,   // 冲刺：攻击力 ×2（用户指定） fxK: 4,
-    slam: { r: 150 * 1.5 * 1.5, mul: 3, air: 0.5, jumpH: 52, fxK: 8 } }   // 下砸：攻击力 ×3（用户指定）
+  dash: { dist: 320, spd: 2400, r: 70, mul: 4, path: 1, times: 3, charge: 0.5, fxK: 4,   // 冲刺：攻击力 ×4（用户指定）
+    slam: { r: 150 * 1.5 * 1.5, mul: 6, air: 0.5, jumpH: 52, fxK: 8 } }   // 下砸：攻击力 ×6（用户指定）   // 下砸：攻击力 ×3（用户指定）
 };
 
-const PET_SKILLS_BELDUM = [PET_SKILL_TAKEDOWN];
-const PET_SKILLS_BELDUM_1 = [PET_SKILL_TAKEDOWN_STAR, PET_SKILL_BULLETPUNCH];
-const PET_SKILLS_BELDUM_2 = [PET_SKILL_ZENHEADBUTT, PET_SKILL_BULLETPUNCH_STAR];
 /* 🐉 多龙梅西亚（图鉴 885，**第 11 波**捕捉 · 大器晚成）：**只有电光一闪**（和伊布同一招） */
-const PET_SKILLS_DREEPY = [PET_SKILL_QUICKATTACK];
 /* ============================================================
    🌟 **神兽三只的专属招式**（用户逐条点名；数值口径：**「直接引用已有（并已按本轮要求修改过的）技能伤害」**）
    ⚠️ 用户在此之前先说「暂时都用高速星星测试」，随后给了这一整套 → 高速星星那套已经删掉（别再加回来）。
@@ -6688,7 +6602,7 @@ const PET_SKILL_EARTHQUAKE_STAR = {
   id: 'earthquakestar', name: '地震☆', icon: '🌋', kind: 'aura', range: 305 * 1.5 * 1.5, fxEl: 'GROUND', fxLife: 0.5,
   desc: '身周大地震裂（同热风的实现）：碰到就结算一次、之后每 0.5 秒一次 · 范围再 ×1.5（半径 ' + Math.round(305 * 1.5 * 1.5) + '）· '
     + '伤害 +20% · 不会烧伤（只掉血）',
-  aura: { r: 305 * 1.5 * 1.5, tick: 0.5, dmg: 234 * 1.2, fxK: 5, noBurn: 1 }
+  aura: { r: 305 * 1.5 * 1.5, tick: 0.5, mul: 1.2, fxK: 5, noBurn: 1 }
 };
 /* 🦈 **圆陆鲨线（#443 / #444 / #445 · 地面）** —— 用户逐条点名（2026-10）：
    大器晚成 · **第 11 波与迷你龙 / 多龙梅西亚 / 铁哑铃一起选（四选一）** · 波次进化（20 / 25 波）。
@@ -6721,7 +6635,7 @@ const PET_SKILL_EQ_STAR = {
   id: 'eqstar', name: '地震☆', icon: '💥', kind: 'aura', range: PET_SKILL_EARTHQUAKE_STAR.range, fxEl: 'GROUND', fxLife: 0.5,
   desc: '和固拉多的「地震☆」同款：范围 ' + Math.round(305 * 1.5 * 1.5) + ' · 每 0.5 秒结算 · 不会烧伤 · **伤害下调 30%**',
   /* ⚠️ 克隆一份（别直接引用固拉多那个对象，否则改这里会把固拉多本体一起改掉）· 伤害 = 地震⭐ × 0.7 */
-  aura: Object.assign({}, PET_SKILL_EARTHQUAKE_STAR.aura, { dmg: PET_SKILL_EARTHQUAKE_STAR.aura.dmg * 0.7 })
+  aura: Object.assign({}, PET_SKILL_EARTHQUAKE_STAR.aura, { mul: PET_SKILL_EARTHQUAKE_STAR.aura.mul * 0.7 })
 };
 /* 🐲 二连劈☆：同龙爪，但**一次出手打两下**（间隔 0.2 秒）· 每下 ×3 */
 const PET_SKILL_DUALCHOP_STAR = {
@@ -6729,9 +6643,6 @@ const PET_SKILL_DUALCHOP_STAR = {
   desc: '龙爪强化：一次出手连劈两下（间隔 0.2 秒）· 每下 宝可梦攻击力 ×3 · 特效同龙爪（强力鞭打那套 · 蓝灰）· ' + petCdText(1.5 / 1.5),
   melee: { r: 375, arc: Math.PI * 0.95, mul: 3, hits: 2, gap: 0.2, fxK: 7.5, rot: -0.52, fxTint: '#9fb6c8' }
 };
-const PET_SKILLS_GIBLE = [PET_SKILL_STOMP];
-const PET_SKILLS_GIBLE_1 = [PET_SKILL_EARTHQUAKE, PET_SKILL_DRAGONCLAW];
-const PET_SKILLS_GIBLE_2 = [PET_SKILL_EQ_STAR, PET_SKILL_DUALCHOP_STAR];
 
 /* 🐉 画龙点睛（烈空坐）：**和喷火龙的闪焰冲锋同一套**（朝指针猛冲 472px → 落点 315 半径范围伤害），
    伤害直接引用**本轮翻倍后**的闪焰冲锋（`6.0 * 2` = 12.0），出手间隔也按用户要求**降到 70%**（`cd: 3.0 * 0.7`）。
@@ -6743,7 +6654,7 @@ const PET_SKILL_DRAGONASCENT = {
   desc: '和喷火龙的「闪焰冲锋」同一套（朝指针方向猛冲 472px · 落点 315 半径范围伤害 · 伤害同为翻倍后的 ' + (6.0 * 2) + ' 倍）· 会自动出手 · ' + petCdText(3.0 * 0.7),
   dash: { dist: 472, spd: 3375, r: 315, mul: 6.0 * 2, fxK: 6 }
 };
-/* 三只神兽的技能表见下面（`PET_SKILLS_KYOGRE / _GROUDON / _RAYQUAZA`）——
+/* 三只神兽的技能表见文件末尾的 `PET_SKILLS_V2`（`kyogre / groudon / rayquaza`）——
    ⚠️ 那三行必须放在 `PET_SKILL_DRAGONRUSH_STAR` **之后**（烈空坐第二招直接引用它），
       写成 `const` 会有 TDZ：在它之前引用会 `ReferenceError`（本轮真踩过）。 */
 /* ⚡ 急速折返（多龙奇）：电光一闪的强化版 —— **撞完立刻回到训练家身边待 0.5 秒**，然后再冲下一个；
@@ -6785,21 +6696,14 @@ const PET_SKILL_DRAGONARROW = {
   shot: { n: 2, spread: 0.5, off: 36, spd: 480 * 2, mul: 1.0 * 2 * 2, homing: 1, homingTurn: 12 * 2, pierce: 1, life: 6,
           mini: 1, miniForm: 'dreepy', miniK: 0.46 * 2, fxK: 1.6 }
 };
-const PET_SKILLS_DREEPY_1 = [PET_SKILL_UTURN, PET_SKILL_SHADOWBALL];
-const PET_SKILLS_DREEPY_2 = [PET_SKILL_DRAGONARROW, PET_SKILL_SHADOWBALL_STAR];
 /* 🐉 迷你龙（图鉴 147，**第 11 波**捕捉 · 大器晚成）：**只有龙卷风**（本轮用户要求伤害翻到 3 倍：5 → 15） */
-const PET_SKILLS_DRATINI = [
-  { id: 'tornado', name: '龙卷风', icon: '🌪️', kind: 'tornado', cd: 2.6, range: 520, def: 1, evo: 'tornadostar',
-    desc: '在身前放出一道持续 3 秒的龙卷风：一边缓慢向前移动、一边每 0.5 秒对范围内的敌人造成 15 点伤害（本轮翻到 3 倍）· ' + petCdText(2.6),
-    tornado: { life: 3, spd: 70, r: 95, tick: 0.5, dist: 150 } }
-];
 /* 🌀 龙卷风⭐（哈克龙）：**存在时间延长 1 秒**（3 → 4）· **伤害仍是龙卷风的 3 倍**（15 → 45）
    ⚠️ 这两条数值是**成对的**：龙卷风本轮翻到 3 倍（5 → 15），这一份也跟着 ×3 才不会出现
       「进化了伤害反而没变」；改一个必须同时改另一个（描述里也写着「伤害翻 3 倍」） */
 const PET_SKILL_TORNADO_STAR = {
   id: 'tornadostar', name: '龙卷风☆', icon: '🌀', kind: 'tornado', cd: 2.6, range: 520, evo: 'meteor',
   desc: '龙卷风强化：存在时间延长 1 秒（4 秒）· 伤害是龙卷风的 3 倍（每 0.5 秒 45 点）· ' + petCdText(2.6),
-  tornado: { life: 4, spd: 70, r: 95, tick: 0.5, flat: 5 * 3 * 3, dist: 150 }
+  tornado: { life: 4, spd: 70, r: 95, tick: 0.5, mul: 0.5, flat: 5 * 3 * 3, dist: 150 }
 };
 /* 🐲 龙之俯冲（哈克龙）：**和炭小侍的蓄能焰袭同一套逻辑**（冲刺 320px + 沿途撞伤），但**伤害翻倍**（1.5 → 3.0） */
 const PET_SKILL_DRAGONRUSH = {
@@ -6830,21 +6734,16 @@ const PET_SKILL_THUNDERPUNCH_STAR = {
   dash: { dist: 320, spd: 2400, r: 70, mul: 6.0, fxK: 4, path: 1, times: 3 }
 };
 
-const PET_SKILLS_DRATINI_1 = [PET_SKILL_TORNADO_STAR, PET_SKILL_DRAGONRUSH];
-const PET_SKILLS_DRATINI_2 = [PET_SKILL_METEOR, PET_SKILL_DRAGONRUSH_STAR];
 /* 🌟 **神兽三只的技能表**（各两招，第一招是默认）：放在这里是因为烈空坐第二招**直接引用快龙的「龙之俯冲☆」**
    同一份定义（用户：「龙之俯冲☆（快龙的龙之俯冲☆）」—— 共用同一个技能对象/id 是故意的，别抄成两份）。
    ⚠️ 这三行只能放在 `PET_SKILL_DRAGONRUSH_STAR` 之后（`const` 的 TDZ，本轮踩过）。 */
-const PET_SKILLS_KYOGRE = [PET_SKILL_ORIGINPULSE, PET_SKILL_THUNDER_STAR];
-const PET_SKILLS_GROUDON = [PET_SKILL_PRECIPICE, PET_SKILL_EARTHQUAKE_STAR];
-const PET_SKILLS_RAYQUAZA = [PET_SKILL_DRAGONASCENT, PET_SKILL_DRAGONRUSH_STAR];
 /* ============================================================
    🌟 **原始回归形态的 ☆ 招式**（奇物「原始回归」到手后自动换这一套）
    用户逐条点名（数值一律写成表达式）：
      · 🌊 **根源波动☆**：光束伤害 **+50%**（`3.0 * 1.5 * 1.5`）· **从身体三个地方往一个点射出光束** · 落点**只生成一个水坑**
      · 🗡️ **断崖之剑☆**：地刺数量 **5 → 8** · 攻击间隔缩短至**原本的 50%**（`4.0 * 0.7 / 2`）
      · 🐉 **画龙点睛☆**：攻击间隔 **×0.7**（`3.0 * 0.7 * 0.7`）· 伤害 **+30%**（`6.0 * 2 * 1.3`）· 落点范围 **×2**（`315 * 2`）
-   ⚠️ 三张表都挂在 `PET_SKILLS_FORM` 上（按**形态 key** 查）→ `petFormKey()` 一换成 `kyogre1` 等，
+   ⚠️ 三张表在 `PET_SKILLS_V2` 里按**形态 key**（`kyogre1` 等）查 → `petFormKey()` 一换形态，
       `petSkillList()` 立刻给出这一套（`petEvoSucc` 找不到旧 id 时会回落到 `def: 1` 的那一招）。 */
 const PET_SKILL_ORIGINPULSE_STAR = {
   id: 'originpulse2', name: '根源波动☆', icon: '🌊', kind: 'beam', cd: 1.2, range: 900, def: 1, fxEl: 'WATER',
@@ -6866,112 +6765,33 @@ const PET_SKILL_DRAGONASCENT_STAR = {
   dash: { dist: 472, spd: 3375, r: 315 * 2, mul: 6.0 * 2 * 1.3, fxK: 6 }
 };
 /* 🌟 原始回归形态的技能表：**第一招 = ☆ 招式（默认）**，第二招沿用原形态的第二招 */
-const PET_SKILLS_KYOGRE_PRIMAL = [PET_SKILL_ORIGINPULSE_STAR, PET_SKILL_THUNDER_STAR];
-const PET_SKILLS_GROUDON_PRIMAL = [PET_SKILL_PRECIPICE_STAR, PET_SKILL_EARTHQUAKE_STAR];
-const PET_SKILLS_RAYQUAZA_PRIMAL = [PET_SKILL_DRAGONASCENT_STAR, PET_SKILL_DRAGONRUSH_STAR];
 /* 🔥 炭小侍（图鉴 935）的两招（第 10 波捕捉）：
    · **火苗**：完全照搬小火龙的火苗（伤害 / 冷却 / 爆炸范围 / 「没敌人也照打」都一样，只是换个人放）
    · **蓄能焰袭**：朝指针方向冲刺，**沿途撞到的敌人各吃一次**（`dash.path`），冲刺距离 ≈ 水枪射程（320） */
-const PET_SKILLS_CHARCADET = [
-  { id: 'ember', name: '火苗', icon: '🔥', kind: 'shot', cd: 1.6, range: 400, always: 1, def: 1,
-    desc: '射出一颗火球，命中即爆炸（范围伤害）· 没有敌人也照打 · ' + petCdText(1.6),
-    shot: { n: 1, spread: 0, spd: 860, mul: 1, homing: 0, fxK: 1.1, boomR: 86, boomMul: 0.8 } },
-  { id: 'flamecharge', name: '蓄能焰袭', icon: '☄️', kind: 'dash', cd: 2.6, range: 520,
-    desc: '朝指针方向冲刺 320px（≈ 水枪射程），沿途撞到的敌人各吃一次伤害 · ' + petCdText(2.6),
-    dash: { dist: 320, spd: 2400, r: 70, mul: 1.5, fxK: 4, path: 1 } }
-];
-const PET_SKILLS = {
-  /* 🐸 妙蛙种子线：藤鞭→强力鞭打→疯狂植物 · 飞叶快刀→魔法叶→花瓣舞 · 能量球→能量球⭐ · 新学日光束 */
-  bulba: [PET_SKILLS_BULBA, PET_SKILLS_BULBA_1, PET_SKILLS_BULBA_2],  /* 🔥 小火龙线：抓击 → 劈开 → 地球上投 · 火苗 → 火焰轮 → 热风 · 龙息 → 喷射火焰 · 闪焰冲锋 */
-  charm: [
-    [
-      { id: 'claw', name: '抓击', icon: '🐾', kind: 'melee', cd: 1.3, range: 240, evo: 'slash',
-        desc: '近身一爪（射程 ≈ 2 倍战士普攻）· ' + petCdText(1.3),
-        melee: { r: 240, arc: 1.62, mul: 1.2, fxK: 3.5, rot: 0 } },
-      { id: 'spark', name: '火苗', icon: '🔥', kind: 'shot', cd: 1.6, range: 400, evo: 'wheel', def: 1, always: 1,
-        desc: '一颗火球，命中即炸开 86px 范围伤害（默认 · 没有敌人也照打）· ' + petCdText(1.6),
-        shot: { n: 1, spread: 0, spd: 860, mul: 1, homing: 0, fxK: 1.1, boomR: 86, boomMul: 0.8 } }
-    ],
-    [
-      { id: 'slash', name: '劈开', icon: '⚔️', kind: 'melee', cd: 0.91, range: 360, evo: 'toss',
-        desc: '抓击强化：范围 +50% · 伤害 +50% · 出手间隔 −30% · ' + petCdText(0.91),
-        melee: { r: 360, arc: 1.62, mul: 1.8, fxK: 4.2, rot: 0 } },
-      { id: 'wheel', name: '火焰轮', icon: '🎡', kind: 'shot', cd: 1.12, range: 440, evo: 'heat', always: 1,
-        desc: '火苗强化：伤害 +50% · 爆炸范围 +50% · 出手间隔 −30%（没有敌人也照打）· ' + petCdText(1.12),
-        shot: { n: 1, spread: 0, spd: 860, mul: 1.5, homing: 0, fxK: 1.3, boomR: 129, boomMul: 1.2 } },
-      { id: 'breath', name: '龙息', icon: '🐉', kind: 'jet', range: 380, fixedTick: 1, fxEl: 'DRAGON',
-        desc: '一道龙息：每 0.5 秒 12 点伤害，命中减速 50%（类似水法师 · 喷 4 秒歇 0.6 秒）',
-        jet: { secs: 4, rest: 0.6, len: 320, w: 26, tick: 0.5, slowK: 0.5, slowT: 1.2 } }
-    ],
-    [
-      { id: 'toss', name: '地球上投', icon: '🌍', kind: 'slam', cd: 0.87, range: 460,
-        desc: '劈开强化：跳砸落点半径 ×2（210px）· 伤害 ×4（= 火箭头锤 ×8 · 本轮翻倍） · 出手间隔 −2/3 · ' + petCdText(0.87),
-        slam: { r: 210, mul: 6.0 * 2, air: 0.42, land: 0.26, dash: 84, jumpH: 40, fxK: 6 } },
-      { id: 'heat', name: '热风', icon: '🌡️', kind: 'aura', range: 305 * 1.5, fxLife: 0.5,
-        desc: '身周热风：每 0.5 秒 234 点（熔岩结界满级 18 倍）· 范围再 ×1.5（半径 ' + Math.round(305 * 1.5) + '）',
-        aura: { r: 305 * 1.5, tick: 0.5, fxK: 5 } },
-      { id: 'flame', name: '喷射火焰', icon: '☄️', kind: 'jet', range: 480,
-        desc: '龙息强化：伤害 ×3 · 距离再 ×1.2（= 水枪的 1.8 倍）· 不休息',
-        jet: { secs: 5, rest: 0, len: 540, w: 30, tick: 0.5, mul: 1.5 } },
-      { id: 'blitz', name: '闪焰冲锋', icon: '🏹', kind: 'dash', range: 520, manual: 1, fxLife: 0.5,
-        desc: '手动技：骑乘时按「闪避键」朝指针方向猛冲（距离 = 浪客一闪 ×0.7 · 落地范围 ×1.5）· 伤害本轮翻倍（12.0）',
-        dash: { dist: 472, spd: 3375, r: 315, mul: 6.0 * 2, fxK: 6 } }
-    ]
-  ],
-  /* 💧 杰尼龟线：水枪→泡沫光线→水炮 · 火箭头锤→高速旋转→冲浪 · 缩入壳中→破壳 · 新学加农水炮 */
-  squirt: [PET_SKILLS_SQUIRT, PET_SKILLS_SQUIRT_1, PET_SKILLS_SQUIRT_2],
-  /* 🐣 波克比（#175）：**不进化，但 20 / 30 级换招**（帮助→帮助☆ · 生命水滴→生命水滴☆）——
-     段位由 `petSkillStage('toge')` 按角色等级给（PET_FORM.toge 只有一段） */
-  toge: [PET_SKILLS_TOGE, PET_SKILLS_TOGE_1, PET_SKILLS_TOGE_2],
-  /* 🐶 伊布（#133）· 🔥 炭小侍（#935）：第 15 波捕捉，都只有一段 */
-  eevee: [PET_SKILLS_EEVEE, PET_SKILLS_EEVEE, PET_SKILLS_EEVEE],
-  charcadet: [PET_SKILLS_CHARCADET, PET_SKILLS_CHARCADET, PET_SKILLS_CHARCADET],
-  /* 🐉 多龙梅西亚（#885）· 迷你龙（#147）：**第 11 波**捕捉 · **波次进化**（20 / 25 波）——
-     三段各有各的表：⚡ 电光一闪 → 急速折返 → 龙箭 · 🌑 暗影球 → 暗影球⭐ ·
-     🌀 龙卷风 → 龙卷风⭐ → 流星群 · 🐲 龙之俯冲 → 龙之俯冲⭐ */
-  dreepy: [PET_SKILLS_DREEPY, PET_SKILLS_DREEPY_1, PET_SKILLS_DREEPY_2],
-  dratini: [PET_SKILLS_DRATINI, PET_SKILLS_DRATINI_1, PET_SKILLS_DRATINI_2],
-  /* 🥊 铁哑铃线（#374/#375/#376 · 钢）：猛撞 → 猛撞☆ + 子弹拳 → 意念头锤 + 子弹拳☆ */
-  beldum: [PET_SKILLS_BELDUM, PET_SKILLS_BELDUM_1, PET_SKILLS_BELDUM_2],
-  /* 🦈 圆陆鲨线（#443/#444/#445 · 地面）：重踏 → 地震 + 龙爪 → 地震☆ + 二连劈☆ */
-  gible: [PET_SKILLS_GIBLE, PET_SKILLS_GIBLE_1, PET_SKILLS_GIBLE_2],
-  /* ☆ 基拉祈（#385）：不进化；**45 级（= 星之助战满层）那一段才解锁破灭之愿**
-     → 段位由 `petSkillStage('jirachi')` 按 `jirachiLv()` 给 */
-  jirachi: [PET_SKILLS_JIRACHI, PET_SKILLS_JIRACHI_2],
-  /* 🌸 谢米（#492）：不进化；50 级（= 幻之助战满层）换第二档技能表（现在两张都是占位技） */
-  shaymin: [PET_SKILLS_SHAYMIN, PET_SKILLS_SHAYMIN_2],
-  /* ⚡ 捷拉奥拉（#807）：50 级前 **雷电拳☆ + 打雷☆**；50 级再学 **等离子闪电拳**
-     （拿到奇物「风来城的闪光」时，那一招换成 ☆ 版 —— 见 petSkillList 的特判） */
-  zeraora: [[PET_SKILL_THUNDERPUNCH_STAR, PET_SKILL_THUNDER_STAR], [PET_SKILL_THUNDERPUNCH_STAR, PET_SKILL_THUNDER_STAR, PET_SKILL_PLASMAFIST]],
-  /* 🌟 神兽三只（#382/#383/#384）：各有**两招专属技能**（用户逐条点名，见上面那张表），
-     它们不进化 → 三段都指向同一份表 */
-  kyogre: [PET_SKILLS_KYOGRE, PET_SKILLS_KYOGRE, PET_SKILLS_KYOGRE],
-  groudon: [PET_SKILLS_GROUDON, PET_SKILLS_GROUDON, PET_SKILLS_GROUDON],
-  rayquaza: [PET_SKILLS_RAYQUAZA, PET_SKILLS_RAYQUAZA, PET_SKILLS_RAYQUAZA]
-};
 const PET_SKILL_DEF = { bulba: 'leaf', charm: 'spark', squirt: 'jet', toge: 'help', eevee: 'swift', charcadet: 'ember', dreepy: 'quickattack', dratini: 'tornado', beldum: 'takedown', gible: 'stomp', jirachi: 'swiftstar', shaymin: 'leaf', zeraora: 'plasmafist',
   kyogre: 'originpulse', groudon: 'precipice', rayquaza: 'dragonascent' };   // 每只的**开局默认**技能 id（远程那套）
 /* ============================================================
    🔮 **道具进化那 5 只的招式表**（用户逐条点名）—— **按形态 key 查**，不是按「物种 + 段位」：
-   伊布三姐妹 / 红莲铠骑 / 苍炎刃鬼 各有**不同的**招式，一张 `PET_SKILLS[物种][段位]` 装不下。
-   `petSkillList(id)` 会先用 `petFormKey(id)` 查 `PET_SKILLS_FORM`，查不到才回落到原来那张表。
+   伊布三姐妹 / 红莲铠骑 / 苍炎刃鬼 各有**不同的**招式，一条「物种 + 段位」的记录装不下。
+   `petSkillList(id)` 会先用 `petFormKey(id)` 去 `PET_SKILLS_V2` 里查形态那一条，查不到才回落到物种记录。
    ⚠️ 这些招式的 id 全都**另起一名**（vsurf / thunder / bitterblade…）—— 和御三家那些同名技（surf / blitz）
    彻底分开，免得 `petEvoSucc` 的 evo 链搜索把它们串起来。
    ⚖️ **伤害「略低于御三家」不用额外改数**：非御三家一律吃 ⚖️ 降伤口径 ×0.5（御三家 ×0.7），
    同一套数值搬过来就自然更低 —— 别再手动砍一遍。
    ============================================================ */
-/* 💧 水伊布（134）：冲浪（与水箭龟同款）· 水流环（和生命水滴相同，**选它时会跟着训练家走**） */
-const PET_SKILLS_VAPOREON = [
+/* 💧 水伊布（134）：冲浪（与水箭龟同款）· 水流环（和生命水滴相同，**选它时会跟着训练家走**）
+   ⚠️ 下面这几组「形态招式表」常量只被文件末尾的 `PET_SKILLS_V2` 引用（形态那几条记录），别处不要直接读。 */
+const PET_FORMSKILL_VAPOREON = [
   { id: 'vsurf', name: '冲浪', icon: '🌊', kind: 'aura', range: 125, spdMul: 2.0, def: 1,
     desc: '身周掀起巨浪（半径 125 = 1 级熔岩结界的范围）：碰到就结算一次、之后每 0.5 秒 234 点并灼烧（本轮伤害降到原来的 1/2，与水箭龟的冲浪同款）· 移速 +100%（电脑端会朝鼠标指针持续冲刺）',
-    aura: { r: 125, tick: 0.5, fxK: 5 } },
+    aura: { r: 125, tick: 0.5, fxK: 5 , mul: 1 } },
   { id: 'aquaring', name: '水流环', icon: '💧', kind: 'heal', cd: 1, fixedTick: 1, range: 0, support: 1, follow: 1,
     desc: '和「生命水滴」相同：所有宝可梦立刻回复 10% 最大生命 · 选它时水伊布会跟着训练家走',
     heal: { pct: 0.1 } }
 ];
 /* ⚡ 雷伊布（135）：打雷（**原地蓄力 0.5 秒** → 随机 5 名敌人单体雷击；本轮伤害翻到 3 倍）·
    伏特替换（和**多龙奇的急速折返**同一套：撞完折返待机 0.5 秒，**顺带溅射附近的敌人**） */
-const PET_SKILLS_JOLTEON = [
+const PET_FORMSKILL_JOLTEON = [
   { id: 'thunder', name: '打雷', icon: '⚡', kind: 'thunder', cd: 5.0 / 2, range: 900, def: 1,
     desc: '原地蓄力 0.5 秒后随机选战场上 5 名敌人各劈一道单体雷击（伤害先翻到 3 倍、再 ×1.5 → `3.0 * 3 * 1.5` · 出手间隔缩短一半）· ' + petCdText(5.0 / 2),
     thunder: { charge: 0.5, n: 5, mul: 3.0 * 3 * 1.5, moveSpd: 420 } },
@@ -6982,7 +6802,7 @@ const PET_SKILLS_JOLTEON = [
 /* 🔥 火伊布（136）：闪焰冲锋（**与喷火龙的同一套招式**，但**自动出手**）· 蓄能焰袭☆（和**龙之俯冲☆**相同：连冲三次）
    ⚠️ 数值口径注意：本轮用户只点名「喷火龙的闪焰冲锋伤害翻倍」（6.0 → 12.0），**火伊布这一份没跟着改**
    （要跟着翻倍就说一声，改 `fblitz.dash.mul` 一处即可）—— 所以这里别写「伤害完全相同」了 */
-const PET_SKILLS_FLAREON = [
+const PET_FORMSKILL_FLAREON = [
   { id: 'fblitz', name: '闪焰冲锋', icon: '🏹', kind: 'dash', cd: 3.0 * 0.7, range: 520, fxLife: 0.5, def: 1,
     desc: '和喷火龙的闪焰冲锋同一套（朝指针方向猛冲 472px · 落点 315 半径范围伤害），但会自动出手（不用按闪避键）· ' + petCdText(3.0 * 0.7),
     dash: { dist: 472, spd: 3375, r: 315, mul: 6.0, fxK: 6 } },
@@ -6995,7 +6815,7 @@ const PET_SKILLS_FLAREON = [
    **打中回自己 30% 最大生命** · 斩击特效是**火属性（FIRE）**，不是幽灵 —— 用户点名「我需要火属性的斩击」；
    斩光最终定稿是**一整片巨大的**（不是好几片，见 `PET_SLASH_FX_*`））
    · 影子偷袭（电光一闪的打法，**伤害/攻速各翻倍** · 每次命中后**无敌 0.5 秒**） */
-const PET_SKILLS_CERULEDGE = [
+const PET_FORMSKILL_CERULEDGE = [
   { id: 'bitterblade', name: '悔念剑', icon: '🗡️', kind: 'slash', cd: 1.8, range: 440, fxEl: 'FIRE', def: 1,
     desc: '像武器大师的大斩刀那样蓄力 0.5 秒再甩出半圆斩（火属性斩击 · 范围 = 大斩刀的 80% · 伤害是大斩刀的 2 倍再 ×1.5）· 只要砍中敌人就回复自身 30% 最大生命 · ' + petCdText(1.8),
     slash: { charge: 0.5, reach: 122 * 4.5 * 0.8, arc: Math.PI, mul: 4.0 * 2 * 1.5, healPct: 0.3, fxK: 7 } },
@@ -7007,13 +6827,13 @@ const PET_SKILLS_CERULEDGE = [
    **伤害 = 日光束 ×2 再 ×1.5** → `3.0 * 2 * 1.5` = 9.0（用户原话：「忘记铠农炮了。他的伤害也提升 1.5 倍」——
    它本来就是日光束翻倍那一档，日光束本轮 +50% 之后它跟着涨，6.0 → 9.0）·
    广域战力（像喷火龙的**热风**那样放一圈持续伤害，但**伤害只有热风的一半** · 特效是超能力的**粉紫色**） */
-const PET_SKILLS_ARMAROUGE = [
+const PET_FORMSKILL_ARMAROUGE = [
   { id: 'armorcannon', name: '铠农炮', icon: '🔴', kind: 'beam', cd: 1.2, range: 900, def: 1, fxEl: 'FIRE',
     desc: '和「日光束」一模一样的一发光炮（200px 宽贯穿光束 · 瞬间一次高额伤害 · 撞墙折返一次 · 伤害是日光束的 2 倍，本轮再 ×1.5），颜色是火焰橙红 · ' + petCdText(1.2),
     beam: { w: 200, len: 760, mul: 3.0 * 2 * 1.5, pal: 'FIRE' } },
   { id: 'expandforce', name: '广域战力', icon: '🔮', kind: 'aura', range: 305 * 1.5, fxEl: 'PSYCHIC', fxLife: 0.5,
     desc: '展开超能力场（同热风的实现）：身周每 0.5 秒结算一次 · 范围 ×1.5（半径 ' + Math.round(305 * 1.5) + '）· 伤害只有热风的一半 · 特效是粉紫色',
-    aura: { r: 305 * 1.5, tick: 0.5, fxK: 5 } }
+    aura: { r: 305 * 1.5, tick: 0.5, fxK: 5 , mul: 0.5 } }
 ];
 /* 形态 key → 技能表（`petSkillList` 先查这里）· 形态 key → 默认技 */
 /* 🎀 **仙子伊布（#700 · 妖精）** —— 用户逐条点名（2026-10）：
@@ -7037,14 +6857,7 @@ const PET_SKILL_MOONBLAST = {
     ' 爆炸伤害 = 宝可梦伤害 ×10 · ' + petCdText(1),
   moons: { n: 3, r: 337.5, mul: 10, spd: 520, boom: 150 * 1.5 * 1.5, fxK: 6 }
 };
-const PET_SKILLS_SYLVEON = [PET_SKILL_DISARMING, PET_SKILL_MOONBLAST];
-const PET_SKILLS_FORM = {
-  vaporeon: PET_SKILLS_VAPOREON, jolteon: PET_SKILLS_JOLTEON, flareon: PET_SKILLS_FLAREON,
-  armarouge: PET_SKILLS_ARMAROUGE, ceruledge: PET_SKILLS_CERULEDGE,
-  sylveon: PET_SKILLS_SYLVEON,
-  /* 🌟 原始回归形态（奇物「原始回归」→ 神兽换成这一套 ☆ 招式；特性另算，不进技能表 = 不可选） */
-  kyogre1: PET_SKILLS_KYOGRE_PRIMAL, groudon1: PET_SKILLS_GROUDON_PRIMAL, rayquaza1: PET_SKILLS_RAYQUAZA_PRIMAL
-};
+const PET_FORMSKILL_SYLVEON = [PET_SKILL_DISARMING, PET_SKILL_MOONBLAST];
 const PET_SKILL_DEF_FORM = {
   vaporeon: 'vsurf', jolteon: 'thunder', flareon: 'fblitz', armarouge: 'armorcannon', ceruledge: 'bitterblade',
   sylveon: 'moonblast'   // 默认给它月亮之力（爆发那招），想常驻唱就自己在面板里换魅惑之声
@@ -7052,90 +6865,13 @@ const PET_SKILL_DEF_FORM = {
 /* 当前段位的技能表：**分支形态（水伊布…）先按形态 key 查**，其余照旧按「物种 + 段位」 */
 /* 🧬 **技能副本**：把技能表深拷贝一份（含 atk/jet/melee/dash/slam/aura/thunder/meteor/moons/seed/blitz/sector 等载荷）
    —— 这样每只宝可梦拿到的都是**自己的**对象，改一只不会牵动另一只（消灭「联动」，用户 2026-10 要求） */
-function petSkillClone(list) {
-  const out = [];
-  for (const sk of (list || [])) {
-    if (!sk || typeof sk !== 'object') { out.push(sk); continue; }
-    const c = Object.assign({}, sk);
-    for (const k in c) {
-      const v = c[k];
-      if (v && typeof v === 'object') c[k] = Object.assign({}, v);
-    }
-    out.push(c);
-  }
-  return out;
-}
-function petSkillList(id) {
-  /* 🧬 单一数据源：V2 里有的直接用（每只宝可梦独立副本 ✓） */
-  try {
-    const v2 = (typeof PET_SKILLS_V2 !== 'undefined') ? (PET_SKILLS_V2[petFormKey(id)] || PET_SKILLS_V2[id]) : null;
-    if (v2 && v2.length) {
-      const st = petStageOf(id);
-      const list = v2[Math.min(st, v2.length - 1)] || v2[0];
-      if (list && list.length) return list;
-    }
-  } catch (e) {}
-  /* ⚡ 捷拉奥拉：50 级前两招；50 级加「等离子闪电拳」——拿到「风来城的闪光」时那一招换成 ☆ 版（18 次 · ×4） */
-  if (id === 'zeraora') {
-    const list = zeraoraLv() >= JIRACHI_TOP_LV ? PET_SKILLS.zeraora[1].slice() : PET_SKILLS.zeraora[0].slice();
-    if (zeraoraLv() >= JIRACHI_TOP_LV) list[2] = artGot(ZERA_ART) ? PET_SKILL_PLASMAFIST_STAR : PET_SKILL_PLASMAFIST;
-    return list;
-  }
-  /* 🌿 谢米：两招常驻 + 50 级的种子闪光；**天空谢米**用 ☆ 版种子闪光（8 道 ×6） */
-  if (id === 'shaymin') {
-    const list = PET_SKILLS_SHAYMIN.slice();
-    if (shayminLv() >= JIRACHI_TOP_LV) list.push(shayminSkyOn() ? PET_SKILL_SEEDFLARE_STAR : PET_SKILL_SEEDFLARE);
-    return list;
-  }
-  const F = PET_SKILLS_FORM[petFormKey(id)];
-  if (F) return F;
-  const T = PET_SKILLS[id] || PET_SKILLS.bulba;
-  return T[Math.max(0, Math.min(T.length - 1, petSkillStage(id)))] || T[0];
-}
 /* 这张表属于谁：物种表（三段）+ 该形态自己的表（有就一起搜 —— 给以后的 evo 链留口子） */
-function petSkillTables(id) {
-  const base = PET_SKILLS[id] || PET_SKILLS.bulba;
-  const F = PET_SKILLS_FORM[petFormKey(id)];
-  return F ? base.concat([F]) : base;
-}
 /* 进化后把「已选技能」沿 evo 链推到当前段位里存在的那个（抓击→劈开→地球上投…），推不动就用本段默认技 */
-function petEvoSucc(id, sid) {
-  const T = petSkillTables(id);
-  const list = petSkillList(id);
-  let cur = sid;
-  for (let guard = 0; guard < 5; guard++) {
-    if (list.some(s => s.id === cur)) return cur;
-    let nx = null;
-    for (const L2 of T) for (const s of L2) if (s.id === cur) nx = s.evo;
-    if (!nx) break;
-    cur = nx;
-  }
-  const d = list.find(s => s.def) || list[0];
-  return d ? d.id : sid;
-}
 /* 这只宝可梦**当前选用**的技能（没选过 / 存档里的 id 不认识 → 默认技） */
 /* 🎛️ 面板高亮用：**列表里当前真正生效的那一项** id。
    ⚠️ 「奇物 / 形态带来的升级版」（基拉祈的破灭之愿☆ 等）并不在技能表里，
    直接用 petSkillOf().id 去比会永远比不中 → 按钮没有高亮（用户报过的 bug）。
    这里退回「`evo` 指向它的那一项」，即玩家看到的那张牌。 */
-function petSkillSelId(id) {
-  const list = petSkillList(id);
-  const cur = petSkillOf(id);
-  if (!cur) return '';
-  for (const s of list) if (s.id === cur.id) return cur.id;
-  for (const s of list) if (s.evo === cur.id) return s.id;   // 被升级版取代的那一项
-  return cur.id;
-}
-function petSkillOf(id) {
-  /* ⚠️ 返回值已由 petSkillList 提供副本（见 petSkillClone） */
-  const list = petSkillList(id);
-  let want = petEvoSucc(id, (p.petSkill || {})[id] || PET_SKILL_DEF[id]);
-  /* 🌠 奇物·千年之愿（训练家专属）：基拉祈已学会「破灭之愿」→ 实战里自动升级成 **破灭之愿☆** */
-  if (id === 'jirachi' && want === 'doomwish' && artGot('wish')) want = 'doomwish2';
-  for (const s of list) if (s.id === want) return s;
-  if (want === 'doomwish2') return PET_SKILL_DOOMWISH_STAR;   // ☆ 版不在技能表里（是质变之外的奇物升级）
-  return list[0];
-}
 /* 🔄 换招时把「正在放的那一招」的状态清干净。
    ⚠️ 光束类（龙息 / 喷射火焰 / 水枪）把**这条光柱的坐标存在 `u.jetDraw` 里**，`drawPetWater()` 每帧照着它画 ——
    中途按 C 换招时若不清理，面板一关就会看到**龙息的光柱钉在原来的位置上**（用户报过这个 bug）。
@@ -9481,7 +9217,7 @@ function petCatchWaveEnd(wave) {
      → 生成器（tools/pet-build.js）把它们 base64 内嵌成 `PET_ITEM_IMG[文件名]`，商店那一栏用 `<img>` 显示
    · 买下 = **当场给对应的宝可梦用掉**（本作没有背包界面）：写 `p.petEvoPick[物种] = 形态 key`（随存档）→
      `petFormKey/petStageOf/petSummonHp/petSummonDmg` 立刻换成进化形态那套（生命/伤害 ×1.5，与别的进化同口径）。
-     进化后的**技能暂时不变**（用户说明：后续再补）→ `PET_SKILLS.eevee/charcadet` 三段仍是同一张表。
+     进化后的**技能暂时不变**（用户说明：后续再补）→ `PET_SKILLS_V2.eevee/charcadet` 三段仍是同一张表。
    · 刷哪几件：**看第 15 波抓到了谁** —— 选了伊布 → 三种进化石；选了炭小侍 → 两件铠甲。
      （判断用「队伍里有没有它」—— 这两只只可能来自第 15 波那次二选一，所以等价于「第 15 波选的是谁」）
    ============================================================ */
@@ -9905,7 +9641,7 @@ function drawPetPools() {
   }
 }
 /* 弹体类技能统一出口：妙蛙种子（飞叶 / 种子机关枪 / 散射）、小火龙（火花 / 烈焰散射 / 大字爆炎）、
-   杰尼龟的水炮点射。`sk` = 这一帧选用的技能（PET_SKILLS 里的一项）。
+   杰尼龟的水炮点射。`sk` = 这一帧选用的技能（`PET_SKILLS_V2` 里的一项）。
    ⚠️ 出手方向 = **玩家的鼠标指针方向**（从这只宝可梦指向指针世界坐标），不是自动瞄准敌人 —— 你指哪它打哪 */
 function firePetAttack(u, foe, sk) {
   const S2 = PET_SUMMON[u.petId], A2 = (sk && sk.shot) || S2.atk;
@@ -10974,7 +10710,7 @@ function trainerSkillUp() {
 }
 /* ============================================================
    🧢 宝可梦管理面板（训练家专属 · **战斗中按 C / 手机端点暂停键左边的 🧢**）
-   列出已拥有的每只宝可梦 → 点技能卡换它这一局用的招式（PET_SKILLS）；
+   列出已拥有的每只宝可梦 → 点技能卡换它这一局用的招式（`PET_SKILLS_V2`）；
    **面板打开期间 = 战斗暂停**（走和升级/质变面板同一套 `choosing` 冻结：updateGame 直接 return，
    overlayKey 命中 'pick:pets' 后静止画面也不再逐帧重绘）。
    ============================================================ */
@@ -29128,6 +28864,16 @@ window.__musouTrainerInfo = () => {
     fireAt: dbgPetFireAt, boomAt: dbgPetBoomAt, foeN: enemies.length
   };
 };
+/* 🧪 只读钩子：宝可梦**单跳伤害**（走游戏自己的 `petHitDmgBase`：含用户数值表 / 训练家之魂 / 原始回归 / 奇物加成）。
+   `skId` = 技能 id（用来查用户数值表；不给就按原始 `mul` 算）。测试用它钉「实战掉血 = 跳数 × 单跳」，
+   而不是手抄一个面板数字 —— 面板伤害会随等级、段位与数值表变动（本轮踩过：写死的「每跳 12」早就过期了）。 */
+window.__musouHitDmgOf = (id, mul, skId) => {
+  try {
+    let sk = null;
+    if (skId) { const list = petSkillList(id); sk = list.filter(s => s.id === skId)[0] || null; }
+    return petHitDmgBase(id, mul === undefined ? 0 : mul, sk);
+  } catch (e) { return 0; }
+};
 /* 🧢 宝可梦管理面板（战斗中按 C / 手机端 🧢 按钮）：读数 + 开关 + 换技能的测试钩子 */
 window.__musouPetInfo = () => ({
   panel: petPanelOn ? 1 : 0, choosing: choosing ? 1 : 0, kind: curKind || '',
@@ -29135,10 +28881,10 @@ window.__musouPetInfo = () => ({
   cur: petOwned().map(id => petSkillOf(id).id),
   stage: petStage(),
   /* skills = **当前段位**的技能表（面板里看到的那几张卡）；tree = 三段全表（进化链核对用） */
-  skills: (function () { const o = {}; for (const id in PET_SKILLS) o[id] = petSkillList(id).map(skDump); return o; })(),
-  tree: (function () { const o = {}; for (const id in PET_SKILLS) o[id] = PET_SKILLS[id].map(L2 => L2.map(skDump)); return o; })(),
+  skills: (function () { const o = {}; for (const id in PET_SKILLS_V2) { if (PET_SKILLS_V2[id].form) continue; o[id] = petSkillList(id).map(skDump); } return o; })(),
+  tree: (function () { const o = {}; for (const id in PET_SKILLS_V2) { const r = PET_SKILLS_V2[id]; if (r.form) continue; o[id] = r.skills.map(L2 => L2.map(skDump)); } return o; })(),
   /* 🔮 分支形态（水伊布…）自己的技能表：形态 key → 招式（道具进化那 5 只用它） */
-  formSkills: (function () { const o = {}; for (const fk in PET_SKILLS_FORM) o[fk] = PET_SKILLS_FORM[fk].map(skDump); return o; })(),
+  formSkills: (function () { const o = {}; for (const fk in PET_SKILLS_V2) { const r = PET_SKILLS_V2[fk]; if (r.form) o[fk] = r.skills[0].map(skDump); } return o; })(),
   formDef: Object.assign({}, PET_SKILL_DEF_FORM),
   forms: (function () { const o = {}; for (const id in PET_FORM) o[id] = PET_FORM[id].slice(); return o; })(),
   /* 🧪 场上宝可梦的**实时中间态**（测试用）：冲刺阶段 / 剩余段数 / 蓄力 / 收尾重压是否已做 */
@@ -29155,7 +28901,7 @@ function skDump(s) {
     orb: s.orb ? 1 : 0,                               // 🟢 画成绿色光球（能量球）
     ghost: (s.shot && s.shot.ghost) ? 1 : 0,           // 🌑 幽灵系光球（暗影球：画成紫黑色）
     star: (s.shot && s.shot.star) ? 1 : 0,             // ⭐ 画成代码画的四角星（伊布·高速星星）
-    def: s.id === PET_SKILL_DEF[Object.keys(PET_SKILLS).find(k => petSkillList(k).indexOf(s) >= 0)] ? 1 : 0,
+    def: s.id === PET_SKILL_DEF[Object.keys(PET_SKILLS_V2).filter(k => !PET_SKILLS_V2[k].form).find(k => petSkillList(k).indexOf(s) >= 0)] ? 1 : 0,
     melee: s.melee ? { r: s.melee.r, arc: +s.melee.arc.toFixed(3), mul: s.melee.mul, hits: s.melee.hits || 1, gap: s.melee.gap || 0, fxTint: s.melee.fxTint || '' } : null,
     shot: s.shot ? { n: s.shot.n, mul: s.shot.mul, boomR: s.shot.boomR || 0, boomMul: s.shot.boomMul || 0, pierce: s.shot.pierce || 0, homing: s.shot.homing || 0, spread: s.shot.spread || 0, spd: s.shot.spd, orbR: s.shot.orbR || 0, hitR: s.shot.hitR || 0, life: s.shot.life || 0, mini: s.shot.mini || 0, miniK: s.shot.miniK || 0, off: s.shot.off || 0, homingTurn: s.shot.homingTurn || 0 } : null,
     slam: s.slam ? { r: s.slam.r, mul: s.slam.mul } : null,
@@ -29171,7 +28917,7 @@ function skDump(s) {
       slam: s.dash.slam ? { r: s.dash.slam.r, mul: s.dash.slam.mul, air: s.dash.slam.air, jumpH: s.dash.slam.jumpH || 0 } : null } : null,   // 🥊 意念头锤的收尾重压
     strike: s.strike ? { spd: s.strike.spd, r: s.strike.r, mul: s.strike.mul, returnHome: s.strike.returnHome || 0, dwell: s.strike.dwell || 0,
       splashR: s.strike.splashR || 0, splashMul: s.strike.splashMul === undefined ? 0 : s.strike.splashMul, invulnT: s.strike.invulnT || 0 } : null,   // ⚡ 电光一闪 / 急速折返 / 伏特替换（溅射）/ 影子偷袭（无敌帧）
-    tornado: s.tornado ? { life: s.tornado.life, spd: s.tornado.spd, r: s.tornado.r, tick: s.tornado.tick, flat: s.tornado.flat, dist: s.tornado.dist } : null,   // 🌀 龙卷风（迷你龙 / 哈克龙）
+    tornado: s.tornado ? { life: s.tornado.life, spd: s.tornado.spd, r: s.tornado.r, tick: s.tornado.tick, flat: s.tornado.flat, mul: s.tornado.mul || 0, dist: s.tornado.dist } : null,   // 🌀 龙卷风（迷你龙 / 哈克龙）：伤害走 `mul`（flat 已废）
     meteor: s.meteor ? { charge: s.meteor.charge, n: s.meteor.n, r: s.meteor.r, mul: s.meteor.mul, fall: s.meteor.fall, spike: s.meteor.spike || 0 } : null,   // ☄️ 流星群（快龙）/ 🗡 断崖之剑（spike=1 → 地刺）
     beam: s.beam ? { w: s.beam.w, len: Math.round(s.beam.len), mul: s.beam.mul, pal: s.beam.pal || 'GRASS',
       /* 🌊 根源波动☆ 的「身体三处 → 同一个落点」：tri = 1（三道光柱共用一个落点，只生成一个水坑） */
@@ -29869,7 +29615,317 @@ window.__musouMageStrike = () => { // 测试钩子：法师朝场地中心方向
   m.y = Math.max(90, Math.min(H - 90, p.y + Math.sin(an) * 520));
   m.castCd = 0;
 };
+/* ══════════════════════════════════════════════════════════════════════
+   🧬 **宝可梦技能表 · 唯一数据源（PET_SKILLS_V2）**
+   · 每只宝可梦 = 一条记录：`{ species: 中文名, form: 形态 key（没有就空串）, skills: [每段位一张表] }`
+     `skills[0]` = 未进化 / 一段，`skills[1]` = 二段，`skills[2]` = 三段（不进化但有换招的按段位表给）
+   · 分支形态（水伊布 / 红莲铠骑 / 原始回归那三只…）也在这张表里，键 = 形态 key，`form` 写清它属于谁
+   · 运行时统一走 `petSkillList(id)`；它内部只查这张表 ——
+     旧的 PET_SKILLS / PET_SKILLS_* / PET_SKILLS_FORM 已经全部删除（2026-10 收尾）
+   · 数值仍以用户的 PET_SKILL_TABLE 为准（结算时查表），这里只装「招式长什么样」
+   · ⚠️ 声明用 `var`（**不是 const**）：主 IIFE 外面那批取表辅助（`petFormNameOf / petUserMul`）
+     也要读这张表，而 `const` 会被关在主 IIFE 里面（踩过：外面报 `PET_SKILLS_V2 is not defined`）
+   · ⚠️ 招式对象**按用途分两种写法**：单个物种独占的招式直接写字面量；
+     被两只以上共用的（高速星星 / 生命水滴☆ / 能量球☆ / 帮助☆ / 电光一闪…）写成模块级常量引用，
+     不给每只都抄一份（抄了以后改一处就会漏另一处）。`petSkillList` 已经把每只宝可梦的招式	extbf{深拷贝}
+     成它自己的对象（`petSkillClone`），改一只不会牵动另一只 ✓
+   ══════════════════════════════════════════════════════════════════════ */
+/* ☆ 基拉祈技能表的段数（0 = 未满 50 级两招 / 1 = 50 级三大招）——petSkillStage 用它判段位 */
+const JIRACHI_SKILL_STAGES = 2;
+var PET_SKILLS_V2 = {
+  /* 妙蛙种子线（妙蛙种子 / 妙蛙草 / 妙蛙花） */
+  bulba: { species: '妙蛙种子线', form: '', skills: [[
+    { id: 'whip', name: '藤鞭', icon: '🌿', kind: 'melee', cd: 1.5, range: 250, evo: 'powerwhip',
+      desc: '近身横扫一鞭（射程 ≈ 2 倍战士普攻）· ' + petCdText(1.5),
+      melee: { r: 250, arc: Math.PI * 0.95, mul: 1.2, fxK: 6.5, rot: -0.52 } },
+    { id: 'leaf', name: '飞叶快刀', icon: '🍃', kind: 'shot', cd: 1.7, range: 860, def: 1, evo: 'magicleaf',
+      desc: '一次甩出 5 片飞叶，会自动追踪敌人（默认 · 射程 860）· ' + petCdText(1.7),
+      shot: { n: 5, spread: 0.34, spd: 460, mul: 0.5, homing: 1, fxK: 1.5 } }
+  ], [
+    { id: 'powerwhip', name: '强力鞭打', icon: '🪢', kind: 'melee', cd: 1.5 / 1.5, range: 375, evo: 'frenzy',
+      desc: '藤鞭强化：范围 +50%（375）· 伤害 +50% · 出手间隔加快 50% · ' + petCdText(1.5 / 1.5),
+      melee: { r: 375, arc: Math.PI * 0.95, mul: 1.8, fxK: 7.5, rot: -0.52 } },
+    { id: 'magicleaf', name: '魔法叶', icon: '🍀', kind: 'shot', cd: 1.7 / 1.5, range: 860, evo: 'petal',
+      desc: '飞叶快刀强化：一次 8 片追踪叶片 · 伤害 +50% · 出手间隔加快 50% · ' + petCdText(1.7 / 1.5),
+      shot: { n: 8, spread: 0.26, spd: 480, mul: 0.75, homing: 1, fxK: 1.7 } },
+    { id: 'energyball', name: '能量球', icon: '🟢', kind: 'shot', cd: 1.7 / 1.5, range: 520, evo: 'energyballstar', orb: 1,
+      desc: '一颗穿透的绿色光球（不走叶片贴图 · 同牌皇的蓝色穿透牌）· 同一只敌人只吃一次 · 伤害是魔法叶的 `2 × 1.5` 倍（本轮再 ×1.5）· ' + petCdText(1.7 / 1.5),
+      shot: { n: 1, spread: 0, spd: 620, mul: 0.75 * 2 * 1.5, homing: 0, pierce: 1, orb: 1, orbR: 39, hitR: 24, fxK: 2.4 } }
+  ], [
+    { id: 'frenzy', name: '疯狂植物', icon: '🌳', kind: 'melee', cd: 1.5 / 1.5 / 1.5, range: 563,
+      desc: '强力鞭打强化：范围 +50%（562.5）· 伤害 +50% · 出手间隔加快 50% · ' + petCdText(1.5 / 1.5 / 1.5),
+      melee: { r: 562.5, arc: Math.PI * 0.95, mul: 2.7, fxK: 9, rot: -0.52 } },
+    { id: 'petal', name: '花瓣舞', icon: '🌸', kind: 'shot', cd: 1.7 / 1.5 / 1.5, range: 860,
+      desc: '魔法叶强化：扇形一次 12 片追踪花瓣 · 伤害 +50% · 出手间隔加快 50% · ' + petCdText(1.7 / 1.5 / 1.5),
+      shot: { n: 12, spread: 0.13, spd: 500, mul: 1.125, homing: 1, fxK: 2 } },
+    PET_SKILL_ENERGYBALL_STAR_REF,
+    /* ☀️ 日光束：**和光法师的「术有专攻」光炮一模一样的实现** —— 从自己射出一条 200px 宽的贯穿光柱，
+       瞬间对线上的敌人各结算**一次高额伤害**（不是持续喷），撞墙反射一次；只是颜色是绿的、由宝可梦来放。
+       ⚠️ 长度别写成光法师那种「横跨整屏」（hypot(W,H)×1.35）：那样光柱永远顶到最远的墙，而 3200×1800 的场地
+       远大于 1280×720 的视野 → 反弹点在屏幕外，加上垂直撞墙时折返段与去程**完全共线**，玩家会以为「根本没反弹」。
+       760px = 略大于半个屏幕宽：撞墙一定发生在眼前（看得见折角 + 撞墙闪光），没墙时就是一根利落的短光柱。 */
+    { id: 'solbeam', name: '日光束', icon: '☀️', kind: 'beam', cd: 1.2, range: 900, fxEl: 'GRASS',
+      desc: '一发光炮（与光法师满级「术有专攻」同款：200px 宽的贯穿光束 · 瞬间一次高额伤害 · 撞墙折返一次 · 本轮伤害 +50%）· ' + petCdText(1.2),
+      beam: { w: 200, len: 760, mul: 3.0 * 1.5 } }
+  ]] },
+  /* 小火龙线（小火龙 / 火恐龙 / 喷火龙） */
+  charm: { species: '小火龙线', form: '', skills: [
+      [
+        { id: 'claw', name: '抓击', icon: '🐾', kind: 'melee', cd: 1.3, range: 240, evo: 'slash',
+          desc: '近身一爪（射程 ≈ 2 倍战士普攻）· ' + petCdText(1.3),
+          melee: { r: 240, arc: 1.62, mul: 1.2, fxK: 3.5, rot: 0 } },
+        { id: 'spark', name: '火苗', icon: '🔥', kind: 'shot', cd: 1.6, range: 400, evo: 'wheel', def: 1, always: 1,
+          desc: '一颗火球，命中即炸开 86px 范围伤害（默认 · 没有敌人也照打）· ' + petCdText(1.6),
+          shot: { n: 1, spread: 0, spd: 860, mul: 1, homing: 0, fxK: 1.1, boomR: 86, boomMul: 0.8 } }
+      ],
+      [
+        { id: 'slash', name: '劈开', icon: '⚔️', kind: 'melee', cd: 0.91, range: 360, evo: 'toss',
+          desc: '抓击强化：范围 +50% · 伤害 +50% · 出手间隔 −30% · ' + petCdText(0.91),
+          melee: { r: 360, arc: 1.62, mul: 1.8, fxK: 4.2, rot: 0 } },
+        { id: 'wheel', name: '火焰轮', icon: '🎡', kind: 'shot', cd: 1.12, range: 440, evo: 'heat', always: 1,
+          desc: '火苗强化：伤害 +50% · 爆炸范围 +50% · 出手间隔 −30%（没有敌人也照打）· ' + petCdText(1.12),
+          shot: { n: 1, spread: 0, spd: 860, mul: 1.5, homing: 0, fxK: 1.3, boomR: 129, boomMul: 1.2 } },
+        { id: 'breath', name: '龙息', icon: '🐉', kind: 'jet', range: 380, fixedTick: 1, fxEl: 'DRAGON',
+          desc: '一道龙息：每 0.5 秒 12 点伤害，命中减速 50%（类似水法师 · 喷 4 秒歇 0.6 秒）',
+          jet: { secs: 4, rest: 0.6, len: 320, w: 26, tick: 0.5, mul: 0.5, slowK: 0.5, slowT: 1.2 } }
+      ],
+      [
+        { id: 'toss', name: '地球上投', icon: '🌍', kind: 'slam', cd: 0.87, range: 460,
+          desc: '劈开强化：跳砸落点半径 ×2（210px）· 伤害 ×4（= 火箭头锤 ×8 · 本轮翻倍） · 出手间隔 −2/3 · ' + petCdText(0.87),
+          slam: { r: 210, mul: 6.0 * 2, air: 0.42, land: 0.26, dash: 84, jumpH: 40, fxK: 6 } },
+        { id: 'heat', name: '热风', icon: '🌡️', kind: 'aura', range: 305 * 1.5, fxLife: 0.5,
+          desc: '身周热风：每 0.5 秒 234 点（熔岩结界满级 18 倍）· 范围再 ×1.5（半径 ' + Math.round(305 * 1.5) + '）',
+          aura: { r: 305 * 1.5, tick: 0.5, mul: 1, fxK: 5 } },
+        { id: 'flame', name: '喷射火焰', icon: '☄️', kind: 'jet', range: 480,
+          desc: '龙息强化：伤害 ×3 · 距离再 ×1.2（= 水枪的 1.8 倍）· 不休息',
+          jet: { secs: 5, rest: 0, len: 540, w: 30, tick: 0.5, mul: 1.5 } },
+        { id: 'blitz', name: '闪焰冲锋', icon: '🏹', kind: 'dash', range: 520, manual: 1, fxLife: 0.5,
+          desc: '手动技：骑乘时按「闪避键」朝指针方向猛冲（距离 = 浪客一闪 ×0.7 · 落地范围 ×1.5）· 伤害本轮翻倍（12.0）',
+          dash: { dist: 472, spd: 3375, r: 315, mul: 6.0 * 2, fxK: 6 } }
+      ]
+    ] },
+  /* 杰尼龟线（杰尼龟 / 卡咪龟 / 水箭龟） */
+  squirt: { species: '杰尼龟线', form: '', skills: [[
+    { id: 'slam', name: '火箭头锤', icon: '🚀', kind: 'slam', cd: 2.2, range: 340, evo: 'spin',
+      desc: '跳起来砸向前方一小片（半径 ≈ Boss 泰山压顶的一半）· ' + petCdText(2.2),
+      slam: { r: 105, mul: 1.5, air: 0.42, land: 0.26, dash: 78, jumpH: 34, fxK: 5 } },
+    { id: 'jet', name: '水枪', icon: '💧', kind: 'jet', range: 320, def: 1, evo: 'bubble',
+      desc: '连喷 5 秒 / 歇 2 秒 · ' + petTickText(0.5),
+      jet: { secs: 5, rest: 2, len: 300, w: 26, tick: 0.5, mul: 0.5 } }
+  ], [
+    { id: 'bubble', name: '泡沫光线', icon: '🫧', kind: 'jet', range: 320 * 1.35, evo: 'hydropump',
+      desc: '水枪强化：射程 +35%（' + Math.round(320 * 1.35) + '）· 伤害 +50% · 休息时间减半（1 秒）· ' + petTickText(0.5),
+      jet: { secs: 5, rest: 1, len: 300 * 1.35, w: 26, tick: 0.5, mul: 0.75 } },
+    { id: 'spin', name: '高速旋转', icon: '🌀', kind: 'spin', cd: 2.0, range: 900,
+      desc: '把卡咪龟自己发射出去：撞到的敌人各吃一次伤害 · 撞墙无限反弹 · 飞满 ' + Math.round(320 * 1.35 * 2) + 'px 后飞回训练家身边 · ' + petCdText(2.0),
+      spin: { dist: 320 * 1.35 * 2, spd: 900, r: 62, mul: 2.0 } },
+    { id: 'withdraw', name: '缩入壳中', icon: '🛡️', kind: 'rest',
+      desc: '不攻击：每秒回复自身 20% 最大生命，并给训练家 +5 点护盾',
+      rest: { tick: 1, heal: 0.2, shield: 5 } }
+  ], [
+    { id: 'hydropump', name: '水炮', icon: '🚿', kind: 'jet', range: 320 * 1.35 * 1.35,
+      desc: '泡沫光线强化：射程 +35%（' + Math.round(320 * 1.35 * 1.35) + '）· 伤害 +50%（水箭龟全技能再 ×1.5）· 取消休息（一直喷）· ' + petTickText(0.5),
+      jet: { secs: 5, rest: 0, len: 300 * 1.35 * 1.35, w: 30, tick: 0.5, mul: 1.125 * 1.5 } },
+    { id: 'surf', name: '冲浪', icon: '🌊', kind: 'aura', range: 125, spdMul: 2.0,
+      desc: '身周掀起巨浪（半径 125 = 1 级熔岩结界的范围）：碰到就结算一次、之后每 0.5 秒 234 点并灼烧（本轮伤害降到原来的 1/2）· 移速 +100%；电脑端会像骑士那样朝鼠标指针方向持续冲刺（手机端按摇杆方向冲）',
+      aura: { r: 125, tick: 0.5, mul: 1, fxK: 5 } },
+    { id: 'shellbreak', name: '破壳', icon: '🥚', kind: 'shell',
+      desc: '不自动攻击：训练家每次闪避时破壳 —— 自损一半生命，换来 30 秒 伤害 +50% · 移速 +80%（5 秒 CD · 不叠加、只刷新时间）',
+      shell: { cd: 5, dur: 30, hpCost: 0.5, dmgMul: 1.5, spdMul: 1.8 } },
+    { id: 'cannon', name: '加农水炮', icon: '💦', kind: 'shot', cd: 2.4, range: 620,
+      desc: '巨大的水炮（子弹伤害再翻倍 · 水箭龟全技能基础伤害 ×1.5）：命中处留下大水坑，坑内敌人每秒受伤并减速 50% · ' + petCdText(2.4),
+      shot: { n: 1, spread: 0, spd: 1120, mul: 1.5 * 1.5 * 2, homing: 0, fxK: 3.2,
+              pool: { r: 300, life: 8, tick: 1, mul: 1.0 * 1.5, slowK: 0.5, slowT: 0.6 } } }
+  ]] },
+  /* 波克比（不进化 · 20 / 30 级换招） */
+  toge: { species: '波克比', form: '', skills: [[
+    { id: 'help', name: '帮助', icon: '🤝', kind: 'help', cd: 1, fixedTick: 1, range: 0, def: 1, support: 1, evo: 'helpstar',
+      desc: '使用后，全部宝可梦下次攻击的伤害 +30% · ' + petCdText(1, 1),
+      help: { mul: 1.3 } },
+    { id: 'lifedew', name: '生命水滴', icon: '💧', kind: 'heal', cd: 1, fixedTick: 1, range: 0, support: 1, evo: 'lifedewstar',
+      desc: '所有宝可梦立刻回复 10% 最大生命 · ' + petCdText(1, 1),
+      heal: { pct: 0.1 } }
+  ], [PET_SKILL_HELP_STAR, PET_SKILL_LIFEDEW], [PET_SKILL_HELP_STAR, PET_SKILL_LIFEDEW_STAR]] },
+  /* 伊布（第 15 波捕捉 · 道具进化） */
+  eevee: { species: '伊布', form: '', skills: [[
+    { id: 'swift', name: '高速星星', icon: '⭐', kind: 'shot', cd: 1.7, range: 860, def: 1,
+      desc: '一次射出 5 颗自动追踪的星星（伤害与出手间隔同「飞叶快刀」）· ' + petCdText(1.7),
+      shot: { n: 5, spread: 0.34, spd: 460, mul: 0.5, homing: 1, fxK: 1.5, star: 1 } },
+    PET_SKILL_QUICKATTACK
+  ], [
+    { id: 'swift', name: '高速星星', icon: '⭐', kind: 'shot', cd: 1.7, range: 860, def: 1,
+      desc: '一次射出 5 颗自动追踪的星星（伤害与出手间隔同「飞叶快刀」）· ' + petCdText(1.7),
+      shot: { n: 5, spread: 0.34, spd: 460, mul: 0.5, homing: 1, fxK: 1.5, star: 1 } },
+    PET_SKILL_QUICKATTACK
+  ], [
+    { id: 'swift', name: '高速星星', icon: '⭐', kind: 'shot', cd: 1.7, range: 860, def: 1,
+      desc: '一次射出 5 颗自动追踪的星星（伤害与出手间隔同「飞叶快刀」）· ' + petCdText(1.7),
+      shot: { n: 5, spread: 0.34, spd: 460, mul: 0.5, homing: 1, fxK: 1.5, star: 1 } },
+    PET_SKILL_QUICKATTACK
+  ]] },
+  /* 炭小侍（第 15 波捕捉 · 道具进化） */
+  charcadet: { species: '炭小侍', form: '', skills: [[
+    { id: 'ember', name: '火苗', icon: '🔥', kind: 'shot', cd: 1.6, range: 400, always: 1, def: 1,
+      desc: '射出一颗火球，命中即爆炸（范围伤害）· 没有敌人也照打 · ' + petCdText(1.6),
+      shot: { n: 1, spread: 0, spd: 860, mul: 1, homing: 0, fxK: 1.1, boomR: 86, boomMul: 0.8 } },
+    { id: 'flamecharge', name: '蓄能焰袭', icon: '☄️', kind: 'dash', cd: 2.6, range: 520,
+      desc: '朝指针方向冲刺 320px（≈ 水枪射程），沿途撞到的敌人各吃一次伤害 · ' + petCdText(2.6),
+      dash: { dist: 320, spd: 2400, r: 70, mul: 1.5, fxK: 4, path: 1 } }
+  ], [
+    { id: 'ember', name: '火苗', icon: '🔥', kind: 'shot', cd: 1.6, range: 400, always: 1, def: 1,
+      desc: '射出一颗火球，命中即爆炸（范围伤害）· 没有敌人也照打 · ' + petCdText(1.6),
+      shot: { n: 1, spread: 0, spd: 860, mul: 1, homing: 0, fxK: 1.1, boomR: 86, boomMul: 0.8 } },
+    { id: 'flamecharge', name: '蓄能焰袭', icon: '☄️', kind: 'dash', cd: 2.6, range: 520,
+      desc: '朝指针方向冲刺 320px（≈ 水枪射程），沿途撞到的敌人各吃一次伤害 · ' + petCdText(2.6),
+      dash: { dist: 320, spd: 2400, r: 70, mul: 1.5, fxK: 4, path: 1 } }
+  ], [
+    { id: 'ember', name: '火苗', icon: '🔥', kind: 'shot', cd: 1.6, range: 400, always: 1, def: 1,
+      desc: '射出一颗火球，命中即爆炸（范围伤害）· 没有敌人也照打 · ' + petCdText(1.6),
+      shot: { n: 1, spread: 0, spd: 860, mul: 1, homing: 0, fxK: 1.1, boomR: 86, boomMul: 0.8 } },
+    { id: 'flamecharge', name: '蓄能焰袭', icon: '☄️', kind: 'dash', cd: 2.6, range: 520,
+      desc: '朝指针方向冲刺 320px（≈ 水枪射程），沿途撞到的敌人各吃一次伤害 · ' + petCdText(2.6),
+      dash: { dist: 320, spd: 2400, r: 70, mul: 1.5, fxK: 4, path: 1 } }
+  ]] },
+  /* 多龙梅西亚线（第 11 波捕捉 · 20 / 25 波进化） */
+  dreepy: { species: '多龙梅西亚线', form: '', skills: [[PET_SKILL_QUICKATTACK], [PET_SKILL_UTURN, PET_SKILL_SHADOWBALL], [PET_SKILL_DRAGONARROW, PET_SKILL_SHADOWBALL_STAR]] },
+  /* 迷你龙线（第 11 波捕捉 · 20 / 25 波进化） */
+  dratini: { species: '迷你龙线', form: '', skills: [[
+    { id: 'tornado', name: '龙卷风', icon: '🌪️', kind: 'tornado', cd: 2.6, range: 520, def: 1, evo: 'tornadostar',
+      desc: '在身前放出一道持续 3 秒的龙卷风：一边缓慢向前移动、一边每 0.5 秒对范围内的敌人造成 15 点伤害（本轮翻到 3 倍）· ' + petCdText(2.6),
+      tornado: { life: 3, spd: 70, r: 95, tick: 0.5, mul: 1.5, dist: 150 } }
+  ], [PET_SKILL_TORNADO_STAR, PET_SKILL_DRAGONRUSH], [PET_SKILL_METEOR, PET_SKILL_DRAGONRUSH_STAR]] },
+  /* 铁哑铃线（第 11 波捕捉 · 20 / 25 波进化） */
+  beldum: { species: '铁哑铃线', form: '', skills: [[PET_SKILL_TAKEDOWN], [PET_SKILL_TAKEDOWN_STAR, PET_SKILL_BULLETPUNCH], [PET_SKILL_ZENHEADBUTT, PET_SKILL_BULLETPUNCH_STAR]] },
+  /* 圆陆鲨线（第 11 波捕捉 · 20 / 25 波进化） */
+  gible: { species: '圆陆鲨线', form: '', skills: [[PET_SKILL_STOMP], [PET_SKILL_EARTHQUAKE, PET_SKILL_DRAGONCLAW], [PET_SKILL_EQ_STAR, PET_SKILL_DUALCHOP_STAR]] },
+  /* 基拉祈（幻之宝可梦 · 50 级解锁破灭之愿） */
+  jirachi: { species: '基拉祈', form: '', skills: [[PET_SKILL_SWIFT_STAR, PET_SKILL_LIFEDEW_STAR], [PET_SKILL_SWIFT_STAR, PET_SKILL_LIFEDEW_STAR, PET_SKILL_DOOMWISH]] },
+  /* 谢米（幻之宝可梦 · 50 级解锁种子闪光（天空谢米 = ☆ 版）） */
+  shaymin: { species: '谢米', form: '', skills: [[PET_SKILL_ENERGYBALL_STAR_REF, PET_SKILL_HELP_STAR], [PET_SKILL_ENERGYBALL_STAR_REF, PET_SKILL_HELP_STAR, PET_SKILL_SEEDFLARE]] },
+  /* 捷拉奥拉（幻之宝可梦 · 50 级学等离子闪电拳） */
+  zeraora: { species: '捷拉奥拉', form: '', skills: [[PET_SKILL_THUNDERPUNCH_STAR, PET_SKILL_THUNDER_STAR],
+        [PET_SKILL_THUNDERPUNCH_STAR, PET_SKILL_THUNDER_STAR, PET_SKILL_PLASMAFIST]] },
+  /* 盖欧卡（神兽 · 原始回归换 ☆ 招式） */
+  kyogre: { species: '盖欧卡', form: '', skills: [[PET_SKILL_ORIGINPULSE, PET_SKILL_THUNDER_STAR], [PET_SKILL_ORIGINPULSE, PET_SKILL_THUNDER_STAR], [PET_SKILL_ORIGINPULSE, PET_SKILL_THUNDER_STAR]] },
+  /* 固拉多（神兽 · 原始回归换 ☆ 招式） */
+  groudon: { species: '固拉多', form: '', skills: [[PET_SKILL_PRECIPICE, PET_SKILL_EARTHQUAKE_STAR], [PET_SKILL_PRECIPICE, PET_SKILL_EARTHQUAKE_STAR], [PET_SKILL_PRECIPICE, PET_SKILL_EARTHQUAKE_STAR]] },
+  /* 烈空坐（神兽 · 原始回归换 ☆ 招式） */
+  rayquaza: { species: '烈空坐', form: '', skills: [[PET_SKILL_DRAGONASCENT, PET_SKILL_DRAGONRUSH_STAR], [PET_SKILL_DRAGONASCENT, PET_SKILL_DRAGONRUSH_STAR], [PET_SKILL_DRAGONASCENT, PET_SKILL_DRAGONRUSH_STAR]] },
+
+  /* ── 🔮 分支形态（键 = 形态 key，`form` = 它属于哪只物种）────────────────── */
+  /* 水伊布（eevee 的进化型） */
+  vaporeon: { species: '水伊布', form: 'eevee', skills: [PET_FORMSKILL_VAPOREON] },
+  /* 雷伊布（eevee 的进化型） */
+  jolteon: { species: '雷伊布', form: 'eevee', skills: [PET_FORMSKILL_JOLTEON] },
+  /* 火伊布（eevee 的进化型） */
+  flareon: { species: '火伊布', form: 'eevee', skills: [PET_FORMSKILL_FLAREON] },
+  /* 仙子伊布（eevee 的进化型） */
+  sylveon: { species: '仙子伊布', form: 'eevee', skills: [PET_FORMSKILL_SYLVEON] },
+  /* 红莲铠骑（charcadet 的进化型） */
+  armarouge: { species: '红莲铠骑', form: 'charcadet', skills: [PET_FORMSKILL_ARMAROUGE] },
+  /* 苍炎刃鬼（charcadet 的进化型） */
+  ceruledge: { species: '苍炎刃鬼', form: 'charcadet', skills: [PET_FORMSKILL_CERULEDGE] },
+  /* 始源盖欧卡（kyogre 的进化型） */
+  kyogre1: { species: '始源盖欧卡', form: 'kyogre', skills: [[PET_SKILL_ORIGINPULSE_STAR, PET_SKILL_THUNDER_STAR]] },
+  /* 始源固拉多（groudon 的进化型） */
+  groudon1: { species: '始源固拉多', form: 'groudon', skills: [[PET_SKILL_PRECIPICE_STAR, PET_SKILL_EARTHQUAKE_STAR]] },
+  /* 超级烈空坐（rayquaza 的进化型） */
+  rayquaza1: { species: '超级烈空坐', form: 'rayquaza', skills: [[PET_SKILL_DRAGONASCENT_STAR, PET_SKILL_DRAGONRUSH_STAR]] },
+};
+
+
+/* 按「物种 id + 段位」取表（**唯一真值**）：分支形态优先（形态 key 命中就用它），否则用物种记录里的段位表。
+   ⚠️ 任何地方要技能表都走这里 / petSkillList；不要再按名字去别处找表。 */
+function petSkillBase(id, stage) {
+  const rec = PET_SKILLS_V2[id];
+  if (!rec || !rec.skills || !rec.skills.length) return [];
+  const st = Math.max(0, Math.min(rec.skills.length - 1, stage | 0));
+  return rec.skills[st] || rec.skills[0] || [];
+}
+/* 这张物种**有没有独立技能表的形态**（水伊布…）——给「进化后招式跟着换」那条链留的口子 */
+function petSkillFormList(id) {
+  const rec = PET_SKILLS_V2[id];
+  return (rec && rec.skills && rec.skills[0]) || [];
+}
+
+function petSkillClone(list) {
+  const out = [];
+  for (const sk of (list || [])) {
+    if (!sk || typeof sk !== 'object') { out.push(sk); continue; }
+    const c = Object.assign({}, sk);
+    for (const k in c) {
+      const v = c[k];
+      if (v && typeof v === 'object') c[k] = Object.assign({}, v);
+    }
+    out.push(c);
+  }
+  return out;
+}
+function petSkillList(id) {
+  /* 🧬 单一数据源：V2 里有的直接用（每只宝可梦独立副本 ✓） */
+  try {
+    const v2 = (typeof PET_SKILLS_V2 !== 'undefined') ? (PET_SKILLS_V2[petFormKey(id)] || PET_SKILLS_V2[id]) : null;
+    if (v2 && v2.length) {
+      const st = petStageOf(id);
+      const list = v2[Math.min(st, v2.length - 1)] || v2[0];
+      if (list && list.length) return list;
+    }
+  } catch (e) {}
+  /* ⚡ 捷拉奥拉：50 级前两招；50 级加「等离子闪电拳」——拿到「风来城的闪光」时那一招换成 ☆ 版（18 次 · ×4） */
+  if (id === 'zeraora') {
+    const list = (zeraoraLv() >= JIRACHI_TOP_LV ? petSkillBase('zeraora', 1) : petSkillBase('zeraora', 0)).slice();
+    if (zeraoraLv() >= JIRACHI_TOP_LV) list[2] = artGot(ZERA_ART) ? PET_SKILL_PLASMAFIST_STAR : PET_SKILL_PLASMAFIST;
+    return list;
+  }
+  /* 🌿 谢米：两招常驻 + 50 级的种子闪光；**天空谢米**用 ☆ 版种子闪光（8 道 ×6） */
+  if (id === 'shaymin') {
+    const list = petSkillBase('shaymin', 0).slice();
+    if (shayminLv() >= JIRACHI_TOP_LV) list.push(shayminSkyOn() ? PET_SKILL_SEEDFLARE_STAR : PET_SKILL_SEEDFLARE);
+    return list;
+  }
+  const fk = petFormKey(id);
+  if (PET_SKILLS_V2[fk]) return petSkillBase(fk, petSkillStage(id));
+  return petSkillBase(id, petSkillStage(id));
+}
+function petSkillTables(id) {
+  const base = PET_SKILLS_V2[id] ? PET_SKILLS_V2[id].skills : PET_SKILLS_V2.bulba.skills;
+  const F = PET_SKILLS_V2[petFormKey(id)];
+  return F ? base.concat([F.skills[0]]) : base;
+}
+function petEvoSucc(id, sid) {
+  const T = petSkillTables(id);
+  const list = petSkillList(id);
+  let cur = sid;
+  for (let guard = 0; guard < 5; guard++) {
+    if (list.some(s => s.id === cur)) return cur;
+    let nx = null;
+    for (const L2 of T) for (const s of L2) if (s.id === cur) nx = s.evo;
+    if (!nx) break;
+    cur = nx;
+  }
+  const d = list.find(s => s.def) || list[0];
+  return d ? d.id : sid;
+}
+function petSkillSelId(id) {
+  const list = petSkillList(id);
+  const cur = petSkillOf(id);
+  if (!cur) return '';
+  for (const s of list) if (s.id === cur.id) return cur.id;
+  for (const s of list) if (s.evo === cur.id) return s.id;   // 被升级版取代的那一项
+  return cur.id;
+}
+function petSkillOf(id) {
+  /* ⚠️ 返回值已由 petSkillList 提供副本（见 petSkillClone） */
+  const list = petSkillList(id);
+  let want = petEvoSucc(id, (p.petSkill || {})[id] || PET_SKILL_DEF[id]);
+  /* 🌠 奇物·千年之愿（训练家专属）：基拉祈已学会「破灭之愿」→ 实战里自动升级成 **破灭之愿☆** */
+  if (id === 'jirachi' && want === 'doomwish' && artGot('wish')) want = 'doomwish2';
+  for (const s of list) if (s.id === want) return s;
+  if (want === 'doomwish2') return PET_SKILL_DOOMWISH_STAR;   // ☆ 版不在技能表里（是质变之外的奇物升级）
+  return list[0];
+}
 })();
+
 
 
 
@@ -30059,27 +30115,6 @@ function petUserMul(id, sk) {
   } catch (e) { return null; }
 }
 
-/* ══════════════════════════════════════════════════════════════════════
-   🧬 **宝可梦技能系统 · 单一数据源（PET_SKILLS_V2）**
-   · 启动时从旧表读出 → 每只宝可梦 / 每个段位一份**深拷贝**（互不共享 → 无联动 ✓）
-   · 数值仍以用户的 PET_SKILL_TABLE 为准（结算时查表 ✓）
-   · 旧表（PET_SKILLS / PET_SKILLS_* / PET_SKILLS_FORM）自此只作原料，运行时只读 V2 ✓
-   ══════════════════════════════════════════════════════════════════════ */
-const PET_SKILLS_V2 = (() => {
-  const out = {};
-  const clone = (o) => { const c = Object.assign({}, o); for (const k in c) { const v = c[k]; if (v && typeof v === 'object') c[k] = Object.assign({}, v); } return c; };
-  try {
-    const src = (typeof PET_SKILLS !== "undefined" && PET_SKILLS) ? PET_SKILLS : {};
-    for (const id in src) {
-      const stages = src[id];
-      if (!Array.isArray(stages)) continue;
-      out[id] = stages.map((list) => (Array.isArray(list) ? list.map(clone) : []));
-    }
-    const F = (typeof PET_SKILLS_FORM !== "undefined" && PET_SKILLS_FORM) ? PET_SKILLS_FORM : {};
-    for (const k in F) { const l = F[k]; if (Array.isArray(l)) out[k] = [l.map(clone)]; }
-  } catch (e) { /* 建表失败 → 全部走老路径 ✓ */ }
-  return out;
-})();
 
 </script>
 </body>
