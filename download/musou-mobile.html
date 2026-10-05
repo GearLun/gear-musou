@@ -7323,7 +7323,7 @@ function petHeadLoad() {
    `trainerLevelUp` 的横幅文案、`__musouTrainerInfo()` 的 dmgBonus/hpBonus/musouBonus，以及冒烟 S42。
    ⚠️ **伤害的升级加成不乘进化倍率**（「先乘倍率再加等级」）→ 每级恒定 +0.5（二段 ×2.25 也一样）；
    ⚠️ 「等级」走 `petLevelOf(id)`：⭐ 基拉祈只认星之助战的层数（jirachiLv），其余才是训练家强化等级 */
-const PET_BASE_DMG_SCALE = 0.9;   // 宝可梦基础伤害 ×0.9（用户要求 −10%）
+const PET_BASE_DMG_SCALE = 0.9;   // ⚖️ 保留给测试读数；实际已收进 petAtkBase()（不再参与结算）
 /* 生命上限的「未打折」基础值（测试钩子 `__musouTrainerInfo().pets[].hpRaw` 读它来折算骑乘惩罚） */
 function petSummonHpBase(id) {
   return Math.max(1, Math.round((PET_SUMMON[id].hp + 1 * petLevelOf(id)) * petEvoMul(petStageOf(id))));
@@ -7335,7 +7335,13 @@ function petSummonHp(id) {
   const mnt = petMountE();
   return (mnt && mnt.petId === id) ? Math.max(1, Math.round(base * PET_RIDE_HP_MUL)) : base;
 }
-function petSummonDmg(id) { return Math.max(1, Math.round(PET_SUMMON[id].dmg * PET_BASE_DMG_SCALE * petEvoMul(petStageOf(id)) + 0.5 * petLevelOf(id))); }
+/* ⚔️ **宝可梦攻击力基值（整数）**：把「基础 −10%」与「训练家口径」一次性收在这里 ——
+   口径：御三家三条线 ×0.7 · 其余 ×0.5（用户 2026-10 口径；想调只改这一处） */
+const PET_ATK_SCALE = { starter: 0.7, other: 0.5 };
+function petAtkBase(id) {
+  return Math.max(1, Math.round(PET_SUMMON[id].dmg * 0.9));   // ⚔️ 整数基础 = 物种原始 × 0.9（基础 −10%）；口径只乘在技能倍率上（petSkillMul）
+}
+function petSummonDmg(id) { return Math.max(1, Math.round((petAtkBase(id) + 0.5 * petLevelOf(id)) * petEvoMul(petStageOf(id)))); }   // ⚔️ 用户口径：(整数基础 + 0.5×等级) × 进化倍率
 /* 🥚 破壳 buff（水箭龟专属）：训练家闪避时触发 —— 30 秒内 伤害 ×1.5 / 移速 ×1.8；**不叠加，只刷新时间** */
 let petShellT = 0, petShellId = '', petShellDmg = 1, petShellSpd = 1;
 function petShellOn(id) { return petShellT > 0 && petShellId === id; }
@@ -7388,6 +7394,19 @@ function petDmgScaleOf(id, sk) {
    生效点**五处**：`petHitDmg / petHitDmgBase` ＋ 三处固定/身周伤害（龙卷风 flat · 光束 flat · 身周 aura.dmg）。 */
 const PET_SOUL_PER = 0.10;
 function petSoulMul() { return 1 + PET_SOUL_PER * ((p.mut && p.mut.trainsoul) || 0); }
+/* ⚗️ **奇物 / 质变的全局伤害加成**（玩家与宝可梦**共用同一份**，改这里两边一起变）：
+   贪狼之牙(每层 +1%) × 哈根(猫神祝福 +20%) × 磨刀(波初 30 秒 +50%) × 金币的力量(每 1000 金币 +6%) × 护盾猛击(有盾时 +10%/层) */
+/* ⚖️ **技能倍率口径**（御三家 0.7 / 其余 0.5）：表里显示的倍率已经乘过它，
+   所以结算里也要乘一次 —— 两边永远一致（用户要求：表里的数 = 游戏里的数） */
+function petSkillMul(id) { return PET_STARTERS.indexOf(id) >= 0 ? PET_ATK_SCALE.starter : PET_ATK_SCALE.other; }
+function artDmgMul() {
+  let b = 1 + (p.fangN || 0) * 0.01;
+  if (artGot('hagen')) b *= 1.2;
+  if (p.sharpenT > 0) b *= 1.5;
+  if (artGot('coinpow')) b *= 1 + COINPOW_PER * Math.floor(coins / 1000);
+  if (p.mut.shieldbash > 0 && (p.oshield || 0) > 0) b *= 1 + SHIELDBASH_PER * p.mut.shieldbash;
+  return b;
+}
 function petHitDmg(id, mul, sk) {
   let m = mul;
   if (petShellOn(id)) m *= petShellDmg;      // 🥚 破壳：伤害 +50%
@@ -7396,10 +7415,10 @@ function petHitDmg(id, mul, sk) {
     delete petHelpCharge[id];
     dbgPetHelpUsed++;
   }
-  return Math.max(1, Math.round(petSummonDmg(id) * m * petDmgScaleOf(id, sk) * petSoulMul() * petPrimalMul(id)));
+  return Math.max(1, Math.round(petSummonDmg(id) * m * petSkillMul(id) * petSoulMul() * petPrimalMul(id) * artDmgMul()));
 }
 /* 纯函数版（**不消耗帮助蓄力 / 不看破壳状态**）：只给读数与测试钩子用 —— 实际结算一律走 petHitDmg */
-function petHitDmgBase(id, mul, sk) { return Math.max(1, Math.round(petSummonDmg(id) * mul * petDmgScaleOf(id, sk) * petSoulMul() * petPrimalMul(id))); }
+function petHitDmgBase(id, mul, sk) { return Math.max(1, Math.round(petSummonDmg(id) * mul * petSkillMul(id) * petSoulMul() * petPrimalMul(id) * artDmgMul())); }
 /* 🤝 波克比「帮助」：给**全部宝可梦**挂上「下次攻击 +50%」的蓄力（每只各一次，用掉即消耗）
    —— 用 map 存倍率，键 = 物种 id；换局 / 换人（resetRun）由 petHelpClear() 清干净 */
 let petHelpCharge = {};
@@ -7858,7 +7877,7 @@ function spawnPetTornado(u, ang, T) {
   petTornadoes.push({
     x: u.x + Math.cos(ang) * (T.dist || 150), y: u.y + Math.sin(ang) * (T.dist || 150),
     ang, t: T.life, life: T.life, r: T.r, tick: 0, period: T.tick,
-    dmg: Math.max(1, Math.round(T.flat * petDmgScale(u.petId) * petSoulMul())),   // ⚖️ 固定伤害也吃降伤口径（+ 🧢 训练家之魂）
+    dmg: Math.max(1, Math.round(T.flat * petSkillMul(u.petId) * petSoulMul() * artDmgMul())),   // ⚖️ 固定伤害也吃降伤口径（+ 🧢 训练家之魂）
     spd: T.spd, spin: rnd(0, TAU), el: petFormElement(u)
   });
   dbgPetTornadoes++;
@@ -8501,7 +8520,7 @@ function updatePetAlly(u, dt) {
       for (const [e] of hits) {
         if (!nowTick && prev.has(e)) continue;
         /* ⚖️ 固定伤害（龙息 12）也吃宝可梦降伤口径；走倍率的那些本来就过 petHitDmg */
-        const hd = J.flat ? Math.max(1, Math.round(J.flat * petDmgScale(u.petId) * petSoulMul())) : petHitDmg(u.petId, J.mul, SK);
+        const hd = J.flat ? Math.max(1, Math.round(J.flat * petSkillMul(u.petId) * petSoulMul() * artDmgMul())) : petHitDmg(u.petId, J.mul, SK);
         hitEnemy(e, Math.cos(u.petAng), Math.sin(u.petAng), 90, hd);
         if (J.slowK !== undefined) { e.slowK = J.slowK; e.slowT = Math.max(e.slowT || 0, J.slowT || 1); }
         dbgPetWaterHits++;
@@ -8712,7 +8731,7 @@ function updatePetAlly(u, dt) {
     const auraHit = (e) => {
       const dx = e.x - u.x, dy = e.y - u.y, dd = Math.hypot(dx, dy) || 1;
       hitEnemy(e, dx / dd, dy / dd, 90, A.mul !== undefined ? petHitDmg(u.petId, A.mul, SK)   // 🦈 重踏/地震：走「X× 宝可梦攻击力」的倍率口径
-        : Math.max(1, Math.round(A.dmg * petDmgScale(u.petId) * petSoulMul())));   // ⚖️ 身周伤害也吃降伤口径（+ 🧢 训练家之魂）
+        : Math.max(1, Math.round(A.dmg * petSkillMul(u.petId) * petSoulMul() * artDmgMul())));   // ⚖️ 身周伤害也吃降伤口径（+ 🧢 训练家之魂）
       /* 🔥 附带灼烧 —— 🌋 地震⭐（固拉多）标了 `A.noBurn`：**只掉血不点火**（用户要求「不会烧伤」） */
       if (!A.noBurn) {
         if (e.burnT === undefined) { e.burnT = 0; e.burnI = 0; }
@@ -10506,11 +10525,7 @@ function hitEnemy(e, ax, ay, force, dmg, chest) {
   }
   /* 奇物全局加成：贪狼之牙(限时叠伤) × 哈根(猫神祝福) × 磨刀(波初 30s +50%) × 金币的力量(每 1000 金币 +6%)
      × 质变·护盾猛击（身上有护盾时 +10%/层，满 5 层 = 1.5 倍） */
-  let artB = 1 + p.fangN * 0.01;
-  if (artGot('hagen')) artB *= 1.2;
-  if (p.sharpenT > 0) artB *= 1.5;
-  if (artGot('coinpow')) artB *= 1 + COINPOW_PER * Math.floor(coins / 1000);
-  if (p.mut.shieldbash > 0 && (p.oshield || 0) > 0) artB *= 1 + SHIELDBASH_PER * p.mut.shieldbash;
+  let artB = artDmgMul();   // ⚗️ 与宝可梦共用同一份奇物/质变加成
   if (artB !== 1) dmg = Math.round(dmg * artB);
   /* 奇物·一刀一刀燃烧刀：命中挂灼伤；对灼伤目标伤害 +20% */
   if (artGot('burns')) {
