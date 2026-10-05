@@ -7878,7 +7878,7 @@ function spawnPetTornado(u, ang, T) {
   petTornadoes.push({
     x: u.x + Math.cos(ang) * (T.dist || 150), y: u.y + Math.sin(ang) * (T.dist || 150),
     ang, t: T.life, life: T.life, r: T.r, tick: 0, period: T.tick,
-    dmg: Math.max(1, Math.round(T.flat * petSkillMul(u.petId) * petSoulMul() * artDmgMul())),   // ⚖️ 固定伤害也吃降伤口径（+ 🧢 训练家之魂）
+    dmg: petHitDmg(u.petId, T.mul !== undefined ? T.mul : 0, null),   // ⚖️ 固定伤害也吃降伤口径（+ 🧢 训练家之魂）
     spd: T.spd, spin: rnd(0, TAU), el: petFormElement(u)
   });
   dbgPetTornadoes++;
@@ -8521,7 +8521,7 @@ function updatePetAlly(u, dt) {
       for (const [e] of hits) {
         if (!nowTick && prev.has(e)) continue;
         /* ⚖️ 固定伤害（龙息 12）也吃宝可梦降伤口径；走倍率的那些本来就过 petHitDmg */
-        const hd = J.flat ? Math.max(1, Math.round(J.flat * petSkillMul(u.petId) * petSoulMul() * artDmgMul())) : petHitDmg(u.petId, J.mul, SK);
+        const hd = petHitDmg(u.petId, J.mul !== undefined ? J.mul : 0, SK);   // 🔧 固定值已全部改为倍率
         hitEnemy(e, Math.cos(u.petAng), Math.sin(u.petAng), 90, hd);
         if (J.slowK !== undefined) { e.slowK = J.slowK; e.slowT = Math.max(e.slowT || 0, J.slowT || 1); }
         dbgPetWaterHits++;
@@ -8732,7 +8732,7 @@ function updatePetAlly(u, dt) {
     const auraHit = (e) => {
       const dx = e.x - u.x, dy = e.y - u.y, dd = Math.hypot(dx, dy) || 1;
       hitEnemy(e, dx / dd, dy / dd, 90, A.mul !== undefined ? petHitDmg(u.petId, A.mul, SK)   // 🦈 重踏/地震：走「X× 宝可梦攻击力」的倍率口径
-        : Math.max(1, Math.round(A.dmg * petSkillMul(u.petId) * petSoulMul() * artDmgMul())));   // ⚖️ 身周伤害也吃降伤口径（+ 🧢 训练家之魂）
+        : petHitDmg(u.petId, A.mul !== undefined ? A.mul : 0, null));   // ⚖️ 身周伤害也吃降伤口径（+ 🧢 训练家之魂）
       /* 🔥 附带灼烧 —— 🌋 地震⭐（固拉多）标了 `A.noBurn`：**只掉血不点火**（用户要求「不会烧伤」） */
       if (!A.noBurn) {
         if (e.burnT === undefined) { e.burnT = 0; e.burnI = 0; }
@@ -29924,7 +29924,7 @@ const PET_MUL_OVERRIDE = {
   const walk = (o) => {
     if (!o || typeof o !== 'object' || seen.has(o)) return;
     seen.add(o);
-    if (o.name && PET_MUL_OVERRIDE[o.name] !== undefined && o.mul !== undefined) o.mul = PET_MUL_OVERRIDE[o.name];
+    if (o.name && PET_MUL_OVERRIDE[o.name] !== undefined) o.mul = PET_MUL_OVERRIDE[o.name];   // 固定值招式也会被赋上 mul（不再有固定值）
     for (const k in o) if (o[k] && typeof o[k] === Q + "object" + Q) walk(o[k]);
   };
   walk(PET_SKILLS);
