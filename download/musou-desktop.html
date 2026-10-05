@@ -7050,6 +7050,21 @@ const PET_SKILL_DEF_FORM = {
   sylveon: 'moonblast'   // 默认给它月亮之力（爆发那招），想常驻唱就自己在面板里换魅惑之声
 };
 /* 当前段位的技能表：**分支形态（水伊布…）先按形态 key 查**，其余照旧按「物种 + 段位」 */
+/* 🧬 **技能副本**：把技能表深拷贝一份（含 atk/jet/melee/dash/slam/aura/thunder/meteor/moons/seed/blitz/sector 等载荷）
+   —— 这样每只宝可梦拿到的都是**自己的**对象，改一只不会牵动另一只（消灭「联动」，用户 2026-10 要求） */
+function petSkillClone(list) {
+  const out = [];
+  for (const sk of (list || [])) {
+    if (!sk || typeof sk !== 'object') { out.push(sk); continue; }
+    const c = Object.assign({}, sk);
+    for (const k in c) {
+      const v = c[k];
+      if (v && typeof v === 'object') c[k] = Object.assign({}, v);
+    }
+    out.push(c);
+  }
+  return out;
+}
 function petSkillList(id) {
   /* ⚡ 捷拉奥拉：50 级前两招；50 级加「等离子闪电拳」——拿到「风来城的闪光」时那一招换成 ☆ 版（18 次 · ×4） */
   if (id === 'zeraora') {
@@ -7103,6 +7118,7 @@ function petSkillSelId(id) {
   return cur.id;
 }
 function petSkillOf(id) {
+  /* ⚠️ 返回值已由 petSkillList 提供副本（见 petSkillClone） */
   const list = petSkillList(id);
   let want = petEvoSucc(id, (p.petSkill || {})[id] || PET_SKILL_DEF[id]);
   /* 🌠 奇物·千年之愿（训练家专属）：基拉祈已学会「破灭之愿」→ 实战里自动升级成 **破灭之愿☆** */
