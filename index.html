@@ -1745,6 +1745,29 @@ function startWave(k) {
   }
   sfx.wave();
 }
+/* 🧹 每帧把死掉的敌人从数组里剔除 —— **原地压缩**，不再 `enemies = enemies.filter(...)`：
+   后者每帧都要新建一个最多 240 个元素的数组（GC 压力的头号来源，所有职业都吃）。
+   顺序保持不变，语义完全一致（`enemies.length` 仍然 = 存活数）。 */
+/* 🧹 武器大师每帧要挑「某一类」武器实例：原来是 `filter().map()` 各分配一个数组，
+   现在复用同一个临时数组（同一帧内用完即弃，绝不跨帧持有）。 */
+let scratchWm = [];
+/* 🧹 临时「活着的非 Boss 敌人」列表（同一帧内用完即弃） */
+let scratchFoeBuf = [];
+function scratchFoes() {
+  scratchFoeBuf.length = 0;
+  for (const e of enemies) if (!e.dead && !e.boss) scratchFoeBuf.push(e);
+  return scratchFoeBuf;
+}
+function scratchWmList(slots, kind) {
+  scratchWm.length = 0;
+  for (const s of slots) if (wmBase(s.inst.id).kind === kind) scratchWm.push({ inst: s.inst, mul: 1, key: s.key });
+  return scratchWm;
+}
+function enemiesCompact() {
+  let w = 0;
+  for (let i = 0; i < enemies.length; i++) { const e = enemies[i]; if (!e.dead) enemies[w++] = e; }
+  if (w !== enemies.length) enemies.length = w;
+}
 function spawnEnemy(type, forceShiny, noShiny, probe) {
   const t = ETYPES[type];
   /* 血量成长：杂兵每波 **+30%**；第5/10/15/20波 ×2/×4/×6/×9；
@@ -23987,7 +24010,7 @@ function updateGame(dt, rawDt) {
     }
     /* 🔷 泰拉棱镜：飞剑（绕着玩家待命 → 锁定最近敌人扑上去 → 回来；攻击逻辑与猫咪/永恒飞剑同款）
        💗 专属偏爱触发时同一把棱镜占满所有槽位 → **每个槽位各自召唤它那几把**（例：满母怪力 + ★3 棱镜 = 4×5 = 20 把） */
-    const wmWantPr = wmSlots().filter(s3 => wmBase(s3.inst.id).kind === 'prism').map(s3 => ({ inst: s3.inst, mul: 1, key: s3.key }));
+    const wmWantPr = scratchWmList(wmSlots(), 'prism');   // 🧹 同上
     if (p.wmMusouT > 0) for (const x of wmStored()) if (wmBase(x.id).kind === 'prism') wmWantPr.push({ inst: x, mul: WM_MUSOU_MUL, key: x.uid + '#m' });
     for (const w of wmWantPr) {          // 数目维护：一个槽位 = 它自己的那几把飞剑（每星 +1）
       const need = Math.max(0, wmStatOf(w.inst).swords | 0);
@@ -24117,7 +24140,7 @@ function updateGame(dt, rawDt) {
         rings.push({ x: p.x, y: p.y, r: 8, vr: 260, life: 0.4, max: 0.4, color: '#7fe08a', width: 3 });
       } else if (st2.aura === 'snap') {
         /* 🧤 无限手套：打个响指，随机抹掉场上半数敌人（Boss 免疫） */
-        const list = enemies.filter(e => !e.dead && !e.boss);
+        const list = scratchFoes();   // 🧹 复用临时数组（原来每帧 filter 一次）
         const killN = Math.floor(list.length / 2);
         for (let i = 0; i < killN; i++) {
           const idx = Math.floor(Math.random() * list.length);
@@ -24141,7 +24164,7 @@ function updateGame(dt, rawDt) {
       }
     }
     /* 🛸 无人机：**自己随机游走**（不再跟着玩家）+ 自动索敌射击（**不撞人、不造成冲撞伤害**） */
-    const wmWantDr = wmSlots().filter(s2 => wmBase(s2.inst.id).kind === 'drone').map(s2 => ({ inst: s2.inst, mul: 1, key: s2.key }));
+    const wmWantDr = scratchWmList(wmSlots(), 'drone');   // 🧹 复用临时数组（原来每帧 filter+map 各分配一次）
     if (p.wmMusouT > 0) for (const x of wmStored()) if (wmBase(x.id).kind === 'drone') wmWantDr.push({ inst: x, mul: WM_MUSOU_MUL, key: x.uid + '#m' });
     for (let i = wmDrones.length - 1; i >= 0; i--) {
       if (!wmWantDr.some(w => w.key === wmDrones[i].key)) wmDrones.splice(i, 1);
@@ -24304,7 +24327,7 @@ function updateGame(dt, rawDt) {
   }
   updateThunderClouds(dt);             // 雷法师：无双雷云（可多朵并存，各自飘移 + 落雷）
   if (thunBossCd > 0) thunBossCd = Math.max(0, thunBossCd - dt);   // 雷罚·Boss 冷却（0.5 秒）
-  if (arcs.length) { for (const a of arcs) a.t += dt; arcs = arcs.filter(a => a.t < a.life); }
+  if (arcs.length) { let w2 = 0; for (const a of arcs) { a.t += dt; if (a.t < a.life) arcs[w2++] = a; } arcs.length = w2; }   // 🧹 原地压缩，不再每帧分配
   /* 法师质变·无穷法力：冷却倒计时 */
   if (p.manapoolT > 0) p.manapoolT = Math.max(0, p.manapoolT - dt);
   /* 法师质变·狂暴增幅：无双后限时增伤 */
@@ -29689,7 +29712,7 @@ window.__musouBHScenario = (mode) => { // 测试钩子：黑洞微场景（离�
     for (const e of made) e.dead = true;
     blackHoles = [];   // 场景黑洞一律清空，避免残留干扰后续真实按键计数
     for (const e of parked) { e.x = e._px; e.y = e._py; delete e._px; delete e._py; }
-    enemies = enemies.filter(e => !e.dead);
+    enemiesCompact();   // 🧹 原地压缩（每帧一次，所有职业共用）
   };
   if (mode === 'dotpull') {
     blackHoles.push(hole);
