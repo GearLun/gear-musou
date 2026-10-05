@@ -30028,11 +30028,14 @@ function petFormNameOf(id) {
   try { return (PET_SUMMON[id] && PET_SUMMON[id].name) || id; } catch (e2) { return id; }
 }
 /* 查表：命中就返回用户写的最终倍率（null = 没写） */
+/* 🚫 不走数值表的技能（用户点名：这些用代码里的固定值）—— 意念头锤：冲刺 ×2 · 下砸 ×3 */
+const PET_SKILL_TABLE_IGNORE = ['意念头锤'];
 function petUserMul(id, sk) {
   /* ⚠️⚠️ 这里**绝对不能抛异常**：它在技能更新循环里被调用，
      抛出去会打断整个技能流程（用户报过：基拉祈的破灭之愿连陨石动画都没了 ✗） */
   try {
     if (!sk || !sk.name) return null;
+    if (PET_SKILL_TABLE_IGNORE.indexOf(sk.name) >= 0) return null;   // 🚫 点名忽略
     if (typeof PET_SKILL_TABLE === 'undefined' || !PET_SKILL_TABLE) return null;
     const t = PET_SKILL_TABLE[petFormNameOf(id)];
     if (!t) return null;
