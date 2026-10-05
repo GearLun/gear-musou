@@ -5181,7 +5181,7 @@ function petLevelOf(id) {
 function petSkillStage(id) {
   /* 🌸 谢米：**50 级解锁种子闪光**（天空谢米换成 ☆ 版，见 petSkillList） */
   if (id === 'shaymin') return shayminLv() >= JIRACHI_TOP_LV ? 1 : 0;
-  if (id === 'zeraora') return 0;   // ⚡ 捷拉奥拉：目前只有「等离子闪电拳」一招，不分段
+  if (id === 'zeraora') return zeraoraLv() >= JIRACHI_TOP_LV ? 1 : 0;   // ⚡ 50 级学「等离子闪电拳」那一档
   if (id === 'toge') return p.lvl >= PET_EVO_LV[1] ? 2 : (p.lvl >= PET_EVO_LV[0] ? 1 : 0);
   if (id === 'jirachi') return jirachiLv() >= JIRACHI_TOP_LV ? (PET_SKILLS.jirachi.length - 1) : 0;
   return petStageOf(id);
@@ -6623,8 +6623,8 @@ const PET_SKILL_ORIGINPULSE = {
    伤害始终 = **雷伊布那一招 ×1.3**（雷伊布：`3.0 * 3` 翻 3 倍后再 `×1.5` → 这里写 `3.0 * 3 * 1.5 * 1.3`） */
 const PET_SKILL_THUNDER_STAR = {
   id: 'thunderstar', name: '打雷☆', icon: '🌩️', kind: 'thunder', cd: 5.0 / 2, range: 900,
-  desc: '原地蓄力 0.5 秒后随机选战场上 5 名敌人各劈一道单体雷击（和雷伊布的打雷同款 · 伤害比它再高 30%）· ' + petCdText(5.0 / 2),
-  thunder: { charge: 0.5, n: 5, mul: 3.0 * 3 * 1.5 * 1.3, moveSpd: 420 }
+  desc: '原地蓄力 0.5 秒后随机选战场上 8 名敌人各劈一道单体雷击（和雷伊布的打雷同款 · 伤害比它再高 30%）· ' + petCdText(5.0 / 2),
+  thunder: { charge: 0.5, n: 8, mul: 3.0 * 3 * 1.5 * 1.3, moveSpd: 420 }   // ⚡ 目标 5 → 8（盖欧卡 / 捷拉奥拉共用这一份，用户要求）
 };
 /* 🗡 断崖之剑（固拉多）：**和流星群差不多**（蓄力 0.5 秒 → 朝至多 5 个敌人的位置各来一发范围伤害），
    但画面是**地刺从地面长出来**（`meteor.spike: 1`，见 petMeteorCast / updatePetMeteors / drawPetMeteors）。
@@ -6773,6 +6773,15 @@ const PET_SKILL_DRAGONRUSH_STAR = {
   desc: '龙之俯冲强化：连续冲刺三次 · 伤害再翻倍（每次 6.0 倍）· ' + petCdText(2.6),
   dash: { dist: 320, spd: 2400, r: 70, mul: 6.0, fxK: 4, path: 1, times: 3 }
 };
+/* ⚡ **雷电拳☆**（捷拉奥拉 50 级前学 · 用户点名「相当于龙之俯冲☆」）：
+   连续冲刺三次造成伤害 —— 冲刺距离 / 速度 / 判定半径 / 段数**直接引用**龙之俯冲☆，
+   伤害按用户口径与它一致（`mul: 6.0`）。 */
+const PET_SKILL_THUNDERPUNCH_STAR = {
+  id: 'thunderpunch2', name: '雷电拳☆', icon: '⚡', kind: 'dash', cd: 2.6, range: 520, fxEl: 'ELECTRIC',
+  desc: '同「龙之俯冲☆」：连续冲刺三次，每次 6 倍宝可梦攻击的伤害 · ' + petCdText(2.6),
+  dash: { dist: 320, spd: 2400, r: 70, mul: 6.0, fxK: 4, path: 1, times: 3 }
+};
+
 const PET_SKILLS_DRATINI_1 = [PET_SKILL_TORNADO_STAR, PET_SKILL_DRAGONRUSH];
 const PET_SKILLS_DRATINI_2 = [PET_SKILL_METEOR, PET_SKILL_DRAGONRUSH_STAR];
 /* 🌟 **神兽三只的技能表**（各两招，第一招是默认）：放在这里是因为烈空坐第二招**直接引用快龙的「龙之俯冲☆」**
@@ -6883,8 +6892,9 @@ const PET_SKILLS = {
   jirachi: [PET_SKILLS_JIRACHI, PET_SKILLS_JIRACHI_2],
   /* 🌸 谢米（#492）：不进化；50 级（= 幻之助战满层）换第二档技能表（现在两张都是占位技） */
   shaymin: [PET_SKILLS_SHAYMIN, PET_SKILLS_SHAYMIN_2],
-  /* ⚡ 捷拉奥拉（#807）：不进化、不换招，从头到尾就一招等离子闪电拳 */
-  zeraora: [[PET_SKILL_PLASMAFIST], [PET_SKILL_PLASMAFIST]],
+  /* ⚡ 捷拉奥拉（#807）：50 级前 **雷电拳☆ + 打雷☆**；50 级再学 **等离子闪电拳**
+     （拿到奇物「风来城的闪光」时，那一招换成 ☆ 版 —— 见 petSkillList 的特判） */
+  zeraora: [[PET_SKILL_THUNDERPUNCH_STAR, PET_SKILL_THUNDER_STAR], [PET_SKILL_THUNDERPUNCH_STAR, PET_SKILL_THUNDER_STAR, PET_SKILL_PLASMAFIST]],
   /* 🌟 神兽三只（#382/#383/#384）：各有**两招专属技能**（用户逐条点名，见上面那张表），
      它们不进化 → 三段都指向同一份表 */
   kyogre: [PET_SKILLS_KYOGRE, PET_SKILLS_KYOGRE, PET_SKILLS_KYOGRE],
@@ -6993,8 +7003,12 @@ const PET_SKILL_DEF_FORM = {
 };
 /* 当前段位的技能表：**分支形态（水伊布…）先按形态 key 查**，其余照旧按「物种 + 段位」 */
 function petSkillList(id) {
-  /* ⚡ 捷拉奥拉：目前只有一招 —— 拿到「风来城的闪光」后换成 ☆ 版（18 次 · ×4） */
-  if (id === 'zeraora') return [artGot(ZERA_ART) ? PET_SKILL_PLASMAFIST_STAR : PET_SKILL_PLASMAFIST];
+  /* ⚡ 捷拉奥拉：50 级前两招；50 级加「等离子闪电拳」——拿到「风来城的闪光」时那一招换成 ☆ 版（18 次 · ×4） */
+  if (id === 'zeraora') {
+    const list = zeraoraLv() >= JIRACHI_TOP_LV ? PET_SKILLS.zeraora[1].slice() : PET_SKILLS.zeraora[0].slice();
+    if (zeraoraLv() >= JIRACHI_TOP_LV) list[2] = artGot(ZERA_ART) ? PET_SKILL_PLASMAFIST_STAR : PET_SKILL_PLASMAFIST;
+    return list;
+  }
   /* 🌿 谢米：两招常驻 + 50 级的种子闪光；**天空谢米**用 ☆ 版种子闪光（8 道 ×6） */
   if (id === 'shaymin') {
     const list = PET_SKILLS_SHAYMIN.slice();
@@ -10722,9 +10736,9 @@ function openStarPick() {
       id, icon: '<img class="up-ic-img" src="' + PET_HEAD[petFormKey(id)] + '" alt="">',
       name: S2.name + (dex ? '（No.' + dex + '）' : ''),
       desc: sk.filter(Boolean).map(x => x.name).join(' / ') + '<br>生命 ' + petSummonHp(id) + ' · 伤害 ' + petHitDmgBase(id, 1)   // filter(Boolean)：表里混进空值也不崩面板
-        + '<br>' + (id === 'jirachi' ? '后续只会刷出「千年之愿」'
-          : (id === 'shaymin' ? '后续只会刷出「葛拉西蒂亚花」（把花送给它 → 变成天空谢米）'
-            : '专属招式「等离子闪电拳」：瞬移连打，优先法师 / 弓箭手')),
+        + '<br>' + (id === 'jirachi' ? '等级50级时学会「破灭之愿」,专属奇物「千年之愿」。'
+          : (id === 'shaymin' ? '等级50级时学会「种子闪光」,专属奇物「葛拉西蒂亚花」。'
+            : '等级50级时学会「等离子闪电拳」,专属奇物「风来城的闪光」。')),
       apply() {
         p.starPick = id;
         /* ⚠️ 幻之宝可梦**只能有一只**：把另一只从队伍与场上清掉（用户报过「基拉祈和谢米一起进队」） */
