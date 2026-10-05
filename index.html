@@ -7416,10 +7416,12 @@ function petHitDmg(id, mul, sk) {
     delete petHelpCharge[id];
     dbgPetHelpUsed++;
   }
+  const u = petUserMul(id, sk);   // 📋 优先用「独立技能数值表」里用户写的数
+  if (u !== null) return Math.max(1, Math.round(petSummonDmg(id) * u * petSoulMul() * petPrimalMul(id) * artDmgMul()));
   return Math.max(1, Math.round(petSummonDmg(id) * m * petSkillMul(id) * petSoulMul() * petPrimalMul(id) * artDmgMul()));
 }
 /* 纯函数版（**不消耗帮助蓄力 / 不看破壳状态**）：只给读数与测试钩子用 —— 实际结算一律走 petHitDmg */
-function petHitDmgBase(id, mul, sk) { return Math.max(1, Math.round(petSummonDmg(id) * mul * petSkillMul(id) * petSoulMul() * petPrimalMul(id) * artDmgMul())); }
+function petHitDmgBase(id, mul, sk) { const u = petUserMul(id, sk); if (u !== null) return Math.max(1, Math.round(petSummonDmg(id) * u * petSoulMul() * petPrimalMul(id) * artDmgMul())); return Math.max(1, Math.round(petSummonDmg(id) * mul * petSkillMul(id) * petSoulMul() * petPrimalMul(id) * artDmgMul())); }
 /* 🤝 波克比「帮助」：给**全部宝可梦**挂上「下次攻击 +50%」的蓄力（每只各一次，用掉即消耗）
    —— 用 map 存倍率，键 = 物种 id；换局 / 换人（resetRun）由 petHelpClear() 清干净 */
 let petHelpCharge = {};
@@ -29932,6 +29934,183 @@ const PET_MUL_OVERRIDE = {
     try { walk(eval(nm)); } catch (e) {}
   }
 })();
+
+/* ══ 独立技能数值表（用户手写 · 每个宝可梦 × 每个技能各自一个数 · 无引用）══════
+   来源：docs/宝可梦技能数值表.最终4.csv 的「新倍率」列（用户 2026-10 逐格填写）
+   用法：结算时按**当前形态的中文名 + 技能名**取数 —— 取到就**直接用它**（不再乘 mul / 口径），
+        取不到才回退到旧的 mul × 口径 路径。想改数值只改这张表。 */
+const PET_SKILL_TABLE = {
+  "妙蛙种子": {
+    "飞叶快刀": 0.3,
+    "藤鞭": 0.8,
+  },
+  "妙蛙草": {
+    "魔法叶": 0.5,
+    "能量球": 1.5,
+    "强力鞭打": 1.2,
+  },
+  "妙蛙花": {
+    "疯狂植物": 1.5,
+    "花瓣舞": 0.6,
+    "日光束": 3,
+    "能量球☆": 2,
+  },
+  "小火龙": {
+    "火苗": 0.5,
+    "抓击": 0.8,
+  },
+  "火恐龙": {
+    "火焰轮": 1.2,
+    "龙息": 0.5,
+    "劈开": 1.2,
+  },
+  "喷火龙": {
+    "地球上投": 6,
+    "喷射火焰": 1,
+    "热风": 1.1,
+    "闪焰冲锋": 7,
+  },
+  "杰尼龟": {
+    "火箭头锤": 1,
+    "水枪": 0.4,
+  },
+  "卡咪龟": {
+    "高速旋转": 1.5,
+    "泡沫光线": 0.5,
+  },
+  "水箭龟": {
+    "冲浪": 1.2,
+    "加农水炮": 3,
+    "水炮": 1,
+  },
+  "伊布": {
+    "电光一闪": 1,
+    "高速星星": 0.2,
+  },
+  "水伊布": {
+    "冲浪": 1.2,
+  },
+  "雷伊布": {
+    "打雷": 5,
+    "伏特替换": 3,
+  },
+  "火伊布": {
+    "闪焰冲锋": 7,
+    "蓄能焰袭☆": 2,
+  },
+  "仙子伊布": {
+    "魅惑之声": 0.8,
+    "月亮之力": 3,
+  },
+  "炭小侍": {
+    "火苗": 0.5,
+    "蓄能焰袭": 0.8,
+  },
+  "红莲铠骑": {
+    "铠农炮": 3,
+    "广域战力": 0.8,
+  },
+  "苍炎刃鬼": {
+    "悔念剑": 5,
+    "影子偷袭": 1.5,
+  },
+  "多龙梅西亚": {
+    "电光一闪": 1,
+  },
+  "多龙奇": {
+    "暗影球": 2,
+    "急速折返": 2.5,
+  },
+  "多龙巴鲁托": {
+    "龙箭": 1.5,
+    "暗影球☆": 2.5,
+  },
+  "迷你龙": {
+    "龙卷风": 0.3,
+  },
+  "哈克龙": {
+    "龙之俯冲": 1.5,
+    "龙卷风☆": 0.5,
+  },
+  "快龙": {
+    "流星群": 2.5,
+    "龙之俯冲☆": 2,
+  },
+  "铁哑铃": {
+    "猛撞": 1,
+  },
+  "金属怪": {
+    "子弹拳": 1,
+    "猛撞☆": 2,
+  },
+  "巨金怪": {
+    "子弹拳☆": 1.5,
+  },
+  "圆陆鲨": {
+    "重踏": 0.4,
+  },
+  "尖牙陆鲨": {
+    "地震": 0.6,
+    "龙爪": 1.2,
+  },
+  "烈咬陆鲨": {
+    "地震☆": 0.8,
+    "二连劈☆": 1.5,
+  },
+  "波克比": {
+    "帮助": 0.3,
+    "帮助☆": 0.5,
+  },
+  "基拉祈": {
+    "破灭之愿": 2.5,
+    "破灭之愿☆": 4,
+    "高速星星☆": 0.8,
+  },
+  "谢米": {
+    "能量球☆": 2,
+    "帮助☆": 0.5,
+    "种子闪光": 1.8,
+    "种子闪光☆": 2.2,
+  },
+  "捷拉奥拉": {
+    "等离子闪电拳": 1.5,
+    "等离子闪电拳☆": 2,
+    "打雷☆": 6,
+    "雷电拳☆": 2.5,
+  },
+  "盖欧卡": {
+    "根源波动": 2,
+    "根源波动☆": 3,
+    "打雷☆": 6,
+  },
+  "固拉多": {
+    "断崖之剑": 3,
+    "断崖之剑☆": 4,
+    "地震☆": 0.8,
+  },
+  "烈空坐": {
+    "画龙点睛": 7,
+    "画龙点睛☆": 8,
+    "龙之俯冲☆": 2,
+  },
+};
+/* 当前形态的中文名（用于查表）：优先用形态名表，其次用物种名 */
+function petFormNameOf(id) {
+  try {
+    const key = petFormKey(id);
+    const arr = PET_FORM_NAME[key];
+    if (arr && arr.length) { const st = petStageOf(id); return arr[Math.min(st, arr.length - 1)] || arr[0]; }
+  } catch (e) {}
+  return (PET_SUMMON[id] && PET_SUMMON[id].name) || id;
+}
+/* 查表：命中就返回用户写的最终倍率（null = 没写） */
+function petUserMul(id, sk) {
+  if (!sk || !sk.name) return null;
+  const t = PET_SKILL_TABLE[petFormNameOf(id)];
+  if (!t) return null;
+  const v = t[sk.name];
+  return (typeof v === "number" && v > 0) ? v : null;
+}
 
 </script>
 <script>if("serviceWorker" in navigator){addEventListener("load",function(){navigator.serviceWorker.register("sw.js").catch(function(){})})}</script>
