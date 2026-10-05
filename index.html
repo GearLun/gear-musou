@@ -5164,9 +5164,17 @@ const WISH_LV_BONUS = 20;      // 🌠 奇物·千年之愿：基拉祈**当前�
 function jirachiLv() { return Math.round(JIRACHI_TOP_LV * ((p.mut && p.mut.starhelp) || 0) / STARHELP_CAP) + (artGot('wish') ? WISH_LV_BONUS : 0); }
 /* 每只宝可梦的「等级」：⭐ 基拉祈只认质变层数 · 其余都吃训练家强化等级（升级 +0.5 伤害 / +1 生命） */
 /* 🌸 谢米：和基拉祈同一套「按幻之助战层数」的等级口径（10/20/30/40/50）· **拿到葛拉西蒂亚花立刻 +20 级** */
+const ZERA_ART = 'windflash';      // ⚡ 奇物「风来城的闪光」（训练家专属 · 选了捷拉奥拉才刷）
+const ZERA_ART_LV = 20;            // ⚡ 拿到它：捷拉奥拉**立刻 +20 级**（用户要求）
 const SHAYMIN_FLOWER_LV = 20;
 function shayminLv() { return Math.round(JIRACHI_TOP_LV * ((p.mut && p.mut.starhelp) || 0) / STARHELP_CAP) + (artGot('gracidea') ? SHAYMIN_FLOWER_LV : 0); }
-function petLevelOf(id) { return id === 'jirachi' ? jirachiLv() : (id === 'shaymin' ? shayminLv() : (p.trainLv || 0)); }
+function zeraoraLv() { return Math.round(JIRACHI_TOP_LV * ((p.mut && p.mut.starhelp) || 0) / STARHELP_CAP) + (artGot(ZERA_ART) ? ZERA_ART_LV : 0); }
+function petLevelOf(id) {
+  if (id === 'jirachi') return jirachiLv();
+  if (id === 'shaymin') return shayminLv();
+  if (id === 'zeraora') return zeraoraLv();   // ⚡ 与基拉祈 / 谢米同一套「跟幻之助战层数」的口径（+风来城的闪光 20 级）
+  return (p.trainLv || 0);
+}
 /* 这只**技能表**走第几段（⚠️ 与「进化段位」`petStageOf` 不是一回事：这两只不进化但会换招）：
    · 🐣 波克比：角色等级 20 / 30 → 帮助☆ / 生命水滴☆
    · ☆ 基拉祈：**50 级**（= 星之助战满层）→ 解锁破灭之愿 */
@@ -6505,12 +6513,20 @@ const PET_SKILL_DOOMWISH_STAR = {
    ⚠️ 「随机陆续」用 `spread`（扇形内铺开）+ `gap`（一道道甩，不是同帧齐射）表达。 */
 /* ⚡ **等离子闪电拳**（捷拉奥拉 · 用户逐条点名）：
    · **优先法师 / 弓箭手**敌人 → 打完再打其余存活的（不足 15 个就**循环**继续打还活着的）
-   · 2 秒内**按顺序**连打至多 **15 个**目标，每次 **×3** 宝可梦攻击 · 出手间隔 **1 秒**（`cd: 1`）
+   · 2 秒内**按顺序**连打至多 **12 个**目标，每次 **×3** 宝可梦攻击 · 出手间隔 **1 秒**（`cd: 1`）
    · 每一次都是**瞬移**到目标身边近战，路径上留下**闪电特效**（数组 petBolts），**技能一结束全部消失** */
 const PET_SKILL_PLASMAFIST = {
   id: 'plasmafist', name: '等离子闪电拳', icon: '⚡', kind: 'blitz', cd: 1, range: 900, fxEl: 'ELECTRIC',
-  desc: '瞬移连打：优先打法师 / 弓箭手，2 秒内按顺序最多打 15 个敌人（不足就继续打还活着的）· 每拳 宝可梦攻击力 ×3 · ' + petCdText(1),
-  blitz: { dur: 2, max: 15, mul: 3, gap: 0.1, r: 46, fxK: 4 }
+  desc: '瞬移连打：优先打法师 / 弓箭手，2 秒内按顺序最多打 12 个敌人（不足就继续打还活着的）· 每拳 宝可梦攻击力 ×3 · ' + petCdText(1),
+  blitz: { dur: 2, max: 12, mul: 3, gap: 0.1, r: 46, fxK: 4 / 3 }   // ⚡ 受击闪电特效 = 原来的 1/3（用户要求）· 次数 12
+};
+
+/* ⚡ **等离子闪电拳☆**（奇物「风来城的闪光」带来的升级版）：
+   攻击次数 **12 → 18** · 每次伤害 **×3 → ×4**（其余口径与本体一致） */
+const PET_SKILL_PLASMAFIST_STAR = {
+  id: 'plasmafist2', name: '等离子闪电拳☆', icon: '⚡', kind: 'blitz', cd: 1, range: 900, fxEl: 'ELECTRIC',
+  desc: '等离子闪电拳强化（风来城的闪光）：瞬移连打最多 18 个敌人 · 每拳 宝可梦攻击力 ×4 · ' + petCdText(1),
+  blitz: { dur: 2, max: 18, mul: 4, gap: 0.1, r: 46, fxK: 4 / 3 }
 };
 
 const PET_SKILL_SEEDFLARE = {
@@ -6977,7 +6993,9 @@ const PET_SKILL_DEF_FORM = {
 };
 /* 当前段位的技能表：**分支形态（水伊布…）先按形态 key 查**，其余照旧按「物种 + 段位」 */
 function petSkillList(id) {
-  /* 🌿 谢米：两招常驻 + 50 级的种子闪光；**天空谢米**用 ☆ 版种子闪光（8 道 · ×6） */
+  /* ⚡ 捷拉奥拉：目前只有一招 —— 拿到「风来城的闪光」后换成 ☆ 版（18 次 · ×4） */
+  if (id === 'zeraora') return [artGot(ZERA_ART) ? PET_SKILL_PLASMAFIST_STAR : PET_SKILL_PLASMAFIST];
+  /* 🌿 谢米：两招常驻 + 50 级的种子闪光；**天空谢米**用 ☆ 版种子闪光（8 道 ×6） */
   if (id === 'shaymin') {
     const list = PET_SKILLS_SHAYMIN.slice();
     if (shayminLv() >= JIRACHI_TOP_LV) list.push(shayminSkyOn() ? PET_SKILL_SEEDFLARE_STAR : PET_SKILL_SEEDFLARE);
@@ -13029,7 +13047,7 @@ function roleBanArts(r) {
   /* 🗡️ 武器大师：同样禁 无双秘籍 / 哈姆；反过来「买一送一」是武器大师专属（其他职业禁选） */
   if (!r && isWM()) out.push('scroll', 'hamu');
   if (!r && !isWM()) out.push('buy1get1', 'nohand');   // 🗡️「买一送一」「骑士不徒手而亡」都是武器大师专属
-  if (!r && !isTrainer()) out.push('wish', 'gracidea', PRIMAL_ART);   // 🧢「千年之愿」「葛拉西蒂亚花」「原始回归」都是训练家专属（别的职业一律禁选）   // 🧢「千年之愿」「原始回归」都是训练家专属（别的职业一律禁选）
+  if (!r && !isTrainer()) out.push('wish', 'gracidea', ZERA_ART, PRIMAL_ART);   // 🧢「千年之愿」「葛拉西蒂亚花」「原始回归」都是训练家专属（别的职业一律禁选）   // 🧢「千年之愿」「原始回归」都是训练家专属（别的职业一律禁选）
   return out;
 }
 const ALL_ROLES = ['warrior', 'archer', 'mage'];
@@ -13695,11 +13713,12 @@ const ART_DEFS = {
   nohand:    { name:'骑士不徒手而亡', icon:'🗡', desc:'武器大师专属,将「木棍」视为「圣剑」！基础伤害30，拿到真圣剑时，提高圣剑20％的伤害！', start:1, w15:0 },
   /* 🧢 训练家专属奇物（用户本轮点名）：别人一律禁选 —— 见 roleBanArts 里的 `if (!r && !isTrainer())` */
   /* 🌸 葛拉西蒂亚花：图标用素材图（sucai\item\GRACIDEA_FLOWER.png → PET_ITEM_IMG，artIcon 见到同名 key 就出图） */
+  windflash: { name:'风来城的闪光', icon:'⚡', desc:'训练家专属,我们的故事从未结束...捷拉奥拉的等级提升20级,并且当捷拉奥拉学会「等离子闪电拳」时，可以增强技能的效果。', start:0, w15:0 },
   gracidea:  { name:'葛拉西蒂亚花', icon:'🌸', img:'GRACIDEA_FLOWER',   // 🌸 图标：HTML 场景用素材图（artIcon 走 img），canvas 飘字仍用纯文本 icon
-    desc:'训练家专属：将花朵送给谢米，会让谢米发生变化！（将谢米变化为天空谢米，并且立刻提高谢米20级！）', start:0, w15:0 },
-  wish:      { name:'千年之愿', icon:'🌠', desc:'训练家专属，基拉祈的等级提升 20 级（上限也 +20 → 满层 70 级），并且当基拉祈学会「破灭之愿」时，强化破灭之愿的技能效果！（升级为破灭之愿☆：范围 +50%、伤害 +50%）', start:0, w15:0 },
+    desc:'训练家专属,花之乐园的珍奇之花...谢米的等级提升20级,并且谢米会转化为天空形态。', start:0, w15:0 },
+  wish:      { name:'千年之愿', icon:'🌠', desc:'训练家专属,沉睡千年,只为见你七天...基拉祈的等级提升20级,并且当基拉祈学会「破灭之愿」时，可以增强技能的效果。', start:0, w15:0 },
   /* 🌟 原始回归（训练家专属 · **第 25 波必刷**）：图标按队里那只神兽换成朱红 / 靛蓝 / 青绿宝珠（见 artIcon） */
-  primal:    { name:'原始回归', icon:'💠', desc:'据说和丰缘地区的传说渊源颇深，散发着三色光辉的宝珠。', start:0, w15:0, primal:1 }
+  primal:    { name:'原始回归', icon:'💠', desc:'训练家专属,散发着三色光辉的宝珠...可以让丰缘的传说宝可梦们进行原始回归！', start:0, w15:0, primal:1 }
 };
 function artGot(id) { return p.art[id] === 1; }
 /* ===== 🎒 奇物槽系统 =====
@@ -14144,6 +14163,7 @@ function artPickPool(wv) {
     /* 🌟 幻之助战的两个专属奇物（用户 2026-10 点名）：**选谁才刷谁的那件** */
     if (id === 'wish' && starChoice() !== 'jirachi') continue;        // 🌠 千年之愿：幻之助战选的是基拉祈才刷
     if (id === 'gracidea' && starChoice() !== 'shaymin') continue;    // 🌸 葛拉西蒂亚花：选的是谢米才刷
+    if (id === ZERA_ART && starChoice() !== 'zeraora') continue;      // ⚡ 风来城的闪光：选的是捷拉奥拉才刷
     /* 🌟 原始回归：**拿到任意一只神兽之后**才进奇物库（在那之前刷出来毫无意义）；
        第 25 波必定刷（见 pickArts），**没在那儿拿的话后面照样能抽到 / 买到**（用户要求） */
     if (id === PRIMAL_ART && !primalOwner()) continue;
@@ -28785,7 +28805,7 @@ window.__musouTrainerInfo = () => {
     petSectorTicks: dbgPetSectorTicks, petSectorHits: dbgPetSectorHits, petSectorCharms: dbgPetSectorCharms,
     petMoons: dbgPetMoons,
   petWaves: dbgPetWaves,
-  petBlitz: dbgPetBlitz, petBoltsLive: petBolts.length, petMoonBooms: dbgPetMoonBooms, petMoonsLive: petMoons.length, slams: dbgPetSlam,   // 🐾 近战命中次数（抓击/藤鞭/砸地）· 🚀 跳砸/猛冲落地次数
+  petBlitz: dbgPetBlitz, petBoltsLive: petBolts.length, zeraLv: zeraoraLv(), zeraArt: artGot(ZERA_ART) ? 1 : 0, petMoonBooms: dbgPetMoonBooms, petMoonsLive: petMoons.length, slams: dbgPetSlam,   // 🐾 近战命中次数（抓击/藤鞭/砸地）· 🚀 跳砸/猛冲落地次数
     jetTicks: dbgJetTicks, auraTicks: dbgPetAura,
       petMoons: dbgPetMoons, petMoonBooms: dbgPetMoonBooms, petMoonsLive: petMoons.length, dashes: dbgPetDash,   // 💧 光束结算节拍 · 🌡️ 环绕结算次数 · ☄️ 猛冲次数
     beams: dbgPetBeams,   // ☀️ 日光束发射次数（一发光炮）
