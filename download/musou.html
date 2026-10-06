@@ -1659,7 +1659,6 @@ function hellEvPick(k) {
   for (const t of comp) { const d = ETYPES[t]; if (d && d.boss) return null; }
   return HELL_EVENTS[Math.floor(Math.random() * HELL_EVENTS.length)];
 }
-function hellEvName() { return hellEv ? hellEv.name : '无'; }
 /* 炽热擂台：地图四周 300px 火海（中心安全） */
 function inHellRing(x, y) { return x < HELL_RING_W || x > W - HELL_RING_W || y < HELL_RING_W || y > H - HELL_RING_W; }
 function hellRingOn() { return hellBonusOn() && !!hellEv && hellEv.id === 'ring'; }   // 本波是否为「炽热擂台」（小地图据此画火海边框）
@@ -4924,49 +4923,6 @@ const PET_HEAD = {
   shaymin1: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAoCAYAAACM/rhtAAADQklEQVR42rWYMY4TQRBF+ywkSCsRgAhIEdoLkO1JNkNkZHABYlJERLAZpKRErEj3CETWoDL+s89/qrrbBoIv2zPTPW9+V1XXuC3Lx0V6+uTh8vLtg+XVzeWqOPb+x+VGOhef2fnsep83xHt//fZlr+8/b5fdbrdX0wW8oSTY7IYzcA4V8wksfhPuw+dPfcC46Orq+ZR7IziHCsXcM3AhwW0AubyVezo/s6y9B6CblXsbwNnY+xu4CjQgAy4FzOLvX4BwiT35OL8gHW4FzLLXJ8kCPRtXZXsmhpHmPRlQUApyxkt813GOryCZFCHC6pqTAfVkWQDHb4HyRhkkE4LSHDpfAnqJ8eD1gRloBSl3CKYHzhIjpGuaJg1AujgLl0E6oIcHwXx+X/rmT68bBOwsXHYDAfJhGSp0Mhur8td68XQOYIiAdI+fVBzjOPYH7RyAU1zMoAjg1/DcfwOUGw4nNx2CZWgKsMqsEDd93VRLlM2jWsna58u417s3f5QBaqIsLjJXXAHQy2yvfalbd9cpZCOYdgwdo4sVjBzKjrnbXilKFwNWgNyCfNdwwMoplgq5xrEEpSFZzLmLm36wB+jN5Cniw00t80FNdvoSO2CVCOco5l0BtZwGdg94uEipLsDMxVFJ4XY2UydXODnniXJ3fe9gfArQXRxBxrjXjy6Wm4vH+88sKQQt99YkIWSSKI0n3cXepu6AAUcFqMS5juLP4UYOngsZ1/169uJIgox5NJbdThcuvq8O8sBBI8gMNGAIKLisFfP7rXLAvYMJ4ChpKmlJuf1lu5TvQpQ/QMuoM1B2xDOw3roJXjHqISEJdBowAyVwD4pg/J2BBfTa7aQOdkAdLnORTQHBqMw5OVrFZ9tsLzg5gqrE11F3kcvMulklT+sta9Z2sXWvgDM3sxp51NkUDG0Ue1nGEZrdi77zJay3w3RLzqyD/sLjbZacYkkRIOF8SUdgXUB/0fY3/gCgmwRXo6txBDsHsvVqnpzIOmW28NwxBMhlrrJ3BrI5mAe+xx/PO6DgCMhQiesIm+0cG8AKrBJjTb/VEHB5WbSz7ZOQXcARWPXPJ1+qVPPoOrO5V/iHgCPHqr9AsncUJkcP8BT9Bi1KX5LO/n5iAAAAAElFTkSuQmCC',
   zeraora: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACgAAAAoCAYAAACM/rhtAAADe0lEQVR42q2YsY4TMRCGt+Mh6GhpEC0SHT3lNZQUVAgJKRIvQHkN70EJHfcKvMBVJ6WhSkO5aDb59779Mx47EYWVeGOPP/8z4/Fmmufvc9X+/rqd5tuvs9rS78z5n7am08TjpK2xmcY27UrAlr1lLRunZ5NPdLDonxlI2pu3N0v78/BuVM10LRdiqnY3Aqb2/MXL+dXd/VWglZem5kBbnO3DzeulEUKA0Z5+ubsIMvWiA1a7iMV//3i2LKgWfQFHX4Cf7w8ppMbExoZi05OEBqhQgAjGIR1UgBlk/P7z25Mz5c+gTMU1SQRHCMIKxAEFGWMCiJAZoCDPQisLtQDU2RQGFOCZO8NoS0VtJlNRz+Mz4LjRXuIE23pwCvD9x08lZCzSUtEBqaK8EM1VrDJ7Axhwaq3E8DAYdbPUY0yXWd4DDKPXQMYcQgqQcCMqroCMQQKOQGbudlcrDl1B2agAjzGIs04xSEDGTyv22JcyUlGAmZtLQD+oY3ILUFmYATpszGNGC5DJdxWgXMMkEeCIioorbZIqElBnYbRuomxK3cnNMiQVWoA8xNVUUQSphHFAjpXNYUACEdKTxbP54XBYm0NmSccSqWdZrd4AahAhe4CEizH83joVNE7lT+tG1peAvE4xQTI4xZDD8VNg0Y85sqff/aIhj2wB97sj5H63Ob9YP7VLr8taMHNxph5V1Aa55qLefjeL51HBUye7Onmhj+/ZlYpqt1zrfc2PTylKnhBvo6AgmWXcnXYtw4TLoAjNDOfzAu5cwfiUijwOqKbqqxZTRvLszF4PsqNI37Vxh3MF109OdEjtmHGppBJk9CMWs7NSv9GG1nCOxyRJGq9EjE2p54c23Zwpl52rDJvFxQlHE5DXe16PsiPHLxqLGnjXcDi6l68TFwP2wHR7Yc1mljqkq6dniMFxQAY0Xy+9itB9BG1lcOZa/X4RYBaPvLV4X88csoJuxd1FgATi6c/v2TlXwbE6ZTZOFaUGJFh26/AKw1jN4tHjjrAso54wXTAZpaHsXwWHY1Z77PHqn9mj69eM9d35+4MU8pclL42uoEO63QpuBaz+exltnkAZZAbo//00k4Q1OJP/WsgRQHqvzGLPqizuRgD9zlgBst8FVDwy3qr/YzKwlor+PtIa3wVkPHiZu7Rpbi/+qgvDUMXws4wLsZ5WKvbGtKrKP086NMB0tbTdAAAAAElFTkSuQmCC'
 };
-const PET_HEAD_SIZE = {
-  bulba: { w: 40, h: 40 },
-  bulba2: { w: 40, h: 40 },
-  bulba3: { w: 40, h: 40 },
-  charm: { w: 40, h: 40 },
-  charm2: { w: 40, h: 40 },
-  charm3: { w: 40, h: 40 },
-  squirt: { w: 40, h: 40 },
-  squirt2: { w: 40, h: 40 },
-  squirt3: { w: 40, h: 40 },
-  toge: { w: 40, h: 40 },
-  eevee: { w: 40, h: 40 },
-  charcadet: { w: 40, h: 40 },
-  vaporeon: { w: 40, h: 40 },
-  jolteon: { w: 40, h: 40 },
-  flareon: { w: 40, h: 40 },
-  sylveon: { w: 40, h: 40 },
-  armarouge: { w: 40, h: 40 },
-  ceruledge: { w: 40, h: 40 },
-  egg: { w: 40, h: 40 },
-  dreepy: { w: 40, h: 40 },
-  dreepy2: { w: 40, h: 40 },
-  dreepy3: { w: 40, h: 40 },
-  dratini: { w: 40, h: 40 },
-  dratini2: { w: 40, h: 40 },
-  dratini3: { w: 40, h: 40 },
-  jirachi: { w: 40, h: 40 },
-  kyogre: { w: 40, h: 40 },
-  groudon: { w: 40, h: 40 },
-  rayquaza: { w: 40, h: 40 },
-  kyogre1: { w: 40, h: 40 },
-  groudon1: { w: 40, h: 40 },
-  rayquaza1: { w: 40, h: 40 },
-  beldum: { w: 40, h: 40 },
-  metang: { w: 40, h: 40 },
-  metagross: { w: 40, h: 40 },
-  gible: { w: 40, h: 40 },
-  gabite: { w: 40, h: 40 },
-  garchomp: { w: 40, h: 40 },
-  shaymin: { w: 40, h: 40 },
-  shaymin1: { w: 40, h: 40 },
-  zeraora: { w: 40, h: 40 }
-};
 const PET_FX_SRC = {
   GRASS: {
     range: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAeAAAAAQCAYAAADOMaw4AAAEUUlEQVR42u2cMa4UMQyGt6OlpeQI3IOGDnEDJBoOQMc1aLkBHXfgBtSISwzKk4z+zTqZSfzbm9lnS6t5r3h2dp7tz3Yyc7mkpKSkpKSkrClvP34+/ElJSUlJSUlGkhipKXnz9eX24cfr7duvT0/X8vuo8pFFJ+BTUlJSUrwhydLNYOSNclG6/dk2+VkUWwEs+kTnq/cvtpmbMwP2FXSnPHaQXoKmSZ42Hsn3I2I588U5Ys8ESEdGXilHxXIVulud88vvd0/6yrWGMILYcqOLvrLeYoMBYFlb0Vt0Ft14o1eF+5kTQkSQip97668r4zPYqP9e/B9j9h7+ybKDOULLPwwAM208l4LICsgjXSoDwGxG3igXx/n59/t/WFo7YNRXrsUGwhi74dnOGnVqVcmIbgkY7SN2VoO79h08gjaio4gApCcc8TuUqwTrjD9G29D8U+CLRTQbjHsxwLAjybIX31YAs22MxBlj/dEdKguQrS5V/JYJYCYjr5ISQrH8jAYsyVT0iHPW8B1dfH2j0elF3+xooE5A2kdsrgR3zY449hEYrwD3KEBiELU6O2sSkHuPlbI5UANs1F0vxi0W0QhhRqKUQlRssTttGRfugdECMA8bR6ArseIN4Bn9UYCs9eN0yHJ/vBl5k5RqIzOARL11EItOTfcoJOtE3XN+JoAxQa0Cd+3/KTrFCRldtifcowCJ68erR3eKwKrv/4o2ULcGYckNxd5swtTgi/ErdljdfL3d5QFgLxu9ETeCRXIHG8BWwEcBsvYr8VmJi9EpaxQjr0CJAYcJ0JpMEb6tRY+CTNa65/CW/eUjEB5xek+49wCMa63HPTMJwQvuUYDE0X8JUNy6YHanqB9Bxqr0PWzUiR4hiR035obZ/0EvpjQ/nY2DETDO5jgvGxp4Ww0HC8BMwEcBshUX2j78rG4PRl4pl8THOnCBNwOrXOs+Dzp9D2qMg1J7QTWShDzh3nKWFtyL8zAAzIR7FCDr/XfKGOlAB4kV9Ko2tGSMNhDCVhtHimfL4RzMa0fBOJvjvGzg3yB8e0W7peBiAz4KkJfqzFHvEJwFwGxG3nQdPaeZTaZnelSoNYbpgXIFuPf2CLUEMTs28YR7JCC1Q3CWfc3WmK2ulGcTZZSN3hMG+LF2wHtxUNtlTYL2wDjbAXvZqO+DliNYT6p4AD4KkPVkVPseVgB7MHIYlF4b/Kscod/bD2HsL3vAfW+vpXUyc9SGJ9wjAaklF49HIVA3VtCr2og4lBP5GNIIFK0Fo4eNHuBxTGzN0V6AjwLk3nYA40UcHowcDohHl9GkYAUwC+5HErRW4VpGYmy4RwOSOfY/WmSxD7OwbTzac6ejE7iIKd9MvGlTJtY2oSfgowDZK4a83oSVL1lZAMCeo/MVk6gn3O8BSFbRM3Lvz2AjY3kNG1Hr9wJ8FCAvAS/xScmEcMrvcDZAPudXUaZkTrq336akpCyeEFJSUlJWl3+rK6rozaIBoQAAAABJRU5ErkJggg==',
@@ -6518,7 +6474,6 @@ const PET_SKILL_SEEDFLARE_STAR = {
 const PET_SKILL_ENERGYBALL_STAR_REF = { id: 'energyballstar', name: '能量球☆', icon: '💚', kind: 'shot', cd: 1.7 / 1.5 / 1.5, range: 520, orb: 1,
     desc: '能量球强化：扇形同时发射 3 颗穿透光球 · 伤害 +50%（能量球本轮再 ×1.5 → 这一招也跟着增强）· ' + petCdText(1.7 / 1.5 / 1.5),
     shot: { n: 3, spread: 0.22, spd: 620, mul: 3.5, homing: 0, pierce: 1, orb: 1, orbR: 39, hitR: 24, fxK: 2.8 } };   // 能量球☆（妙蛙花那一份 · 谢米共用）
-const PET_SKILL_HELP_STAR_REF = PET_SKILL_HELP_STAR;   // 帮助☆（波克比那一份）
                   // 未满 50 级
    // 50 级：解锁破灭之愿
 /* ⚡ 电光一闪（伊布 / 多龙梅西亚共用同一份定义 —— 用户说多龙梅西亚的这招「和伊布一样」）：
@@ -11328,7 +11283,6 @@ const KNIGHT_RAM_CD = 0.35;       // 同一敌人两次被撞的间隔（防止�
 const KNIGHT_BLOCK_DOT = 0.30;    // 正面判定：来袭方向与朝向的余弦阈值
 const KNIGHT_MUSOU_R = 185;       // 🌀 无双「旋枪突进」的伤害半径（比普攻撞击更大）
 const KNIGHT_MUSOU_SPD = 0.5;     // 🌀 无双期间移速 +50%
-const KNIGHT_MUSOU_REACH = 55;    // 🌀 无双期间撞击判定的额外半径（长枪横扫）
 const KNIGHT_BAN_MUTS = ['bonus', 'chi', 'whirl', 'clone', 'dash', 'blink'];
 /* 🗡️ 武器大师禁选的质变：追加斩 / 旋风斩 / 剑气斩 / 影分身十字斩（都挂在「挥砍」上，武器大师不吃这套） */
 const WM_BAN_MUTS = ['bonus', 'whirl', 'chi', 'clone'];
@@ -11431,7 +11385,6 @@ function skyDmg() { return knightBuffDmg(knightRamDmg() * (1 + SKY_DMG_PER * Mat
           WM_STAR_DMG_PER（星级加成：**每星 +80%** 伤害）· WM_MERGE_NEED（几件同名同星合 1 件 = 3）
    ============================================================ */
 const WM_REFRESH_COST = 200;   // 🛒 刷新货架的**固定价 200 金币**（用户本轮：原来是 100 起、每刷一次翻倍）
-const WM_BUY_COST = 300;       // 旧常量（已被按品质的 wmBuyCost 取代，保留兼容）
 const WM_MUSOU_T = 6.0;
 const WM_MUSOU_MUL = 0.6;
 const WM_STOCK_N = 3;
@@ -12933,13 +12886,13 @@ const MEDIC_HEAL_P = 2.5, MEDIC_HEAL_U = 10;                    // 医疗小队�
 const SUPPORT_RING_R = 650;                                     // 奇物·支援部队：特种部队车的巡视圆半径（圆心 = 地图正中心）
 const SUPPORT_SPD_MUL = 1.3;                                    // 部队车线速度 = 角色初始移速（330）×1.3 = 429px/s
 const SUPPORT_REGEN = 10;                                       // 车上维修员：每秒自修 10 点
-const SUPPORT_MG_RNG = 560, SUPPORT_RK_RNG = 620, SUPPORT_RK_CD = 1.0;   // 车载机枪射程 / 火箭炮射程 / 火箭炮间隔
+const SUPPORT_RK_CD = 1.0;                                      // 车载火箭炮间隔
+/* ⚠️ 这一行原来还写着 `SUPPORT_MG_RNG = 560` 与 `SUPPORT_RK_RNG = 620`（车载机枪/火箭炮射程）——
+   全文件无人引用 = 废案，已删。**只剩 `SUPPORT_RK_CD` 还在用**（`a.rkT = SUPPORT_RK_CD`），别连带删掉。 */
 const OSHIELD_MAX = 50;                                         // 过量治疗护盾上限（用户本轮要求：50 点）
 const OSHIELD_MAX_SUPER = 200;                                  // 奇物·超级护盾：护盾值上限 50 → 200（用户本轮要求）
 const SUPERSHIELD_WAVE = 30;                                    // 奇物·超级护盾：每波清剿完毕获得 30 点护盾
 const SHIELDBASH_PER = 0.1;                                     // 质变·护盾猛击：每层 +10% 伤害
-const SHIELDBASH_CAP = 5;                                       // 满 5 层 = 1.5 倍
-const SHIELDBASH_ARTS = ['supershield', 'overheal'];            // 护盾类奇物（护盾猛击的收益来源；本轮起**不再**作为选取门槛）
 /* 质变·即时铸盾：每秒自动铸出 FORGE_PER×层数 点护盾值（受护盾上限 50/200 限制）
    ⚠️ 用户本轮加了一条门槛：**3 秒内不受到任何伤害**才会铸盾（`p.noHitT` 就是「距上次受伤的时间」，
    受伤时在 `hurtPlayer` 里归 0）—— 见 FORGE_CALM 与 updateGame 里的铸盾分支 */
@@ -12950,7 +12903,6 @@ const FORGE_CALM = 3.0;                                         // 用户本轮�
 /* 质变·落雷：累计击杀触发天雷（**天雷本身没有冷却**）——
    触发所需击杀 = 30 - 2×层数（1 层 28 杀 → 满 10 层 10 杀），每次随机轰击 THUNDER_TARGETS 名敌人；
    **天雷自己劈死的敌人不计入这个进度**（否则会「雷劈死 → 又攒够 → 再劈」自我连锁） */
-const THUNDER_CAP = 10;                                         // 最多叠 10 层
 const THUNDER_BASE_KILLS = 30;                                  // 触发公式基数：30 - 2×层数
 const THUNDER_MIN_KILLS = 10;                                   // 最低击杀需求（满 10 层 = 10 杀一次）
 const THUNDER_PER_LEVEL = 2;                                    // 每层减少的击杀需求
@@ -13684,7 +13636,6 @@ let catE = null;                 // 猫咪实体
 /* 幼猫撒娇的拟声词池（4~8 秒随机一句；「喵~ ♪」是用户点名保留的可爱演出） */
 const CAT_MEOWS = ['喵~ ♪', '喵~ ♪', '喵~', '喵♪', '喵呜~'];
 let homingM = [];                // 追踪物（导弹）
-let talT = 0;                    // （保留兼容）
 let swordE = null, swordHits = 0;   // 永恒飞剑（飞剑符箓）
 let artCutT = 0, artCutDmg = 0;  // 无双秘籍·全屏斩
 let artSwordN = 0;               // 诊断：符箓发射数
@@ -30262,25 +30213,6 @@ function petSkillBase(id, stage) {
   if (!rec || !rec.skills || !rec.skills.length) return [];
   const st = Math.max(0, Math.min(rec.skills.length - 1, stage | 0));
   return rec.skills[st] || rec.skills[0] || [];
-}
-/* 这张物种**有没有独立技能表的形态**（水伊布…）——给「进化后招式跟着换」那条链留的口子 */
-function petSkillFormList(id) {
-  const rec = PET_SKILLS_V2[id];
-  return (rec && rec.skills && rec.skills[0]) || [];
-}
-
-function petSkillClone(list) {
-  const out = [];
-  for (const sk of (list || [])) {
-    if (!sk || typeof sk !== 'object') { out.push(sk); continue; }
-    const c = Object.assign({}, sk);
-    for (const k in c) {
-      const v = c[k];
-      if (v && typeof v === 'object') c[k] = Object.assign({}, v);
-    }
-    out.push(c);
-  }
-  return out;
 }
 function petSkillList(id) {
   /* 🧬 单一数据源：V2 里有的直接用（每只宝可梦独立副本 ✓） */
