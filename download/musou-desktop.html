@@ -13558,7 +13558,7 @@ const MUTS = [
   { id:'sidekick', icon:'🧑‍🤝‍🧑', name:'小跟班', desc:'你的小跟班，他也会和你一样丢出榴弹！（跟随你自动索敌射击 · 伤害 50/75/100%）', cap:3, apply(){ p.mut.sidekick = Math.min(3, (p.mut.sidekick || 0) + 1); syncSidekick(); } },
   /* —— 🃏 牌皇专属质变（选「扑克牌」才出现；传统弓/士兵/战士/法师候选池自动剔除）—— */
   { id:'deck',      icon:'🎴', name:'筛选牌库', desc:'特殊牌出现的频率更高了！（每 5/4/3 张普通牌出 1 张特殊牌）', cap:DECK_CAP, apply(){ p.mut.deck = Math.min(DECK_CAP, (p.mut.deck || 0) + 1); } },
-  { id:'wild',      icon:'🛸', name:'万能牌', desc:'特殊牌的效果强化！（伤害 1.2/1.4/1.6/1.8/2 倍 · 爆破半径 +12/24/36/48/60% · 穿透牌尺寸 +16/32/48/64/80% · 哈吉咪寿命 12/14/16/18/20 秒）', cap:WILD_CAP, apply(){ p.mut.wild = Math.min(WILD_CAP, (p.mut.wild || 0) + 1); } },
+  { id:'wild',      icon:'🛸', name:'万能牌', desc:'特殊牌的效果强化！（伤害 1.2/1.4/1.6/1.8/2 倍**并额外附加一次普通攻击的伤害** · 爆破半径 +12/24/36/48/60% · 穿透牌尺寸 +16/32/48/64/80% · 哈吉咪寿命 12/14/16/18/20 秒）', cap:WILD_CAP, apply(){ p.mut.wild = Math.min(WILD_CAP, (p.mut.wild || 0) + 1); } },
   { id:'possess',   icon:'👻', name:'夺舍牌', desc:'击败敌人后，有概率将其变为友军为你所用！（倒戈 2/4/6/8/10% · 满血复活、伤害 = 你的普攻、存在 20 秒 · Boss 免疫）', cap:CHARM_CAP, apply(){ p.mut.possess = Math.min(CHARM_CAP, (p.mut.possess || 0) + 1); } },
   { id:'multishot', icon:'🀄', name:'连发牌', desc:'攻击时，有概率额外丢出追踪的特殊牌攻击敌人！（触发 12/24/36/48/60% · 一次甩 3 张）', cap:MULTI_CAP, apply(){ p.mut.multishot = Math.min(MULTI_CAP, (p.mut.multishot || 0) + 1); } },
   /* —— 🛡️ 骑士专属质变（选「骑士」才出现；其它职业候选池自动剔除）—— */
@@ -15692,12 +15692,19 @@ function nextCardSpecial() {
   dbgCardSpecial[k]++;
   return k;
 }
+/* 🃏 万能牌（= 牌皇的**特殊牌本体**：穿透 / 爆破 / 召唤）：用户 2026-10 定口径 ——
+   「所有万能牌都视为**普通攻击 + 额外效果**，所以所有的万能牌要再额外加上普通攻击的伤害」。
+   于是它们的伤害 = **自身效果伤害 × 万能倍率 + 一次普通攻击的伤害**（`cardAtkDmg()`）。
+   ⚠️ 传进来的 `dmg` 在普攻路径下**本来就等于普攻伤害**、在无双路径下是「普攻×2×无双不息」，
+      所以这里再加一次 `cardAtkDmg()` 就是"额外加上普通攻击的伤害"，
+      而不是把它换成普攻（别改成 `= cardAtkDmg()`，那样无双发的万能牌会变弱）。
+   ⚠️ 召唤牌本体也一样吃这一次普攻伤害（它砸到人本来就有伤害；猫自己的扑击另算 `cardCatDmg()`）。 */
+function wildCardDmg(dmg) { return Math.max(1, Math.round(dmg * wildMul() + cardAtkDmg())); }
 function fireCard(ang, range, dmg, special, homeIn) {
-  const wm = wildMul();   // 万能牌：特殊牌伤害/尺寸加成
   let size = CARD_SIZE, v = CARD_SPD, outDmg = dmg, blastR = 0, catDmg = 0, catLife = 0;
-  if (special === 'pierce') { size = CARD_SIZE * wildPierceSize(); v = CARD_SPD * CARD_PIERCE_SPD_MUL; outDmg = Math.max(1, Math.round(dmg * wm)); }
-  else if (special === 'blast') { outDmg = Math.max(1, Math.round(dmg * wm)); blastR = wildBlastR(); }
-  else if (special === 'summon') { catDmg = cardCatDmg(); catLife = cardCatLife(); }
+  if (special === 'pierce') { size = CARD_SIZE * wildPierceSize(); v = CARD_SPD * CARD_PIERCE_SPD_MUL; outDmg = wildCardDmg(dmg); }
+  else if (special === 'blast') { outDmg = wildCardDmg(dmg); blastR = wildBlastR(); }
+  else if (special === 'summon') { outDmg = wildCardDmg(dmg); catDmg = cardCatDmg(); catLife = cardCatLife(); }
   pBullets.push({
     x: p.x + Math.cos(ang) * 20, y: p.y + Math.sin(ang) * 20,
     vx: Math.cos(ang) * v, vy: Math.sin(ang) * v,
@@ -16224,9 +16231,15 @@ function soldierMusou() {
   return 'nuke';
 }
 /* 全屏轰炸 = 核弹：弹头落向地图正中 → 落地白闪 + 冲击波 + 蘑菇云，并结算全场伤害 */
+/* ☢️ 核弹轰炸伤害（用户 2026-10 新口径）：**5 × 角色攻击力 + 5 × 角色等级**，再吃「无双不息」。
+   「角色攻击力」= 士兵的枪械普攻 `gunAtkDmg()`（基础 10 + 4，吃锋镞/锋锐/等级÷2）。
+   改这里一处即可（`launchNuke()` 与诊断读数都读它）。 */
+function nukeDmg() { return Math.max(2, Math.round((5 * gunAtkDmg() + 5 * (p.lvl || 0)) * musouDmgMul())); }
 let nukeFx = null;
 function launchNuke() {
-  nukeFx = { t: 0, fall: 0.65, life: 1.9, x: camX + VW / 2, y: camY + VH / 2, boomed: false, dmg: Math.max(2, Math.round(gunAtkDmg() * 2.5 * musouDmgMul())) };
+  /* ☢️ 核弹伤害（用户 2026-10 新口径）：**5 × 角色攻击力 + 5 × 角色等级**
+     （原来 = `枪械普攻 × 2.5`）。它仍是无双技能 → 继续吃「无双不息」(`musouDmgMul`)。 */
+  nukeFx = { t: 0, fall: 0.65, life: 1.9, x: camX + VW / 2, y: camY + VH / 2, boomed: false, dmg: nukeDmg() };
   dbgBombard++;
   bigBanner('核 弹 轰 炸 !', (artGot('support') ? '四支部队齐备（含支援部队车）' : '三名部署单位齐备') + ' · 目标：地图正中');
   tone(120, 60, 'square', 0.3, 0.16);
@@ -29728,6 +29741,8 @@ window.__musouCardForce = (k) => { cardForce = (k && CARD_KINDS.indexOf(k) >= 0)
 window.__musouCardN = (v) => { if (state === 'play' && typeof v === 'number') p.cardN = Math.max(0, v | 0); return p.cardN || 0; };   // 测试钩子：设定已出牌数（设成 4 → 下一张必是特殊牌）
 window.__musouCardThrow = () => { if (state !== 'play' || !p.alive || !isCard()) return false; doCardThrow(); return true; };   // 测试钩子：立刻甩一张牌（不走普攻冷却）
 window.__musouCardList = () => pBullets.filter(b => b.card).map(b => ({ kind: b.card, x: Math.round(b.x), y: Math.round(b.y), size: b.size || CARD_SIZE, dmg: b.dmg, home: b.cardHome ? 1 : 0, blastR: b.blastR || 0, catLife: b.catLife || 0 }));   // 测试钩子：场上飞行中的卡牌
+/* ☢️ 测试钩子：核弹的当前伤害（`nukeDmg()`，未落地时也能读；用来钉「5×攻击力 + 5×等级」） */
+window.__musouNuke = () => ({ dmg: nukeDmg(), gunAtk: gunAtkDmg(), lvl: p.lvl || 0, musouMul: +musouDmgMul().toFixed(3), on: nukeFx ? 1 : 0 });
 window.__musouCardCats = () => cardCats.map(c => ({ x: Math.round(c.x), y: Math.round(c.y), t: +c.t.toFixed(2), maxT: +(c.maxT || CARD_CAT_LIFE).toFixed(2), dmg: c.dmg || CARD_CAT_DMG, busy: c.busy ? 1 : 0 }));   // 测试钩子：召唤牌召出的哈吉咪
 window.__musouCharmUnits = () => charmUnits.map(u => ({ hp: Math.round(u.src.hp), maxhp: u.src.maxhp, type: u.src.type, x: Math.round(u.src.x), y: Math.round(u.src.y), t: +u.t.toFixed(2), maxT: +(u.maxT || CHARM_LIFE).toFixed(2), mode: u.mode, spdMul: u.spdMul, spd: Math.round((u.src.spd || 90) * (u.spdMul || 1)), hits: u.hits, maxHits: u.maxHits, shots: u.shots || 0, ph: u.ph || '', inEnemies: enemies.indexOf(u.src) >= 0 ? 1 : 0 }));   // 测试钩子：夺舍牌倒戈的友军（含兵种行为与生效移速）
 window.__musouPlayerModel = () => (isWM() ? 'wm' : (isKnight() ? 'knight' : (isRonin() ? 'samurai' : (isTrainer() ? 'trainer' : (isCard() ? 'magician' : (isGunner() ? 'gunner' : (isArcher() ? 'archer' : (isMage() ? 'mage' : 'warrior'))))))));   // 测试钩子：当前职业立绘分支
