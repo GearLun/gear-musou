@@ -388,9 +388,17 @@
   .shop-slot { display: flex; align-items: stretch; gap: 8px; width: 100%; }
   .shop-slot .up-btn { flex: 1; min-width: 0; }
   .shop-slot .up-btn.sold { opacity: .4; pointer-events: none; }
+  /* 🔄 2026-10 商店改版：单格刷新按钮已废弃 → 统一走底部那颗「一键三换」。
+     按钮仍留在 DOM 里（`shopPaint()` 会写它们的文案），但**整列隐藏**（display:none 不占位）。 */
+  .shop-slot .btn.btn2.shop-rr { display: none; }
   .btn.btn2.shop-rr {
     font-size: 15px; padding: 8px 16px 8px 18px; letter-spacing: .1em;
     align-self: center; white-space: nowrap;
+  }
+  /* 🔄 一键三换：把三个自选奇物一起换掉（价格逐次翻倍：2000 / 4000 / 8000 …） */
+  .btn.btn2.shop-reroll-all {
+    font-size: 16px; padding: 10px 22px; letter-spacing: .12em;
+    border-color: #8ff0e8; color: #d8fbf7;
   }
   .up-key {
     font-family: Consolas, monospace; font-weight: 700; color: var(--gold);
@@ -639,20 +647,21 @@
       <button class="up-btn" id="shop-b-rng"></button>
       <button class="up-btn" id="shop-b-art"></button>
     </div>
-    <div class="shop-sec">🎯 自选奇物 · 每件 7000 金币（花 1000 可刷新单格）</div>
+    <div class="shop-sec">🎯 自选奇物 · 每件 10000 金币</div>
     <div class="up-list">
       <div class="shop-slot">
         <button class="up-btn" id="shop-p0"></button>
-        <button class="btn btn2 shop-rr" id="shop-r0">刷 新 500</button>
       </div>
       <div class="shop-slot">
         <button class="up-btn" id="shop-p1"></button>
-        <button class="btn btn2 shop-rr" id="shop-r1">刷 新 500</button>
       </div>
       <div class="shop-slot">
         <button class="up-btn" id="shop-p2"></button>
-        <button class="btn btn2 shop-rr" id="shop-r2">刷 新 500</button>
       </div>
+    </div>
+    <!-- 🔄 一键三换（2026-10 改版）：把上面三个自选奇物**一起**换掉，价格逐次翻倍 2000 / 4000 / 8000 … -->
+    <div class="up-list" style="margin-top:8px;">
+      <button class="btn btn2 shop-reroll-all" id="shop-reroll-all">🔄 刷新三个奇物 · 2000 金币</button>
     </div>
     <!-- 🎁 质变宝箱（1000 / 2000 / 3000 · **一家店最多 3 次** · 买下立刻开「质变三选一」）-->
     <div class="shop-sec">🎁 质变宝箱 · 1000 / 2000 / 3000 金币（一家店最多 3 次）</div>
@@ -1071,14 +1080,21 @@ let shopPend = 0;              // 待开的商店波次（清剿当帧正好弹�
 let shopWaveNext = 1;          // 商店关闭后要进入的波次
 let shopN = { spd: 0, rng: 0 }; // 商店攻速/范围已购次数（价格翻倍、增幅 ×1.1×N）
 const SHOP_PICK_N = 3;          // 商店「自选奇物」格子数
-const SHOP_PICK_COST = 7000;    // 自选一件奇物：**7000 金币**（本版本由 5000 提价）
-const SHOP_PICK_REROLL = 1000;  // 单格刷新成别的奇物：**1000 金币**（本版本由 500 提价）
-const SHOP_RAND_COST = 5000;    // 随机奇物：**5000 金币**（本版本由 3000 提价）
+/* 🛒 商店价格（用户 2026-10 大改）：
+   · 自选奇物 7000 → **10000**
+   · 随机奇物 5000 → **7000**
+   · **单格刷新已废除** → 改成底部一颗「一键三换」按钮：**一次性把三个自选奇物全换掉**，
+     价格**逐次翻倍**：第 1 次 2000 / 第 2 次 4000 / 第 3 次 8000 / 第 4 次 16000 …（见 `shopRerollAllCost()`）
+   ⚠️ 旧的 `SHOP_PICK_REROLL`（单格 1000）与 `shopRerollPick(i)` 已删除，别再往回加。 */
+const SHOP_PICK_COST = 10000;   // 自选一件奇物：**10000 金币**
+const SHOP_RAND_COST = 7000;    // 随机奇物：**7000 金币**
+const SHOP_REROLL_BASE = 2000;  // 🔄 一键三换的第 1 次价格（之后 ×2 递增）
 const SHOP_RAND_MAX = 1;        // 每次开店**只能买一次**随机奇物
 const FANG_CAP = 100, FANG_DUR = 10;   // 奇物·贪狼之牙：每次击杀 +1% 伤害、上限 +100%，限时 10 秒（每次击杀续满）
 const COINPOW_PER = 0.04;              // 奇物·金币的力量：每 1000 金币 +4% 伤害（用户 2026-10 由 +6% 下调）
 let shopPicks = [];             // 本次开店的三个自选格 [{ id, sold }]
 let shopRandBought = 0;         // 本次开店已购买的随机奇物次数（上限 SHOP_RAND_MAX）
+let shopRerollN = 0;            // 🔄 本次开店「一键三换」已用次数（价格 = 2000 × 2^n）
 let shopShown = new Set();      // 本次开店已经出现过的奇物（刷新不会重复出现同一件）
 let probeTgt = [];              // 测试探针：弓箭手射程靶引用
 let selRole = 'warrior';        // 主页当前选中的角色（warrior/archer），开局生效
@@ -1143,6 +1159,7 @@ const HELL_RING_W = 300;        // 炽热擂台：地图四周 300px 是火海�
 const HELL_RING_TICK = 0.5, HELL_RING_DMG = 10; // 火海：每 0.5 秒扣 10 血（**无视护盾**）
 const HELL_MAGE_HEX_MUL = 1.5;  // 法师的新绝招：敌方妖法师的法阵半径 ×1.5
 const HELL_DARK_MUL = 2;        // 黑暗游戏：敌我双方伤害 ×2
+const HELL_TRADE_HP_MUL = 2;    // ⚖️ 等价交换：本波敌人血量 ×2（配合「数量减半、速率不变」）
 /* 🎡 终焉齿轮（final2 · 本版重做）：固定钉在地图正中间当炮台，只有弹幕 + 场地法阵 */
 const GEAR_CAT_HP_CUT = 0.3;    // 开场吞掉驻守中央的「哈根（猛虎）」→ 自身血量 −30%
 const GEAR_SHIELD_MUL = 2;      // 终焉齿轮**对玩家护盾造成的伤害翻倍**（护盾值按 2 倍消耗 / 守护盾一次碎 2 层）
@@ -1174,6 +1191,7 @@ const HELL_EVENTS = [
   { id:'nodrop', icon:'🚫', name:'没有补给品！',       desc:'本波次的敌人不会掉落任何物品！' },
   { id:'chest',  icon:'💰', name:'刚从金矿回来吗？',   desc:'每个敌人都会掉落宝箱！' },
   { id:'art',    icon:'🎁', name:'这个没人要吗？',     desc:'本波结束后，可以额外选择一个奇物！' },
+  { id:'trade',  icon:'⚖️', name:'等价交换！',         desc:'本波次的敌人数量减半，但出怪速率不变。所有敌人的血量翻倍。' },
   { id:'plain',  icon:'🌤️', name:'平平无奇的一天...',  desc:'但是什么也没有发生…' }
 ];
 let hellEv = null;              // 本波生效的奇遇（null = 非地狱/无尽 / Boss 波）
@@ -1236,7 +1254,7 @@ const p = {
   pickN: { rng: 0, spd: 0, mem: 0, mvm: 0 },
   pickTimes: { dmg: 0, rng: 0, spd: 0, vit: 0, mvm: 0, mus: 0, mem: 0, heal: 0 },   // 本局各升级词条已选次数（暂停面板展示）   // 词条已选次数（广域/疾风 每局上限 10 次；mem = 法师「魔能」法术条上限）
   mut: { bonus: 0, shield: 0, drone: 0, chi: 0, whirl: 0, blink: 0, dash: 0, master: 0, leech: 0, thunder: 0, mstor: 0, mdura: 0, giant: 0, shieldbash: 0, forge: 0, clone: 0, blade: 0, firestep: 0, cold: 0, bounce: 0, split: 0, xbow: 0, wallb: 0, lava: 0, manapool: 0, rage: 0, multicast: 0, mastery: 0, mag: 0, grenade: 0, decoy: 0, sidekick: 0, deck: 0, wild: 0, possess: 0, multishot: 0, spin: 0, recall: 0, vigor: 0, royal: 0, rampage: 0, skyfall: 0, mom: 0, favor: 0, pack: 0, shopq: 0, sale: 0, trainsoul: 0, starhelp: 0, miracle: 0, shinymut: 0 },
-  art: { missile: 0, amplifier: 0, scroll: 0, cat: 0, hagen: 0, talisman: 0, turtle: 0, fang: 0, crane: 0, burns: 0, killhand: 0, grind: 0, ion: 0, sari: 0, coinpow: 0, goldmine: 0, hamu: 0, overheal: 0, supershield: 0, tactical: 0, charm: 0, hotdrink: 0, buy1get1: 0, nohand: 0, novrain: 0, rainkeep: 0, carddeck: 0, support: 0, wish: 0 },
+  art: { missile: 0, amplifier: 0, scroll: 0, cat: 0, hagen: 0, talisman: 0, turtle: 0, fang: 0, crane: 0, burns: 0, killhand: 0, grind: 0, ion: 0, sari: 0, coinpow: 0, goldbox: 0, spendpow: 0, rebound: 0, goldmine: 0, hamu: 0, overheal: 0, supershield: 0, tactical: 0, charm: 0, hotdrink: 0, buy1get1: 0, nohand: 0, novrain: 0, rainkeep: 0, carddeck: 0, support: 0, wish: 0 },
   starPick: undefined, starPend: 0,   // 🌟 幻之助战：二选一的结果（undefined = 还没选过）· 面板挂起
   artPend: 0, fangN: 0, fangT: 0, craneT: 0, hotT: 0, mouseDash: false, sharpenT: 0,
   wm: 0, wmBag: [], wmUid: 0, wmStock: null, wmFree: 0, wmRfN: 0, wmMusouT: 0, wmThrustT: 0,   // 🗡️ 武器大师：分支 / 武器实例（品质·星级·装备标记）/ 货架 / 免费次数 / 无双剩余 / 戳刺动画
@@ -1534,9 +1552,18 @@ const GEAR_WAVE = 35;              // 地狱终章：终焉齿轮
    那条「地狱专属额外商店」分支成了死代码 —— 备战终焉齿轮的补给点仍然存在，只是走通式。） */
 function waveMax() { return endlessMode() ? WAVE_MAX_ENDLESS : (hellMode() ? WAVE_MAX_HELL : WAVE_MAX_NORMAL); }
 function clampWave(k) { return Math.max(1, Math.min(waveMax(), k | 0)); }
-/* 奇物奖励波：普通/地狱 = **第 5 / 10 / 15 / 20 / 25 层**清剿后各一件；
-   ♾ 无尽 = **每 5 层一件**（正好是「打完一位随机 Boss 给一件」的节奏） */
-function artWaveOn(k) { return endlessMode() ? (k % 5 === 0) : (k === 5 || k === 10 || k === 15 || k === 20 || k === 25); }
+/* 奇物奖励波（**免费奇物**）：用户 2026-10 改口径 —— **每 10 层一件**
+   · 普通 / 地狱：第 **10 / 20 / 30** 层清剿后各一件（**5 / 15 / 25 层那三次已删除**）
+   · ♾ 无尽：同样每 10 层（10 / 20 / 30 / 40 …）
+   ⚠️⚠️ **必须排除 0**：`k = 0` 是「开局奇物」（`triggerArtPick(0)`）与存档里的 `artDueWv: 0`（＝没有欠账）。
+      写成 `(k|0) % 10 === 0` 会让 `artWaveOn(0) === true` → 读档那行 `if (artWaveOn(s.artDueWv)) triggerArtPick(0)`
+      **每次开局都白送一个奇物面板**（2026-10 改成 %10 时踩过；旧的枚举写法天然不含 0）。
+   ⚠️ 训练家第 25 波的「原始回归必刷」不受影响（那条走 `artForcedIds`，是**奇遇/强制**口径，不是这条免费波次）。 */
+function artWaveOn(k) { const w = k | 0; return w > 0 && w % 10 === 0; }
+/* 🐱🦷 奇物·哈根的**必刷波次**（用户 2026-10：15 → **20**）——队里有猫时，这一波的奇物面板必定出现哈根。
+   ⚠️ 必须落在**真正的奇物奖励波**上（见上面的 `artWaveOn`：10 / 20 / 30…），否则这条永远不生效。
+   判据只在这里定义，`artForcedIds` / `pickArts` 两处都引用它（别再各处写死数字）。 */
+const HAGEN_WAVE = 20;
 /* 商店波：**每 5 层一次**（用户本轮要求：由「10 层一次」改密）——
    具体是**第 4 / 9 / 14 / 19 / 24 / 29 / 34 层清剿后**进商店，正好卡在每个 Boss 波（5/10/15/20/25/30/35）**前面**：
    先补给再打 Boss。无尽模式继续每 5 层（39 / 44 / 49 …）。
@@ -1674,6 +1701,13 @@ function hellDarkOn() { return hellBonusOn() && !!hellEv && hellEv.id === 'dark'
 function eqDmgMul() { return hellDarkOn() ? HELL_DARK_MUL : 1; }   // 本波伤害倍率（双向）
 function startWave(k) {
   wave = k;
+  /* 🧙 魔法转职：**第 5 波必弹**（用户 2026-10 明确「法师仍然需要在第五波转职」）。
+     挂在 `startWave` 的开场（而不是清剿之后）—— 这样无论玩家是「打到第 5 波」还是「从存档/钩子
+     直接进入第 5 波」，转职面板都一定会出现，判据也不会被别的结算路径吃掉。
+     ⚠️ 原来它挂在「第 5 波奇物面板选完」那个时机上（`pickChoice` 的 `kind0 === 'art'` 分支），
+        而免费奇物 2026-10 改成**每 10 层**后第 5 波已经没有奇物面板 → 那条判据恒为假 →
+        **法师永远转不了职**。别再挂回奇物面板。 */
+  if (k === JOB_WAVE && isMage() && !p.job) { p.jobPend = 1; tryOpen(); }
   /* 🌊 水法师：水柱伤害的「每持续喷 1 秒 +8%」加成**每波开始清空**（用户要求） */
   p.waterRampT = 0;
   /* ♾ 无尽模式：血量档位**按层数**走（每 10 层一档、最多 2 档 = ×2/×4），
@@ -1703,6 +1737,13 @@ function startWave(k) {
       for (let i = spawnQ.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = spawnQ[i]; spawnQ[i] = spawnQ[j]; spawnQ[j] = t; }
     }
     if (hellEv.id === 'runner') spawnQ = spawnQ.map(() => 'runner');   // 轻骑士大军：全换成轻骑贼（数量不变）
+    /* ⚖️ 等价交换（用户 2026-10 新增）：**敌人数量减半，但出怪速率不变；所有敌人血量翻倍**。
+       · 「数量减半」= 只砍 `spawnQ` 的长度（`spawnInt` 在下面那行照旧算 → 速率不变 ✓）
+       · 「速率不变」= **绝不能动 `spawnInt`**（它在下面按波数算出怪间隔）
+       · 「血量翻倍」= 走 `hellTradeHpMul()`，在 `spawnEnemy` 末尾乘一次（Boss 也吃 —— 文案说的是「所有敌人」） */
+    if (hellEv.id === 'trade' && spawnQ.length > 1) {
+      spawnQ = spawnQ.slice(0, Math.max(1, Math.floor(spawnQ.length / 2)));
+    }
   }
   const types = [];
   if (spawnQ.includes('groudon')) types.push('是扩张陆地，或是海洋？');
@@ -1964,6 +2005,10 @@ function spawnEnemy(type, forceShiny, noShiny, probe) {
   }
   /* 🎖️ 指挥官光环：**在指挥官存活期间刷出来的敌人直接按加成血量出场**（不是等下一帧再翻倍） */
   if (cmdAura === 1 && type !== 'commander' && !e.cmdHp) cmdApplyHp(e);
+  /* ⚖️ 地狱/无尽奇遇·等价交换（用户 2026-10 新增）：**本波所有敌人血量翻倍**（Boss 也一样 —— 文案写的是「所有敌人」）。
+     放在 `spawnEnemy` 的**最后**（指挥官光环之后），这样无论前面怎么叠，翻倍都作用在最终血量上。
+     ⚠️ 「数量减半」是在 `startWave` 里砍 `spawnQ` 做的，「出怪速率不变」= `spawnInt` 一个字都没动。 */
+  if (hellEv && hellEv.id === 'trade') { e.hp = Math.round(e.hp * HELL_TRADE_HP_MUL); e.maxhp = e.hp; }
   enemies.push(e);
   for (let i = 0; i < 4; i++) addPart(x, y, rnd(-40, 40), rnd(-60, 10), 0.3, 3, '#8a7a5c', 120);
   /* 出闪演出：金光柱 + 星尘 + 铃音（词条同屏用颜色/尘迹读，不再写文字） */
@@ -7120,7 +7165,8 @@ function petMiracleSave(u) {
 const PET_SOUL_PER = 0.10;
 function petSoulMul() { return 1 + PET_SOUL_PER * ((p.mut && p.mut.trainsoul) || 0); }
 /* ⚗️ **奇物 / 质变的全局伤害加成**（玩家与宝可梦**共用同一份**，改这里两边一起变）：
-   贪狼之牙(每层 +1%) × 哈根(猫神祝福 +20%) × 磨刀(波初 30 秒 +50%) × 金币的力量(每 1000 金币 +4%) × 护盾猛击(有盾时 +10%/层) */
+   贪狼之牙(每层 +1%) × 哈根(猫神祝福 +20%) × 磨刀(波初 30 秒 +50%) × 金币的力量(每 1000 金币 +4%) ×
+   消费战术(每花掉 1000 金币 +2%) × 护盾猛击(有盾时 +10%/层) */
 /* ⚖️ **技能倍率口径**（御三家 0.7 / 其余 0.5）：表里显示的倍率已经乘过它，
    所以结算里也要乘一次 —— 两边永远一致（用户要求：表里的数 = 游戏里的数） */
 function artDmgMul() {
@@ -7128,6 +7174,7 @@ function artDmgMul() {
   if (artGot('hagen')) b *= 1.2;
   if (p.sharpenT > 0) b *= 1.5;
   if (artGot('coinpow')) b *= 1 + COINPOW_PER * Math.floor(coins / 1000);
+  if (artGot('spendpow')) b *= spendPowMul();
   if (p.mut.shieldbash > 0 && (p.oshield || 0) > 0) b *= 1 + SHIELDBASH_PER * p.mut.shieldbash;
   return b;
 }
@@ -9254,7 +9301,7 @@ function shopBuyPetItem(i) {
   const it = petShopItems()[i];
   if (!it) return;
   if (coins < PET_ITEM_COST) { addText(p.x, p.y - 60, '金币不足（' + it.name + ' 需 ' + PET_ITEM_COST + '）', 16, '#ff9d7a', '#3a1400'); return; }
-  coins -= PET_ITEM_COST;
+  spendCoins(PET_ITEM_COST);
   p.petItemBuy = it.id;                              // 整局只能买一件（下架全栏）
   if (!p.petEvoPick) p.petEvoPick = {};
   p.petEvoPick[it.forId] = it.form;
@@ -10799,8 +10846,11 @@ function buildPetPanel() {
     });
   }
 }
-/* ---- 魔法转职（第 JOB_WAVE 波奇物选完后，法师专属） ---- */
-const JOB_WAVE = 5;   // 转职触发波次：**第 5 波**奇物选完后弹出（用户本轮：由第 10 波提前到第 5 波 · 改这里即可调整）
+/* ---- 魔法转职（法师专属 · **第 5 波清剿后必弹**） ---- */
+/* ⚠️ 触发点 = 波次结算里的 `wave === JOB_WAVE && isMage() && !p.job` → `p.jobPend = 1`。
+   2026-10 免费奇物改成每 10 层后，第 5 波不再有奇物面板；这条判据**必须**和奇物面板解耦，
+   否则法师永远转不了职（冰/雷/光全拿不到）—— 踩过一次，别再挂回 `pickChoice` 的 art 分支。 */
+const JOB_WAVE = 5;
 const JOBS = [
   { id: 'water', icon: '💧', name: '水法师', desc: '水柱：法杖射出、跟随指针持续喷射（命中即伤 + 每 0.5 秒结算；耗法术条 = 满条 ÷ 3 —— 200 条与 450 条都是 3 秒喷空）；无双为全屏击退水爆（当场补满法术条，并在场地里撒 9 颗蓝球，每颗回 150、走过去捡 450）；多重施法 = 水柱宽度 +30px/层（永远只有一条），术有专攻 = 法力涨满的那一瞬间，头顶左右各射一道激光水柱（每道 = 法师普攻的 2/3.5/5 倍）' },
   { id: 'thunder', icon: '⚡', name: '雷法师', desc: '闪电球自动追踪敌人（会拐弯锁定最近的敌人），命中不爆炸，触发闪电链（至多 3 名，伤害相同）；无双为雷云（飘移落雷，术有专攻每层把雷云范围 +1/6，满 3 层 = 半径 ×1.5）；术有专攻：定身 0.5 秒（Boss 免疫），6/4/3 次雷击触发雷罚——普通敌人秒杀、Boss 扣 3% 最大生命（对 Boss 有 0.5 秒冷却，冷却内最多触发一次）' },
@@ -11039,10 +11089,15 @@ function mixFreshList(fresh, old, n) {
 /* 奇物：猫在第 15 波锁哈根、十一月雨在第 20 波锁「雨一直下」——刷新也必须保留它们 */
 function artForcedIds(wv, oldIds) {
   const out = [];
-  if (wv === 15 && artGot('cat') && !p.art.hagen) out.push('hagen');
+  /* 📌 用户 2026-10：**哈根必刷波次 15 → 20**（免费奇物改成每 10 层后，15 波没有面板了）。
+     判据统一走 `HAGEN_WAVE`，别再各处写死数字。 */
+  if (wv === HAGEN_WAVE && artGot('cat') && !p.art.hagen) out.push('hagen');
   if (wv === 20 && isArcher() && !isGunner() && artGot('novrain') && !p.art.rainkeep
       && !(oldIds || []).includes('rainkeep')) out.push('rainkeep');
-  /* 🌟 原始回归（第 25 波必刷）：刷新之后**也必须留着**（和哈根 / 雨一直下同款口径） */
+  /* 🌟 原始回归（第 25 波必刷）：刷新之后**也必须留着**（和哈根 / 雨一直下同款口径）。
+     ⚠️ 25 波**不再有免费奇物面板**了（每 10 层一次）→ 这条必须挂在**奇遇「这个没人要吗？」**
+        那条额外奇物上，见 `HELL_EVENTS` 的 'art' 分支（那里会 `pickArts`）。保留在这里是给
+        任何**仍然开了面板**的路径兜底（例如奇遇给的额外奇物）。 */
   if (wv === 25 && isTrainer() && primalOwner() && !p.art[PRIMAL_ART]
       && !(oldIds || []).includes(PRIMAL_ART)) out.push(PRIMAL_ART);
   return out;
@@ -13258,30 +13313,39 @@ function shopPaint() {
         ? '每次开店只能买一次随机奇物（已经买过了）'
         : (coins < SHOP_RAND_COST ? SHOP_RAND_COST + ' 金币（金币不足）' : SHOP_RAND_COST + ' 金币 · 随机一件（共 ' + pool.length + ' 件，哈根/猫咪/增幅器/哈姆' + (isArcher() ? '/无双秘籍' : '') + '除外）')),
     coins < SHOP_RAND_COST || pool.length === 0 || randLeft <= 0);
-  /* 自选三格：左键整格买下（5000），右边小按钮刷新（500） */
+  /* 自选三格：整格买下（10000）。⚠️ 2026-10 改版：**单格刷新按钮已删除** ——
+     三个格子一起换的那颗按钮在下面统一处理（`shopRerollAll` / 价格 2000×2^n）。 */
   for (let i = 0; i < SHOP_PICK_N; i++) {
-    const b = $('shop-p' + i), rb = $('shop-r' + i);
-    if (!b || !rb) continue;
+    const b = $('shop-p' + i);
+    if (!b) continue;
     const s = shopPicks[i];
     if (!s || !s.id) {
       mk(b, '🚫', '本店无更多奇物', '能通过商店获得的奇物都已入手（或已在本店出现过）', true);
       b.classList.add('sold');
-      rb.textContent = '刷 新 ' + SHOP_PICK_REROLL;
-      rb.disabled = true;
       continue;
     }
     if (s.sold) {
-      mk(b, '✅', '已购：' + ART_DEFS[s.id].name, '这一格已经买走了（刷新可换下一件）', true);
+      mk(b, '✅', '已购：' + ART_DEFS[s.id].name, '这一格已经买走了', true);
       b.classList.add('sold');
-      rb.textContent = '刷 新 ' + SHOP_PICK_REROLL;
-      rb.disabled = true;
       continue;
     }
     b.classList.remove('sold');
     mk(b, ART_DEFS[s.id].icon, ART_DEFS[s.id].name + ' · ' + SHOP_PICK_COST + ' 金币',
       shopPlainDesc(s.id) + (coins < SHOP_PICK_COST ? '（金币不足）' : ''), coins < SHOP_PICK_COST);
-    rb.textContent = '刷 新 ' + SHOP_PICK_REROLL;
-    rb.disabled = coins < SHOP_PICK_REROLL || shopPickPool().length === 0;
+  }
+  /* 🔄 一键三换：把三个自选奇物一起换掉（价格 2000 / 4000 / 8000 …，每次开店从 2000 起算） */
+  {
+    const rb = $('shop-reroll-all');
+    if (rb) {
+      const rc = shopRerollAllCost();
+      const canAny = shopPicks.some(s => s && s.id && !s.sold);
+      rb.textContent = '🔄 刷新三个奇物 · ' + rc + ' 金币（第 ' + ((shopRerollN || 0) + 1) + ' 次）';
+      rb.disabled = !canAny || shopPickPool().length === 0 || coins < rc;
+      rb.title = shopPickPool().length === 0
+        ? '本店已经没有别的奇物可换了'
+        : (canAny ? '一次性把三个自选奇物全部换掉（已买走的不受影响）'
+          : '三个格子都已买走，没什么可换的了');
+    }
   }
   /* 🔮 进化道具那一栏（训练家专属）：没有可卖的就整栏隐藏；有就一格一件（道具图标是内嵌的 PET_ITEM_IMG） */
   const iSec = $('shop-item-sec'), iList = $('shop-item-list');
@@ -13312,6 +13376,7 @@ function openShop(nextWave) {
   shopWaveNext = clampWave(nextWave);
   rollShopPicks();          // 三个自选奇物格：每次开店重新抽
   shopRandBought = 0;       // 随机奇物：每次开店重置「只能买一次」
+  shopRerollN = 0;          // 🔄 一键三换：每次开店从 2000 重新起算
   shopMutBought = 0;        // 🎁 质变宝箱：每次开店重置（一家店最多 3 个：1000 / 2000 / 3000）
   $('sc-shop').classList.add('show');
   shopPaint();
@@ -13328,7 +13393,7 @@ function shopBuyMut() {
   if (shopMutBought >= SHOP_MUT_COSTS.length) { addText(p.x, p.y - 60, '这家店的质变宝箱已经买满了（最多 3 个）', 16, '#ff9d7a', '#3a1400'); return false; }
   const cost = shopMutCost();
   if (coins < cost) { addText(p.x, p.y - 60, '金币不足（质变宝箱需 ' + cost + '）', 16, '#ff9d7a', '#3a1400'); return false; }
-  coins -= cost;
+  spendCoins(cost);
   shopMutBought++;
   mutPending++;                // 与「闪光敌人掉落的质变宝箱」走同一条链路
   sfx.mut();
@@ -13390,17 +13455,17 @@ function shopBuy(kind) {
   }
   if (kind === 'spd') {
     if (coins < shopSpdCost()) { addText(p.x, p.y - 60, '金币不足（攻速需 ' + shopSpdCost() + '）', 16, '#ff9d7a', '#3a1400'); return; }
-    coins -= shopSpdCost();
+    spendCoins(shopSpdCost());
     shopN.spd++;   // 面板上的等级/价格会立刻更新，不再飘字
   } else if (kind === 'rng') {
     if (coins < shopRngCost()) { addText(p.x, p.y - 60, '金币不足（范围需 ' + shopRngCost() + '）', 16, '#ff9d7a', '#3a1400'); return; }
-    coins -= shopRngCost();
+    spendCoins(shopRngCost());
     shopN.rng++;
   } else if (kind === 'art') {
     const pool = shopArtPool();
     if (coins < SHOP_RAND_COST || !pool.length) return;
     if ((shopRandBought || 0) >= SHOP_RAND_MAX) { addText(p.x, p.y - 60, '每次开店只能买一次随机奇物', 16, '#ff9d7a', '#3a1400'); return; }
-    coins -= SHOP_RAND_COST;
+    spendCoins(SHOP_RAND_COST);
     shopRandBought = (shopRandBought || 0) + 1;
     const id = pool[Math.floor(Math.random() * pool.length)];
     /* ⚠️ 槽满时 `artTryGain()` 只是挂起 + 弹「替换」面板、并返回 false —— 以前这条路**不登记挂起状态**，
@@ -13439,7 +13504,7 @@ function shopBuyPick(i) {
   const s = shopPicks[i];
   if (!s || !s.id || s.sold) return;
   if (coins < SHOP_PICK_COST) { addText(p.x, p.y - 60, '金币不足（自选奇物需 ' + SHOP_PICK_COST + '）', 16, '#ff9d7a', '#3a1400'); return; }
-  coins -= SHOP_PICK_COST;
+  spendCoins(SHOP_PICK_COST);
   if (artFull()) {   // 奇物槽满：先扣钱、弹出替换面板（面板里再决定丢哪件；放弃则退款）
     shopPendingPick = { i, id: s.id };
     pendArtId = s.id;
@@ -13458,20 +13523,33 @@ function shopBuyPick(i) {
   shopPaint();
   saveGame(shopWaveNext, 0);
 }
-/* 商店·自选奇物：花 500 把第 i 格刷成别的奇物（不会刷出本店已出现过的） */
-function shopRerollPick(i) {
+/* 🔄 商店·一键三换（2026-10 改版）：**把三个自选奇物一起换掉**，价格逐次翻倍。
+   第 n 次（n 从 1 起）= `SHOP_REROLL_BASE × 2^(n-1)` → 2000 / 4000 / 8000 / 16000 …
+   ⚠️ 计数 `shopRerollN` 每次开店归零（见 `openShop`）；已买走（`sold`）的格子**不换**，也不重置它的 sold 标记。 */
+function shopRerollAllCost() { return SHOP_REROLL_BASE * Math.pow(2, shopRerollN || 0); }
+function shopRerollAll() {
   if (!shopOn || state !== 'play') return;
-  const s = shopPicks[i];
-  if (!s || !s.id || s.sold) return;
-  if (coins < SHOP_PICK_REROLL) { addText(p.x, p.y - 60, '金币不足（刷新需 ' + SHOP_PICK_REROLL + '）', 16, '#ff9d7a', '#3a1400'); return; }
-  const pool = shopPickPool();
-  if (!pool.length) { addText(p.x, p.y - 60, '本店已经没有别的奇物可换了', 16, '#ff9d7a', '#3a1400'); return; }
-  coins -= SHOP_PICK_REROLL;
-  const id = pool[Math.floor(Math.random() * pool.length)];
-  shopShown.add(id);
-  s.id = id;
+  const cost = shopRerollAllCost();
+  if (coins < cost) { addText(p.x, p.y - 60, '金币不足（刷新需 ' + cost + '）', 16, '#ff9d7a', '#3a1400'); return; }
+  /* 池子里得**真的还有**能换的东西（三个都没得换 → 白花钱，直接拦住） */
+  if (!shopPickPool().length) { addText(p.x, p.y - 60, '本店已经没有别的奇物可换了', 16, '#ff9d7a', '#3a1400'); return; }
+  /* ⚠️ 还要确认**至少有一格是没买走的**：三格全买走时「换」没有意义 → 不该收钱
+     （只判池子会白扣一笔，冒烟 S42 抓过这条）。 */
+  if (!shopPicks.some(s => s && s.id && !s.sold)) { addText(p.x, p.y - 60, '三个格子都买走了，没什么可换的', 16, '#ff9d7a', '#3a1400'); return; }
+  if (!spendCoins(cost)) return;
+  shopRerollN = (shopRerollN || 0) + 1;
+  /* 三格一起重抽（已买走 / 空白的格子保留，不重新上架） */
+  for (let i = 0; i < SHOP_PICK_N; i++) {
+    const s = shopPicks[i];
+    if (!s || s.sold || !s.id) continue;
+    const pool = shopPickPool();
+    if (!pool.length) { s.id = null; s.sold = true; continue; }   // 池子空了：该格留空
+    const id = pool[Math.floor(Math.random() * pool.length)];
+    shopShown.add(id);          // 本店出现过的记下来 → 同一次开店不会再撞见同一件
+    s.id = id;
+  }
   sfx.pick();
-  burst(p.x, p.y, 10, '#ffd166', 260);
+  burst(p.x, p.y, 14, '#8ff0e8', 300);
   shopPaint();
   saveGame(shopWaveNext, 0);
 }
@@ -13599,10 +13677,11 @@ function pickMuts(exclude) {
 function allMutsCapped() {
   return mutsAvail().length === 0;
 }
-/* 质变全部收集满之后，再击败闪光敌人：不再给质变，改为 **+500 金币 + 1% 最终造成伤害**
+/* 质变全部收集满之后，再击败闪光敌人：不再给质变，改为 **+300 金币 + 1% 最终造成伤害**
    （回满血 + 补无双 + 金光演出照旧；金币会一并计入本局的「传承带出」基数；
-    伤害加成是**本局内永久叠加**的：每斩一只闪光 +1%，直接乘在 hitEnemy 的最终伤害上） */
-const MUT_FULL_COIN = 500;
+    伤害加成是**本局内永久叠加**的：每斩一只闪光 +1%，直接乘在 hitEnemy 的最终伤害上）
+   💰 用户 2026-10：额外金币 **500 → 300**。 */
+const MUT_FULL_COIN = 300;
 const MUT_FULL_DMG_PER = 0.01;   // 每次 +1% 最终造成伤害
 function mutFullDmgMul() { return 1 + MUT_FULL_DMG_PER * (p.mutFullKills || 0); }
 function mutCapBonus() {
@@ -13682,7 +13761,7 @@ let dbgFoeDrawN = 0;                  // 诊断：上一帧真正画出来的敌
 let dbgSpin = 0, dbgSpinC = 0;                    // 诊断：满级旋风斩旋转（本体 / 影分身）次数
 const ART_DEFS = {
   missile:   { name:'弹射导弹', icon:'🚀', desc:'闪避后飞出 3 枚自动追踪导弹', start:0, w15:0 },
-  amplifier: { name:'奇物增幅', icon:'✨', desc:'第 5/10/15 波奇物奖励各可多选一件', start:1, w15:0 },
+  amplifier: { name:'奇物增幅', icon:'✨', desc:'每次奇物奖励各可多选一件', start:1, w15:0 },
   scroll:    { name:'无双秘籍', icon:'📖', desc:'无双变为「秘奥义·斩」：无双会使出全屏一击！', start:0, w15:0 },
   cat:       { name:'一只猫咪？', icon:'🐱', desc:'老吴！阿你个你个你个你个！（1-5 波跟随撒娇 · 6-10 波成年出击 · 11 波起觉醒）', start:1, w15:0 },
   hagen:     { name:'哈根', icon:'🐈', desc:'哈气大王！！！（每 3 秒哈气一次：全场敌人按最大生命受伤——杂兵 50%、战将/铁骑 20%、Boss 3%，并震慑 0.5 秒）', start:0, w15:1 },
@@ -13696,6 +13775,10 @@ const ART_DEFS = {
   ion:       { name:'岚刀离子切', icon:'🌩️', desc:'被击中的敌人停滞 0.5 秒', start:0, w15:0 },
   sari:      { name:'舍利子回魂', icon:'📿', desc:'阵亡时原地复活，并删除此奇物', start:0, w15:0 },
   coinpow:   { name:'金币的力量', icon:'💰', desc:'每拥有1000金币，你的伤害提高4％', start:0, w15:0 },
+  /* 🧰 用户 2026-10 新增三个（前两个是「得即离槽」的一次性奇物，见 `ART_INSTANT`） */
+  goldbox:   { name:'金币宝箱', icon:'🎁', desc:'随机获得1000-10000金币，不占用奇物槽。', start:0, w15:0 },
+  spendpow:  { name:'消费战术', icon:'🛒', desc:'梭哈是一种智慧...每花费1000金币，伤害增加2％。', start:0, w15:0 },
+  rebound:   { name:'触底反弹', icon:'🪃', desc:'我不玩了，把我钱还我！（归还玩家60％已消耗的金币）', start:0, w15:0 },
   goldmine:  { name:'挖金矿咯', icon:'⛏️', desc:'击杀敌人有 5% 的概率掉落宝箱！（1-10 金币 · 另有 1% 撞大运：+999 金币并秒杀全屏）', start:0, w15:0 },
   novrain:   { name:'十一月雨', icon:'🌧️', desc:'弓箭手专属：无双变为「十一月雨」——全屏箭雨 5 秒，每 0.5 秒造成普攻 1/3 的伤害', start:0, w15:0 },
   rainkeep:  { name:'雨一直下', icon:'☔', desc:'需先有十一月雨（第 20 波必刷）：若无双槽允许，则会自动释放无双技能，每持续 1 秒伤害提高 2%', start:0, w15:0 },
@@ -13728,9 +13811,53 @@ function artCount() { let n = 0; for (const id in ART_DEFS) if (p.art[id]) n++; 
 function artCap() { return ART_CAP_BASE + metaLv('slot'); }
 function artFull() { return artCount() >= artCap(); }
 function artOwnedList() { const out = []; for (const id in ART_DEFS) if (p.art[id]) out.push(id); return out; }
+/* ============================================================
+   🧰 一次性奇物（用户 2026-10 新增「得即离槽」的那一类）
+   ============================================================
+   口径：**拿到的那一刻立刻结算效果，然后把自己从奇物槽里删掉**（`p.art[id] = 0`），
+   所以它们既不会占格、也不会留在背包里 —— 玩家看到的就是「领了个奖励」。
+   ⚠️ 结算必须发生在 `artGain()` 的**最后**（见那里的调用）：前面的分支已经把 `p.art[id] = 1`，
+      所以这里要自己清掉；而且要在 `artCount()` 被任何 UI 读到之前完成（同一帧内）。 */
+/* 🎁 金币宝箱：随机 1000~10000 金币（含两端） */
+const GOLD_BOX_MIN = 1000, GOLD_BOX_MAX = 10000;
+function goldBoxRoll() { return GOLD_BOX_MIN + Math.floor(Math.random() * (GOLD_BOX_MAX - GOLD_BOX_MIN + 1)); }
+/* 🪃 触底反弹：归还本局**已消耗**金币的 60% */
+const REBOUND_RATE = 0.6;
+function reboundRoll() { return Math.floor((coinsSpent || 0) * REBOUND_RATE); }
+/* 🛒 消费战术：每**花费** 1000 金币 → 最终伤害 +2%（按整千取，与「金币的力量」同款口径） */
+const SPENDPOW_PER = 0.02;
+function spendPowMul() { return 1 + SPENDPOW_PER * Math.floor((coinsSpent || 0) / 1000); }
+const ART_INSTANT = { goldbox: 1, rebound: 1 };   // 「得即离槽」名单（加新的只要往这里加一行 + 下面的 apply 分支）
+let artGainN = 0;                    // 累计**获得**过的奇物件数（含一次性奇物；`artCount()` 是当前持有数）
+let artInstantN = 0;                 // 诊断/测试读数：一次性奇物一共触发过几次
+let artInstantLast = null;           // 最近一次 { id, gain, spent }
+let artInstantLog = [];              // 最近的触发记录（测试用）
+/* 结算 + 把自己从槽里删掉（返回一个读数对象给 UI/测试用） */
+function artInstantApply(id) {
+  let gain = 0, text = '';
+  if (id === 'goldbox') {
+    gain = goldBoxRoll();
+    text = '🎁 金币宝箱 · 💰 +' + gain;
+  } else if (id === 'rebound') {
+    gain = reboundRoll();
+    text = '🪃 触底反弹 · 归还 💰 +' + gain + '（已花 ' + (coinsSpent || 0) + '）';
+  } else return null;
+  if (gain > 0) addCoins(gain);
+  p.art[id] = 0;                       // ⭐ 不占用奇物槽：立刻离槽
+  addText(p.x, p.y - 46, text, 20, '#ffe9a8', '#5a3a00');
+  addRing(p.x, p.y, '#ffd166', 12);
+  burst(p.x, p.y, 22, '#ffd166', 360);
+  flashG = Math.max(flashG, 0.16);
+  sfx.pick();
+  const rec = { id: id, gain: gain, spent: coinsSpent || 0, off: 1 };
+  artInstantN++;
+  artInstantLast = rec;
+  artInstantLog.push(rec);
+  if (artInstantLog.length > 32) artInstantLog.shift();
+  return rec;
+}
 /* 丢弃一件奇物（并把它带来的东西一起收拾干净：猫 / 飞剑 / 护盾上限 / 支援车 …） */
-function artLose(id) {
-  if (!p.art[id]) return false;
+function artLose(id) {  if (!p.art[id]) return false;
   p.art[id] = 0;
   if (id === 'cat' || id === 'hagen') catE = null;
   if (id === 'talisman') swordE = null;
@@ -13754,6 +13881,11 @@ let shopPendingRand = 0;           // 商店「随机奇物」因槽满挂起的
 function artTryGain(id) {
   if (!ART_DEFS[id]) return false;
   if (artGot(id)) return true;
+  /* 🧰 一次性奇物（金币宝箱 / 触底反弹）：**得即离槽** → 不占格、也**不需要腾格子**。
+     ⚠️⚠️ 必须在 `artFull()` 之前拦掉：否则槽满时抽到它会弹「丢掉一件换新」面板，
+        玩家丢了一件之后它自己又离槽 → **净亏一件奇物、只换到一点金币**（2026-10 踩过）。
+        直接结算即可（`artGain` 内部会调 `artInstantApply` 把自己清掉）。 */
+  if (ART_INSTANT[id]) { artGain(id); return true; }
   if (!artFull()) { artGain(id); return true; }
   pendArtId = id;                  // 槽满：等玩家决定丢哪件（或放弃）
   openSlotUp();
@@ -14185,8 +14317,10 @@ function pickArts(wv, exclude) {
   const ex = new Set(exclude || []);
   if (ex.size) pool = pool.filter(id => !ex.has(id));
   shuffleIds(pool);
-  if (wv === 15 && artGot('cat')) {
-    /* 有猫 → 哈根锁定必刷（即使上轮已展示过，刷新后也须保留哈根，其余两项换新） */
+  /* 🐱 有猫 → 哈根锁定必刷（即使上轮已展示过，刷新后也须保留哈根，其余两项换新）
+     📌 用户 2026-10：**必刷波次由第 15 波改到第 20 波**（原来钉 15 波；免费奇物改成每 10 层后
+        15 波已经没有面板，所以这个数必须落在真正的奇物奖励波上）。 */
+  if ((wv === HAGEN_WAVE || wv >= 25) && artGot('cat')) {
     if (pool.includes('hagen')) { pool.splice(pool.indexOf('hagen'), 1); }
     pool.unshift('hagen');
   }
@@ -14195,7 +14329,9 @@ function pickArts(wv, exclude) {
     pool = pool.filter(id => id !== 'rainkeep');
     pool.unshift('rainkeep');
   }
-  /* 🌟 原始回归：**训练家第 25 波必刷**（队里得有神兽、还没拿过这件）—— 顶到第一位，其余两项照常随机 */
+  /* 🌟 原始回归：**训练家第 25 波必刷**（队里得有神兽、还没拿过这件）—— 顶到第一位，其余两项照常随机。
+     ⚠️ 第 25 波现在**没有免费奇物面板**了（每 10 层一次）→ 这条只在「奇遇『这个没人要吗？』给的额外奇物」
+        走到 25 波时才生效（那一支会把 `artWv` 设成当前波）。留着不影响别的波次。 */
   if (wv === 25 && isTrainer() && primalOwner() && !p.art[PRIMAL_ART] && !(ex && ex.has(PRIMAL_ART))) {
     pool = pool.filter(id => id !== PRIMAL_ART);
     pool.unshift(PRIMAL_ART);
@@ -14213,7 +14349,11 @@ function triggerArtPick(wv) {
   else artStageTxt = '第 ' + wv + ' 波清剿完毕 · 挑选一件奇物';
   let n = 1;
   if (wv === 0) n += metaLv('art');   // 局外养成「额外奇物」：开局多选 n 件
-  if (wv !== 0 && (wv === 5 || wv === 10 || wv === 15) && artGot('amplifier')) n++;   // 奇物增幅：5/10/15 奖励波多拿一件
+  /* 奇物增幅：奇物奖励波多拿一件。
+     ⚠️ 2026-10 波次改口径（免费奇物 **每 10 层**）后，这里的旧判据 `wv === 5 || 15` 全是**死分支**
+         （那两波已经不发奇物了）→ 改成「**只要是奇物奖励波就多一件**」，与 `artWaveOn()` 同源，
+         将来再调波次不会再脱节。文案（`ART_DEFS.amplifier.desc`）也要跟着改。 */
+  if (wv !== 0 && artWaveOn(wv) && artGot('amplifier')) n++;
   p.artPend += n;
   tryOpen();
 }
@@ -14253,6 +14393,7 @@ function artGain(id) {
   /* 职业禁选（授予级拦截）：池子过滤之外再兜一道 ——
      🛡️骑士禁「无双秘籍 / 哈姆杀所有」，士兵/牌皇禁雨系，传统弓禁士兵专属 … */
   if (roleBanArts().indexOf(id) >= 0) return false;
+  artGainN++;                    // 累计**获得次数**（与「当前持有数」不同：一次性奇物领完就离槽）
   p.art[id] = 1;
   /* 🌠 千年之愿（训练家专属）：基拉祈等级立刻 +20（`jirachiLv()` 读这件奇物）→ 刷新它的面板与生命上限 */
   if (id === 'wish') {
@@ -14294,6 +14435,8 @@ function artGain(id) {
       if (sfx.fanfare) sfx.fanfare(); else sfx.musou();
     }
   }
+  /* 🧰 一次性奇物（金币宝箱 / 触底反弹）：**放在最后**结算，结算完自己离槽（不占格） */
+  if (ART_INSTANT[id]) artInstantApply(id);
 }
 
 /* ---------- 奇物·弹射导弹 / 飞剑符箓：自动追踪体 ---------- */
@@ -14702,7 +14845,7 @@ function wmShopPick(i) {
     p.wmFree--;
     addText(p.x, p.y - 46, '🎁 免费获得 · ' + wmQualName(s.q) + d.name, 19, '#8ff0e8', '#14404d');
   } else {
-    coins -= cost;
+    spendCoins(cost);
     addText(p.x, p.y - 46, '💰 -' + cost + ' 买下 ' + wmQualName(s.q) + d.name, 19, '#ffe9a8', '#3a2a00');
   }
   p.wmStock[i | 0] = null;               // 买走 → 货架空格（刷新补货）
@@ -14729,7 +14872,7 @@ function wmShopRefresh() {
   if (!choosing || curKind !== 'wmshop') return;
   const cost = wmRefreshCost();
   if (coins < cost) { addText(p.x, p.y - 46, '金币不足（本次刷新需 ' + cost + '）', 16, '#ff9d7a', '#3a1400'); return; }
-  coins -= cost;
+  spendCoins(cost);
   p.wmRfN = (p.wmRfN || 0) + 1;
   p.wmStock = wmRollStock();
   noiseBurst(0.05, 0.04, 1500, 0.6);
@@ -14784,8 +14927,9 @@ function pickChoice(i) {
   if (kind0 === 'mut') mutPending--;
   else if (kind0 === 'art') {
     p.artPend--;
-    /* 第 JOB_WAVE 波（**第 5 波**）的奇物选完后：法师额外开启「魔法转职」页面 */
-    if (artWv === JOB_WAVE && isMage() && !p.job) p.jobPend = 1;
+    /* ⚠️ 魔法转职**不再挂在这里** —— 用户要求它「仍然在第 5 波」触发，而第 5 波已经没有奇物面板了，
+       所以改成独立的波次触发（见波次结算里的 `wave === JOB_WAVE && isMage()` 那一行）。
+       别把 `p.jobPend = 1` 加回来（会和波次触发重复弹两次）。 */
   }
   else if (kind0 === 'job') p.jobPend--;
   else if (kind0 === 'weapon') p.weaponPend--;
@@ -14843,12 +14987,12 @@ $('shop-b-spd').addEventListener('click', () => shopBuy('spd'));
 $('shop-b-rng').addEventListener('click', () => shopBuy('rng'));
 $('shop-b-art').addEventListener('click', () => shopBuy('art'));
 $('shop-b-mut').addEventListener('click', shopBuyMut);   // 🎁 质变宝箱（1000/2000/3000 · 一家店最多 3 个）
-/* 商店·自选奇物三格：整格购买 + 单格刷新 */
+/* 商店·自选奇物三格：整格购买（10000）· 单格刷新已废除，改走 `#shop-reroll-all` 一键三换 */
 for (let i = 0; i < SHOP_PICK_N; i++) {
-  const pb = $('shop-p' + i), rb = $('shop-r' + i);
+  const pb = $('shop-p' + i);
   if (pb) pb.addEventListener('click', () => shopBuyPick(i));
-  if (rb) rb.addEventListener('click', () => shopRerollPick(i));
 }
+{ const ra = $('shop-reroll-all'); if (ra) ra.addEventListener('click', shopRerollAll); }
 /* 🔮 商店·进化道具三格（训练家专属，买下即给对应宝可梦进化） */
 for (let i = 0; i < 3; i++) {
   const ib = $('shop-i' + i);
@@ -17727,7 +17871,8 @@ function wipeAllSaves() {
   eggReset(); eggLast = '';                                     // 图鉴彩蛋：连点进度 + 领取标记一起清
   const egg = $('cdx-egg');
   if (egg && egg.parentNode && egg.parentNode.removeChild) egg.parentNode.removeChild(egg);
-  coinsTotal = 0; runBanked = false;                            // 当前这局的金币从零开始统计
+  coinsTotal = 0; coinsSpent = 0; runBanked = false;                            // 当前这局的金币从零开始统计
+  artGainN = 0; artInstantN = 0; artInstantLast = null; artInstantLog = [];     // 本局奇物获得/一次性奇物读数归零
   selRole = 'warrior'; selDiff = 'hard';                        // 主页卡片回到默认（困难 / 战士）
   syncMetaBtn();
   renderMeta();
@@ -17852,9 +17997,18 @@ function metaUnlockSet(role) {
 }
 /* 本局总金币（含商店消费掉的）——用于结算带出 */
 let coinsTotal = 0;
+/* 💸 本局**已消耗**的金币总数（用户 2026-10 新增两个按「花费」算的奇物：消费战术 / 触底反弹）。
+   ⚠️ 所有扣钱都必须走 `spendCoins()`，**不要再写裸 `coins -=`** —— 漏一处那两个奇物就少算一笔。 */
+let coinsSpent = 0;
 let runBanked = false;
-function addCoins(n) {
-  const g = Math.max(0, Math.round(n));
+/* 扣钱唯一收口：够则扣、返回 true；不够则原样返回 false（调用方自己给提示） */
+function spendCoins(n) {
+  const c = Math.max(0, Math.round(n));
+  if (coins < c) return false;
+  coins -= c; coinsSpent += c;
+  return true;
+}
+function addCoins(n) {  const g = Math.max(0, Math.round(n));
   coins += g; coinsTotal += g;
   return g;
 }
@@ -18099,7 +18253,7 @@ function buildSaveData(nextWave, artDueWv) {
     v: 1,
     wave: nextWave,              // 从这一波开始打
     artDueWv: artDueWv || 0,     // 刚结束的波是奇物奖励波（未领取则补发）
-    kills, score, shinies, time, mIdx, coins, coinsTotal,
+    kills, score, shinies, time, mIdx, coins, coinsTotal, coinsSpent,
     lvl: p.lvl, xp: p.xp, xpNeed: p.xpNeed,
     hp: p.hp, maxhp: p.maxhp, shieldC: p.shieldC, oshield: p.oshield || 0,
     fangN: p.fangN, fangT: +(p.fangT || 0).toFixed(2),
@@ -18213,7 +18367,7 @@ function loadGame() {
   hideAllPanels();
   /* 恢复全局进度 */
   score = s.score || 0; kills = s.kills || 0; shinies = s.shinies || 0;
-  time = s.time || 0; mIdx = s.mIdx || 0; coins = s.coins || 0; coinsTotal = s.coinsTotal || 0;
+  time = s.time || 0; mIdx = s.mIdx || 0; coins = s.coins || 0; coinsTotal = s.coinsTotal || 0; coinsSpent = s.coinsSpent || 0;
   p.lvl = s.lvl || 1; p.xp = s.xp || 0; p.xpNeed = s.xpNeed || 8; p.pending = 0;
   p.maxhp = s.maxhp || baseHp(); p.hp = Math.min(p.maxhp, s.hp || p.maxhp);
   p.shieldC = Math.min(3, s.shieldC || 0);
@@ -18232,7 +18386,7 @@ function loadGame() {
   p.memT = 0;
   shopN = Object.assign({ spd: 0, rng: 0 }, s.shopN || {});
   p.mut = Object.assign({ bonus: 0, shield: 0, drone: 0, chi: 0, whirl: 0, blink: 0, dash: 0, master: 0, leech: 0, thunder: 0, mstor: 0, mdura: 0, giant: 0, shieldbash: 0, forge: 0, clone: 0, blade: 0, firestep: 0, cold: 0, bounce: 0, split: 0, xbow: 0, wallb: 0, lava: 0, manapool: 0, rage: 0, multicast: 0, mastery: 0, mag: 0, grenade: 0, decoy: 0, sidekick: 0, deck: 0, wild: 0, possess: 0, multishot: 0, spin: 0, recall: 0, vigor: 0, royal: 0, rampage: 0, skyfall: 0, mom: 0, favor: 0, pack: 0, shopq: 0, sale: 0, trainsoul: 0, starhelp: 0, miracle: 0, shinymut: 0 }, s.mut || {});
-  p.art = Object.assign({ nohand: 0, missile: 0, amplifier: 0, scroll: 0, cat: 0, hagen: 0, talisman: 0, turtle: 0, fang: 0, crane: 0, burns: 0, killhand: 0, grind: 0, ion: 0, sari: 0, coinpow: 0, goldmine: 0, hamu: 0, overheal: 0, supershield: 0, tactical: 0, charm: 0, hotdrink: 0, buy1get1: 0, nohand: 0, novrain: 0, rainkeep: 0, carddeck: 0, support: 0, wish: 0 }, s.art || {});
+  p.art = Object.assign({ nohand: 0, missile: 0, amplifier: 0, scroll: 0, cat: 0, hagen: 0, talisman: 0, turtle: 0, fang: 0, crane: 0, burns: 0, killhand: 0, grind: 0, ion: 0, sari: 0, coinpow: 0, goldbox: 0, spendpow: 0, rebound: 0, goldmine: 0, hamu: 0, overheal: 0, supershield: 0, tactical: 0, charm: 0, hotdrink: 0, buy1get1: 0, nohand: 0, novrain: 0, rainkeep: 0, carddeck: 0, support: 0, wish: 0 }, s.art || {});
   /* 🧢 训练家：箭雨体系一律不给 —— **老存档里可能已经带着**（这条禁令是后加的），读档时就地摘掉，
      否则无双会被「十一月雨」顶成箭雨，玩不到「无双号令」 */
   if (isTrainer()) { p.art.novrain = 0; p.art.rainkeep = 0; }
@@ -18366,7 +18520,7 @@ function resetRun() {
   p.pickN = { rng: 0, spd: 0, mem: 0, mvm: 0 };   // 广域/疾风/魔能/冲锋(骑士移速) 每局限选 10 次
   p.pickTimes = { dmg: 0, rng: 0, spd: 0, vit: 0, mvm: 0, mus: 0, mem: 0, heal: 0 };   // 本局已选词条计数（暂停面板）
   p.mut = { bonus: 0, shield: 0, drone: 0, chi: 0, whirl: 0, blink: 0, dash: 0, master: 0, leech: 0, thunder: 0, mstor: 0, mdura: 0, giant: 0, shieldbash: 0, forge: 0, clone: 0, blade: 0, firestep: 0, cold: 0, bounce: 0, split: 0, xbow: 0, wallb: 0, lava: 0, manapool: 0, rage: 0, multicast: 0, mastery: 0, mag: 0, grenade: 0, decoy: 0, sidekick: 0, deck: 0, wild: 0, possess: 0, multishot: 0, spin: 0, recall: 0, vigor: 0, royal: 0, rampage: 0, skyfall: 0, mom: 0, favor: 0, pack: 0, shopq: 0, sale: 0, trainsoul: 0, starhelp: 0, miracle: 0, shinymut: 0 };
-  p.art = { nohand: 0, missile: 0, amplifier: 0, scroll: 0, cat: 0, hagen: 0, talisman: 0, turtle: 0, fang: 0, crane: 0, burns: 0, killhand: 0, grind: 0, ion: 0, sari: 0, coinpow: 0, goldmine: 0, hamu: 0, overheal: 0, supershield: 0, tactical: 0, charm: 0, hotdrink: 0, buy1get1: 0, nohand: 0, novrain: 0, rainkeep: 0, carddeck: 0, support: 0, wish: 0 };
+  p.art = { nohand: 0, missile: 0, amplifier: 0, scroll: 0, cat: 0, hagen: 0, talisman: 0, turtle: 0, fang: 0, crane: 0, burns: 0, killhand: 0, grind: 0, ion: 0, sari: 0, coinpow: 0, goldbox: 0, spendpow: 0, rebound: 0, goldmine: 0, hamu: 0, overheal: 0, supershield: 0, tactical: 0, charm: 0, hotdrink: 0, buy1get1: 0, nohand: 0, novrain: 0, rainkeep: 0, carddeck: 0, support: 0, wish: 0 };
   p.artPend = 0; p.fangN = 0; p.fangT = 0; p.craneT = 0; p.hotT = 0; p.mouseDash = false; p.sharpenT = 0;
   hellGiftArt();   // 地狱模式：本轮起**不再**白送「闪耀护符」（留空函数，便于以后再加开局赠礼）
   shopN = { spd: 0, rng: 0 }; shopOn = false; shopPend = 0; shopWaveNext = 1; shopPicks = []; shopShown = new Set();
@@ -18391,7 +18545,7 @@ function resetRun() {
   allyUnits = allyUnits.filter(u => u.kind !== 'pet' && u.kind !== 'shinypet');   // 上一局的宝可梦收回去
   p.hurtT = 0; p.alive = true;
   p.shinySet = metaSetOn() ? 1 : 0;   // 局外：本局是否穿该职业的闪光套装（纯外观：金色光环 + 头顶齿轮）
-  coinsTotal = 0; runBanked = false;  // 本局总金币（结算带出用）
+  coinsTotal = 0; coinsSpent = 0; runBanked = false;  // 本局总金币（结算带出用）
   catE = null; homingM = []; clawFx = [];
   swordE = null; swordHits = 0;
   sceneDark = false;
@@ -25217,7 +25371,8 @@ function updateGame(dt, rawDt) {
       petStarterWaveEnd(wave);
       /* 每波结束自动存档（奇物奖励波记录待补发标记） */
       saveGame(wave + 1, artWaveOn(wave) ? wave : 0);
-      /* 奇物：第 5/10/15/20/25 波清剿完毕各得一件（♾ 无尽：每 5 层一件） */
+      /* 奇物：**每 10 层**清剿完毕各得一件（第 10 / 20 / 30 层；♾ 无尽同样每 10 层）
+         ⚠️ 用户 2026-10 删掉了 5 / 15 / 25 层那三次（原来是每 5 层一件）。 */
       if (artWaveOn(wave)) triggerArtPick(wave);
       /* 地狱奇遇·这个没人要吗？：本波清剿后再额外送一次奇物三选一 */
       if (hellEv && hellEv.id === 'art') {
@@ -27793,7 +27948,7 @@ window.__musouDebug = () => ({ kills, score, coins, wave, state, alive: p.alive,
   mutPending, curKind, reroll: rerollLeft, curOpts: curChoices.map(c => c.id), shieldC: p.shieldC,
   pickN: Object.assign({ rng: 0, spd: 0, mem: 0, mvm: 0 }, p.pickN),
   pickTimes: Object.assign({}, p.pickTimes),   // 诊断：本局各升级词条已选次数（暂停面板同源）
-  art: Object.assign({}, p.art), artPend: p.artPend, fangN: p.fangN, fangT: +(p.fangT || 0).toFixed(2),
+  art: Object.assign({}, p.art), artPend: p.artPend, artGainN: artGainN, fangN: p.fangN, fangT: +(p.fangT || 0).toFixed(2),
   fangCap: FANG_CAP, fangDur: FANG_DUR, coinpowPer: COINPOW_PER,   // 奇物数值（测试/调参用）
   homing: homingM.length, cat: catE ? catStage() : -1, artCuts, cutDmg: Math.round(artCutDmg), artMissileN, artSwordN,
   swordHits, swordOn: !!swordE, dashT: +p.dashT.toFixed(2), dashCd: +p.dashCd.toFixed(2), dashN: p.dashN, dashSp: Math.round(p.lastDashSp || 0), psp: +Math.hypot(p.vx, p.vy).toFixed(1), hitstop: +hitstop.toFixed(3), slowmo: +slowmo.toFixed(2), blinkShocks: dbgBlinkShocks, blinkShockR: blinkShockR(), streak: p.dashStreak, dashGap: +p.dashGap.toFixed(2),
@@ -29651,8 +29806,13 @@ window.__musouShop = (nextWave) => { if (state === 'play' && !choosing && !shopO
 window.__musouShopPicks = () => shopPicks.map(s => ({ id: s.id, sold: s.sold ? 1 : 0 })); // 测试钩子：商店三个自选奇物格的状态
 window.__musouShopShown = () => Array.from(shopShown);   // 测试钩子：本店已经出现过的奇物（刷新不会重复撞见）
 window.__musouShopBuyPick = (i) => { shopBuyPick(i | 0); return shopPicks[i | 0] ? shopPicks[i | 0].sold === true : false; }; // 测试钩子：走真实购买流程
-window.__musouShopRerollPick = (i) => { shopRerollPick(i | 0); return true; }; // 测试钩子：走真实刷新流程
+window.__musouShopRerollAll = () => { const b4 = shopPicks.map(s => s && s.id); shopRerollAll(); return { cost: shopRerollAllCost(), n: shopRerollN, before: b4, after: shopPicks.map(s => s && s.id) }; }; // 测试钩子：走真实「一键三换」流程
 window.__musouCoins = (v) => { if (state === 'play') coins = Math.max(0, v | 0); }; // 测试钩子：直接设定金币
+/* 🧰 一次性奇物读数（金币宝箱 / 触底反弹）：`先` 记下已经触发的次数与累计金额，测试据此判定「确实拿到了」——
+   ⚠️ 它们**得即离槽**（`p.art[id]` 立刻回 0），所以不能靠「谁从 0 变 1」来检测（踩过）。 */
+window.__musouInstantInfo = () => ({ list: Object.keys(ART_INSTANT), n: artInstantN, lastId: artInstantLast ? artInstantLast.id : '', lastGain: artInstantLast ? artInstantLast.gain : 0, log: artInstantLog.slice(-8), spent: coinsSpent, spendMul: spendPowMul(), goldMin: GOLD_BOX_MIN, goldMax: GOLD_BOX_MAX, reboundRate: REBOUND_RATE, spendPer: SPENDPOW_PER });
+window.__musouInstantGive = (id) => (ART_INSTANT[id] ? artTryGain(id) : false);   // 测试钩子：走真实获取流程拿一件一次性奇物
+window.__musouSpend = (n) => spendCoins(n | 0);   // 测试钩子：走真实扣钱流程（记账 coinsSpent）
 window.__musouSetHp = (v) => { if (state === 'play' && p.alive) p.hp = Math.max(1, Math.min(p.maxhp, v)); }; // 测试钩子：直接设定生命（绕过护盾/玄龟/回血干扰）
 window.__musouMaxHp = (v) => { if (state === 'play') { p.maxhp = Math.max(1, v | 0); p.hp = Math.min(p.hp, p.maxhp); } }; // 测试钩子：设定生命上限（血量体系缩放测试用）
 window.__musouLeechK = (v) => { if (state === 'play') p.leechK = Math.max(0, v | 0); }; // 测试钩子：设定夺命累计击杀进度（隔离历史残值）
@@ -29762,7 +29922,7 @@ window.__musouCharmTry = (n) => {   // 测试钩子：对场上前 n 只敌人�
   p.mut.possess = save;
   return got;
 };
-window.__musouArtSlots = () => ({ count: artCount(), cap: artCap(), list: artOwnedList(), pend: pendArtId, open: $('sc-slot').classList.contains('show') ? 1 : 0, choosing: choosing ? 1 : 0, metaSlot: metaLv('slot'), page: slotPage, pages: slotPageN(), pageSize: SLOT_PAGE_SIZE, pageMax: SLOT_PAGE_MAX, pageShown: slotList.slice(slotPage * SLOT_PAGE_SIZE, slotPage * SLOT_PAGE_SIZE + SLOT_PAGE_SIZE), pagerVisible: ($('slot-pager') && $('slot-pager').style.display !== 'none') ? 1 : 0 });   // 测试钩子：奇物槽状态（数量 / 上限 / 待入手 / 替换面板是否打开 / **分页**）
+window.__musouArtSlots = () => ({ count: artCount(), cap: artCap(), gained: artGainN, list: artOwnedList(), pend: pendArtId, open: $('sc-slot').classList.contains('show') ? 1 : 0, choosing: choosing ? 1 : 0, metaSlot: metaLv('slot'), page: slotPage, pages: slotPageN(), pageSize: SLOT_PAGE_SIZE, pageMax: SLOT_PAGE_MAX, pageShown: slotList.slice(slotPage * SLOT_PAGE_SIZE, slotPage * SLOT_PAGE_SIZE + SLOT_PAGE_SIZE), pagerVisible: ($('slot-pager') && $('slot-pager').style.display !== 'none') ? 1 : 0 });   // 测试钩子：奇物槽状态（数量 / 上限 / 待入手 / 替换面板是否打开 / **分页**）
 /* 🧪 NaN 体检钩子（自查用）：把**所有活着的实体数组**扫一遍，找出任何一个数值字段为 NaN / ±Infinity 的对象。
    用途：绘制参数出现 NaN 时真机 canvas 会抛异常 → 整个 drawGame 中断 → **画面永久卡住**（逻辑还在跑），
    而无头桩默认把它吞掉。有了这个钩子就能一眼指出「是哪个数组的第几只、哪个字段坏了」。
@@ -29862,9 +30022,14 @@ window.__musouEndlessBossAt = (k) => endlessBossAt(clampWave(k));   // 测试钩
 window.__musouWaveComp = (k) => waveComp(clampWave(k)).slice();   // 测试钩子：某一层的完整出怪构成（含地狱/无量的 ×1.5 补量）
 window.__musouWaveBosses = (k) => waveComp(clampWave(k)).filter(t => ETYPES[t] && ETYPES[t].boss);   // 测试钩子：某一层的 Boss 单位
 window.__musouHpBoost = (v) => { if (v !== undefined) hpBoost = Math.max(0, Math.min(2, v | 0)); return hpBoost; };   // 测试钩子：设定「Boss 后额外翻倍」档位
-window.__musouShopInfo = () => ({ on: shopOn ? 1 : 0, coins: coins, randBought: shopRandBought, randMax: SHOP_RAND_MAX, pickCost: SHOP_PICK_COST, rerollCost: SHOP_PICK_REROLL, randCost: SHOP_RAND_COST, picks: shopPicks.map(s => ({ id: s.id, sold: s.sold ? 1 : 0 })), pool: shopArtPool().length, mutBought: shopMutBought, mutCost: shopMutCost(), mutCosts: SHOP_MUT_COSTS.slice(), mutMax: SHOP_MUT_COSTS.length });   // 测试钩子：商店价格与本次开店状态（含 🎁 质变宝箱档位）
+window.__musouShopInfo = () => ({ on: shopOn ? 1 : 0, coins: coins, spent: coinsSpent, randBought: shopRandBought, randMax: SHOP_RAND_MAX, pickCost: SHOP_PICK_COST, rerollCost: shopRerollAllCost(), rerollBase: SHOP_REROLL_BASE, rerollN: shopRerollN, randCost: SHOP_RAND_COST, picks: shopPicks.map(s => ({ id: s.id, sold: s.sold ? 1 : 0 })), pool: shopArtPool().length, mutBought: shopMutBought, mutCost: shopMutCost(), mutCosts: SHOP_MUT_COSTS.slice(), mutMax: SHOP_MUT_COSTS.length });   // 测试钩子：商店价格与本次开店状态（含 🎁 质变宝箱档位 / 🔄 一键三换当前价）
 window.__musouShopBuyMut = () => shopBuyMut();   // 测试钩子：买一个质变宝箱（走真实流程：扣钱 → 弹质变三选一）
 window.__musouShopWaveAt = (k) => shopWaveOn(k | 0) ? 1 : 0;   // 测试钩子：第 k 层清剿后是否进商店（每 5 层一次 = 4/9/14/19/…）
+window.__musouArtWaveAt = (k) => artWaveOn(k | 0);             // 测试钩子：第 k 层是不是「免费奇物」波（每 10 层 · 0 不算）
+window.__musouShopPrice = (what) => ({                          // 测试钩子：商店三个价格（改价一律改常量，别在测试里写死）
+  pick: SHOP_PICK_COST, rand: SHOP_RAND_COST, rerollBase: SHOP_REROLL_BASE,
+}[what]);
+window.__musouShopRerollCostAt = (n) => SHOP_REROLL_BASE * Math.pow(2, Math.max(0, n | 0));   // 测试钩子：第 n 次「一键三换」的价格（n 从 0 起）
 /* 🎵 背景音乐读数（无头环境没有 AudioContext，所以这里除了运行时读数，还能**离屏推演 N 拍**）：
    `__musouBGM(n)` 返回前 n 拍的完整排程（纯函数 `bgmNotesAt` 算的），测试据此核对
    「没有低于 85Hz 的音（旧版 70→45 的闷鼓就没了）· 每秒 ≤3.5 个音（旧版 6.7 个）· 音量 ≤0.1（旧版 0.32）· 每个音 ≥0.4 秒」。
