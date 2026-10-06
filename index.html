@@ -5657,9 +5657,18 @@ const PRIMAL = {
   seaTick: 0.5, seaPct: 0.10, seaBossDiv: 40,        // 🌧️ 始源之海：每 0.5 秒 10%（Boss ÷40）
   sunBurnT: 1.5, sunDmgMul: 1.1,                     // ☀️ 终结之地：保持烧伤 + 受伤 ×1.1
   deltaTick: 1.0, deltaPct: 0.20, deltaBossDiv: 40,  // 🌀 德尔塔气流：每秒 20%（Boss ÷40）
-  deltaPush: 300,                                    // 强制位移速度（px/s）→ 每秒约 300px
+  /* 🌀 德尔塔气流的推力。⚠️ 用户 2026-10：「效果有点太好了 → 改成**弱于敌人正常行走的速度**，
+     我要看见近战敌人还会缓慢向玩家靠近，而不是被直接吹飞到地图边缘」。
+     —— `deltaPush` 由 **300 → 42**（对照 ETYPES.spd：战将 56 / 兵卒 92 / 轻骑贼 215）。
+     ⚠️⚠️ 这段位移是**每帧直接改坐标**（`e.x += ux*step`），**与敌人的走位无关 = 净推力** ——
+        判据只有一条：**推力必须小于最慢的近战怪（战将 56）**，否则重型怪永远靠不近。
+        取 42 留余量：战将 56−42 = +14 px/s（几乎顶住，但确实在挪）/ 兵卒 +50 / 轻骑贼 +173。
+     ⚠️ 远程（弓兵/法师）本就被吹**向中心**，风小了反而会慢慢聚拢 → 更好打。
+     ⚠️ 别再往上调回几百：那是「推力 > 移速」= 近战怪从场上消失（用户报的就是这个现象）。 */
+  deltaPush: 42,                                     // 强制位移速度（px/s）· 必须低于近战敌人的 ETYPES.spd
   deltaStreakStep: 2,                                // 🌀 德尔塔气流的**风痕密度**（2 = 每隔一条画一条 = 原特效数量的 1/2，用户 2026-10 要求）
   deltaVMax: 420,                                    // ⚠️ 风速叠加到 vx/vy 上的**上限**（防无限累加把敌人甩飞 / 画面卡死）
+  deltaPushInertia: 1,                               // 顺带加进 `vx/vy` 的惯性系数（原来是 ×4：配 300 推力时每帧往速度里灌 20px/s，把走位 lerp 压死）
 };
 let primalWeather = '';              // 当前场景天气：'' / 'seasource' / 'desolateland' / 'deltastream'（渲染用）
 let primalT1 = 0;                    // 特性结算计时器（始源之海 / 德尔塔气流共用）
@@ -5748,7 +5757,7 @@ function tickPrimalAbilities(dt) {
        但**站桩 / 眩晕 / 冲刺 / 钻地**这些状态里 `vx` 不被 lerp（甚至每帧被清零后再被风加一次）→
        几分钟后 vx 能涨到几十万；等状态一结束，`e.x += e.vx*dt` 会把敌人瞬间甩到天文数字坐标，
        接着画面上就是「半径几十万的圆 / 巨大 shadowBlur」→ 光栅化卡死（低配机尤其明显）。 */
-    e.vx += ux * step * 4; e.vy += uy * step * 4;   // 顺手带一点惯性，看起来像被风推着走
+    e.vx += ux * step * PRIMAL.deltaPushInertia; e.vy += uy * step * PRIMAL.deltaPushInertia;   // 顺手带一点惯性，看起来像被风推着走
     if (e.vx > PRIMAL.deltaVMax) e.vx = PRIMAL.deltaVMax; else if (e.vx < -PRIMAL.deltaVMax) e.vx = -PRIMAL.deltaVMax;
     if (e.vy > PRIMAL.deltaVMax) e.vy = PRIMAL.deltaVMax; else if (e.vy < -PRIMAL.deltaVMax) e.vy = -PRIMAL.deltaVMax;
   }
