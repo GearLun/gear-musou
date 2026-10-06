@@ -16572,16 +16572,23 @@ function lightWidth() { const w = 34 + 22 * Math.min(3, p.mut.mastery || 0); ret
 function lightFanN() { return 1 + (p.mut.multicast || 0); }             // 光炮条数
 function lightFanDeg() { return 60 * (p.mut.multicast || 0); }          // 扇形张角：1 层 60° → 满 2 层 120°
 function lightRange() { return Math.hypot(W, H) * 1.35; }               // 单发总射程（保证能打到墙并留下反射余量）
-/* 光炮伤害：随本次倾泻的法术条线性提升（基础条 200 → 5.12 倍普攻；满魔能 450 → 10.52 倍）
-   ⚠️ 用户本轮：「**法术条上限转光炮伤害的幅度增加 20%**」→ 把换算幅度（每点法力的系数）由 0.018 提到 0.018×1.2 = 0.0216
-   （写进 `LIGHT_MANA_DMG_PER`，改这里一处即可；基础系数 0.8 不动） */
-const LIGHT_MANA_DMG_PER = 0.018 * 1.2;
-function lightBeamDmg(spent) { return Math.round(mageAtkDmg() * (0.8 + spent * LIGHT_MANA_DMG_PER)); }
-/* 无双光波（极光光波）每 0.3 秒结算的伤害 = 法师普攻 × 0.9 × 3
-   ⚠️ 用户本轮：「**光法师的无双技能，伤害翻至现在的三倍**」→ 只动 `LIGHT_WAVE_DMG_MUL` 这一个常量
-   （基础系数 0.9 保持原样；命中瞬间的那一发与每 0.3 秒的周期结算同源，所以一起翻三倍） */
-const LIGHT_WAVE_DMG_MUL = 3;
-function lightWaveDmg() { return Math.max(2, Math.round(mageAtkDmg() * 0.9 * LIGHT_WAVE_DMG_MUL)); }
+/* 光炮伤害：随本次倾泻的法术条线性提升。
+   📈 用户 2026-10 两次调整：
+     ① 换算幅度（每点法力换多少倍普攻）由 0.018 → 0.0216（+20%）→ 现在 **0.03**
+        → 基础条 200：`0.8 + 200×0.03` = **6.8 倍普攻**；满魔能 450：`0.8 + 450×0.03` = **14.3 倍**
+     ② **无双不息（`mdura`）也给光炮加伤害**：乘 `musouDmgMul()`（+15%/层，满 5 层 ×1.75）。
+        ⚠️ 光炮是**普攻**、原本不吃这条质变（它只管"一次性无双伤害"）→ 用户点名要它吃，所以这里显式乘上。
+   基础系数 0.8 与 `musouDmgMul()` 的接入都在这一个函数里，改这里一处即可。 */
+const LIGHT_MANA_DMG_PER = 0.03;
+function lightBeamDmg(spent) { return Math.round(mageAtkDmg() * (0.8 + spent * LIGHT_MANA_DMG_PER) * musouDmgMul()); }
+/* 无双光波（极光光波）每 0.3 秒结算的伤害。
+   🌊 用户 2026-10 新口径：**每 0.3 秒造成「法力条上限 × 0.5 + 法师攻击力」的伤害**
+   （原来与普攻挂钩：`普攻 × 0.9 × 3`）。所以现在**法力上限越高，光波越强** —— 和光炮同一条成长轴。
+   命中瞬间的那一发与周期结算**同源**（同一个 `lightWaveDmg()`）。
+   无双不息（`mdura`）照旧计入（它是无双技能）；命中/周期都乘同一个值。 */
+function lightWaveDmg() { return Math.max(2, Math.round((memMax() * 0.5 + mageAtkDmg()) * musouDmgMul())); }
+/* ⏳ 光法师无双的固定时长（用户 2026-10：不随「无双不息」变长） */
+const LIGHT_MUSOU_T = 5;
 function lightMuzzle() { return waterMuzzle(); }                        // 与法杖法球同一个起点
 /* 单发方向上的光炮：从法杖射出 → 撞墙反射一次 → 命中路径上所有敌人（每名敌人每发只吃一次） */
 function fireLightBeam() {
@@ -23805,8 +23812,11 @@ function updateGame(dt, rawDt) {
           spawnWaterMusouOrbs(WATER_MUSOU_ORBS);
           p.waterExtraT = WATER_MUSOU_BEAM_T;
         } else if (isLight()) {
-          /* 光法师无双：持续光波（正常无双时间；光波由 updateLightWave 每帧结算，且不可反射） */
-          p.musouT = musouMaxT();
+          /* 光法师无双：持续光波（光波由 updateLightWave 每帧结算，且不可反射）
+             ⏳ 用户 2026-10：光法师的无双时间**固定 5 秒**（不吃「无双不息」的时长加成 ——
+                那条质变现在改为给光炮加伤害，见 `fireLightBeam()`）。
+                写死常量 `LIGHT_MUSOU_T`，别再改回 `musouMaxT()`。 */
+          p.musouT = LIGHT_MUSOU_T;
           p.lightJetOn = 0;      // 重新起手：命中瞬间立即结算一次
           p.lightJetPrev = null;
           refillMana(false);     // 光波期间不耗法术条：起手即满条
