@@ -13156,9 +13156,16 @@ function tickBlackHoles(dt) {
 function shopArtPool() {
   const ban = { hagen: 1, cat: 1, amplifier: 1, hamu: 1, nohand: 1 };   // 🗡 「骑士不徒手而亡」是开局限定，商店（随机/自选）一律不出
   const roleBan = new Set(roleBanArts());   // 弓箭手：无双秘籍 / 哈姆杀所有 商店同样禁售
-  /* 🌟 原始回归：**队里有神兽之后**才可能出现在商店（没在第 25 波拿也没关系 —— 用户要求「后面也可以拿到」） */
+  const starNow = starChoice();             // 🌟 幻之助战选的是谁（以队伍里实际有谁为准）
+  /* 🌟 原始回归：**队里有神兽之后**才可能出现在商店（没在第 25 波拿也没关系 —— 用户要求「后面也可以拿到」）
+     ⚠️⚠️ 幻兽专属奇物也必须在这里过滤！用户 2026-10 报的 bug：「商店里还能刷到**别的幻兽**的专属奇物」——
+        因为这套过滤原来只写在 `artPickPool()`（波次奇物池）里，商店池漏了。
+        **两个池子必须都过同一套判据**（选了基拉祈 → 只出千年之愿；谢米 → 只出葛拉西蒂亚花；捷拉奥拉 → 只出风来城的闪光）。 */
   return Object.keys(ART_DEFS).filter(id => !p.art[id] && !ban[id] && !roleBan.has(id) && id !== 'rainkeep'
-    && !(id === 'scroll' && p.art.hamu) && (id !== PRIMAL_ART || !!primalOwner()));   // 哈姆 ↔ 无双秘籍 互斥；雨一直下不进商店
+    && !(id === 'scroll' && p.art.hamu) && (id !== PRIMAL_ART || !!primalOwner())
+    && !(id === 'wish' && starNow !== 'jirachi')
+    && !(id === 'gracidea' && starNow !== 'shaymin')
+    && !(id === ZERA_ART && starNow !== 'zeraora'));   // 哈姆 ↔ 无双秘籍 互斥；雨一直下不进商店
 }
 /* 自选奇物：把描述里的 markdown 粗体标记去掉，方便直接贴进按钮 */
 function shopPlainDesc(id) {
@@ -18088,7 +18095,12 @@ function buildSaveData(nextWave, artDueWv) {
     petWv: Object.assign({}, p.petWv || {}),    // 🐉 大器晚成两条线的波次进化段位
     petEvoPick: Object.assign({}, p.petEvoPick || {}),   // 🔮 道具进化选定的形态（随存档走）
     petItemBuy: p.petItemBuy || '',                      // 🔮 本局买过的进化道具（整局只能买一件）
-    petSkill: Object.assign({}, p.petSkill || {}),
+    /* 🌟 幻之助战：**必须进存档** —— 否则读档后 `starPick` 变回 `undefined`，
+       `starAidEnsure()` 会以为玩家「还没选过」→ **重新弹一次幻兽三选一**，
+       玩家就能借此换幻兽（用户 2026-10 报的 bug）。存 `''` 表示「已选过但还没定」不会出现（选完才会写值）。 */
+    starPick: (typeof p.starPick === 'string') ? p.starPick : '',
+    starShow: p.starShow || 0,          // 面板弹出次数（防死循环那个计数，一起存避免读档后重数）
+    starPend: p.starPend || 0,
     ronin: p.ronin || 0,           // 战士分支：1 = 浪客
     knight: p.knight || 0,         // 战士分支：1 = 🛡️ 骑士（举盾冲锋）
     wm: p.wm || 0, wmBag: (p.wmBag || []).slice(), wmUid: p.wmUid || 0, wmFree: p.wmFree || 0,   // 🗡️ 武器大师：分支 + 武器实例（品质/星级/装备）+ 未用完的免费次数
@@ -18223,6 +18235,12 @@ function loadGame() {
     if ((PET_BRANCH_FORM[id] || []).indexOf(key) >= 0) p.petEvoPick[id] = key;
   }
   p.petItemBuy = PET_ITEMS.some(it => it.id === s.petItemBuy) ? s.petItemBuy : '';   // 🔮 已买过的进化道具
+  /* 🌟 幻之助战：把「选过谁」读回来（用户 2026-10 报的 bug：不存这个 → 读档后又弹一次幻兽三选一、
+     还能借机换幻兽）。⚠️ 老存档没有这个字段 → 落到 `undefined`，交给 `starAidEnsure()` 按队伍里实际有谁兜底
+     （那份兼容逻辑还在，见它开头的 `if (p.starPick === undefined)` 分支）。 */
+  p.starPick = (typeof s.starPick === 'string' && STAR_PETS.indexOf(s.starPick) >= 0) ? s.starPick : undefined;
+  p.starShow = s.starShow | 0;
+  p.starPend = 0;   // 面板挂起状态不跨存档（存的是「选过谁」，不是「正弹着面板」）
   if (p.petOwned.indexOf('toge') >= 0) p.petEgg = 0;
   p.petSkill = Object.assign({}, PET_SKILL_DEF);
   if (s.petSkill) for (const id in s.petSkill) if (PET_SUMMON[id]) for (const sk of petSkillList(id)) if (sk.id === s.petSkill[id]) p.petSkill[id] = sk.id;
@@ -29100,6 +29118,10 @@ window.__musouTrainerInfo = () => {
     /* 🧢 御三家三选一（第 5 波清剿后必须留一只）：读「还留着几只御三家 / 该不该选 / 是哪一波」 */
     starterN: starterOwnedN(), starterPickWave: PET_STARTER_PICK_WAVE, starterDue: starterPickDue() ? 1 : 0,
     starterBossDown: p.starterBossDown ? 1 : 0,   // 第 5 波 ⭐总大将 是否已被讨伐（「打完总大将才三选一」的回归读数）
+    /* 🌟 幻之助战读数（用户 2026-10 报的「读档后又弹幻兽三选一」靠这几个字段回归）：
+       `starPick` = 选过谁（'' / undefined 都表示「还没选过」）· `starChoice()` = 以队伍实际有谁为准的当前幻兽。 */
+    starPick: (typeof p.starPick === 'string') ? p.starPick : '', starChoice: starChoice(),
+    starPend: p.starPend || 0, starShow: p.starShow || 0, starLvN: (p.mut && p.mut.starhelp) || 0,
     edge: PET_EDGE, edgeN: dbgPetEdgeN,   // 🚧 场地边界 + 「被墙夹回来」的次数（宝可梦越界 bug 的回归读数）
     pets, petN: pets.length,
     /* 🧬 进化读数：当前段位 / 各段形态 key 与名字 / 进化等级 / 本局进化次数 */
