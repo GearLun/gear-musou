@@ -10883,6 +10883,10 @@ function lvPct(x) { return Math.round(x * 100) + '%'; }
       基础值一改就变成每层 +4（实测踩过：锋镞/弹头/牌锋/秘能 全变 +4）。
    所以：**战士系（战士 / 骑士 / 浪客 / 武器大师）加 2**，其余加 1 由公式乘 2 补上 —— 对外口径都是每层 +2。 */
 function dmgUpStep() { return (isArcher() || isMage()) ? 1 : 2; }
+/* ⚔️ 哈姆杀所有的攻击力贡献（用户 2026-10 增强）：**每 10 点生命上限 +6 攻击力**
+   （原来是「每 20 点 +8」→ 每点生命的收益 0.4 → 0.6，强了 50%）。
+   ⚠️ 抽成函数：`dmgNow()` 与诊断读数 `__musouDebug().hamuDmg` 都读它，别在两处各写一遍公式。 */
+function hamuAtkBonus() { return artGot('hamu') ? 6 * (p.maxhp / 10) : 0; }
 /* 升级词条池（每级 3 选 1 用的选项；抽成函数便于测试钩子直接取用） */
 function levelPool() {
   return [
@@ -11158,8 +11162,8 @@ function fillChoices() {
    ⚠️ **武器大师不给**：他的伤害走 `wmAtkDmg()` / `wmWeapon().dmg`，跟这条普攻口径无关（用户点名排除）。 */
 function atkLvBonus() { return (p.lvl || 0) * 0.5; }
 function dmgNow() {
-  /* 奇物·哈姆杀所有：每 20 最大生命 +8 点伤害；局外传承「锋锐」再乘一个系数 */
-  const hamuDmg = artGot('hamu') ? 8 * (p.maxhp / 20) : 0;
+  /* ⚔️ 哈姆杀所有（用户 2026-10 增强）：**每 10 点生命上限 +6 攻击力**（原「每 20 点 +8」） */
+  const hamuDmg = hamuAtkBonus();
   return Math.round((3 + p.bonus.dmg + hamuDmg + atkLvBonus()) * metaAtkMul());
 }
 /* ===== 攻速 / 范围 生效值 =====
@@ -11249,9 +11253,9 @@ const BLADE_HIT_R = 130;        // 下砸范围伤害半径
 const BLADE_PICK_R = 46;        // 捡起判定半径
 const BLADE_BUFF_T = 8.0;       // 捡起后增伤持续（秒）—— 用户要求由 5 秒改为 **8 秒**
 const BLADE_DMG_PER = 20;       // 每多一层：下砸伤害 +20
-const BLADE_BUFF_BASE = 2.0;    // 第 1 层：伤害 ×2
-const BLADE_BUFF_STEP = 0.75;   // 每多一层：增伤 +0.75（2 / 2.75 / 3.5 / 4.25 / 5）
-const BLADE_BUFF_MAX = 5.0;     // 上限 ×5
+const BLADE_BUFF_BASE = 2.0;    // 第 1 层：伤害 ×2（用户 2026-10 定死「一级 2 倍」）
+const BLADE_BUFF_STEP = 0.5;    // 每多一层：增伤 +0.5（2 / 2.5 / 3 / 3.5 / 4）
+const BLADE_BUFF_MAX = 4.0;     // 上限 ×4（用户 2026-10 削弱：原来满级 ×5、每层 +0.75）
 const RONIN_ONLY_MUTS = ['firestep', 'cold', 'blade'];   // 浪客专属质变（其它职业/普通战士都拿不到）
 /* 🧢 训练家专属质变（用户点名：训练家之魂 / 星之助战 / 羁绊奇迹）—— 别的职业候选池里一律剔除 */
 const TRAINER_ONLY_MUTS = ['trainsoul', 'starhelp', 'miracle', 'shinymut'];
@@ -11334,7 +11338,7 @@ const WM_ONLY_MUTS = ['mom', 'favor', 'pack', 'shopq', 'sale'];   // 🗡️ 武
    🌀 旋转长枪：闪避改为**把长枪丢到指定位置**，长枪在原地旋转、每 0.5 秒打一次；
      每层延长存在时间（满级 3 秒），停止旋转后**插在地上**等回收
    ⚔️ 长枪回收：捡起插在地上的枪 → 回收并打出一记长枪横扫（每层加范围与伤害）
-   💪 骑士体魄：每 5 点生命上限加成 → +1% 移速（叠层后变成每 2 点 → +1%）
+   💪 骑士体魄：每 10 点生命上限加成 → +1% 移速（叠满 5 层后变成每 3 点 → +1%；中间层线性过渡）
    🐎 皇家骑士团：每 5 秒召唤一名骑兵横穿战场（叠层缩短间隔；骑兵范围/伤害随之递减）
    💥 横冲直撞：增大撞击判定范围与撞击伤害 */
 const KNIGHT_ONLY_MUTS = ['spin', 'recall', 'vigor', 'royal', 'rampage', 'skyfall'];
@@ -11358,8 +11362,11 @@ const KR_SWEEP_DMG_MUL = 2;      // ⚔️ 横扫基准伤害 ×2（本轮加强
 const KR_SWEEP_DMG_PER = 0.35;   // 横扫伤害每层 +35%
 const KNIGHT_PARA_T = 5.0;       // 🛡️ 骑士被动：撞停铁骑 → 瘫痪 5 秒
 const KNIGHT_PARA_DMG_MUL = 1.5; // 瘫痪期间铁骑受到的伤害 ×1.5（+50%）
-const KV_HP_L1 = 5;              // 骑士体魄 1 层：每 5 点生命上限 → +1% 移速
-const KV_HP_MIN = 2;             // 叠满后：每 2 点生命上限 → +1% 移速
+/* 💪 骑士体魄（用户 2026-10 **削弱**）：1 级时每 10 点生命上限 +1% 移速，叠满时每 3 点 +1%
+   （原口径是「1 级每 5 点 / 满级每 2 点」—— 每层收紧 1 点的机制不变，但起点和终点都放宽了） */
+const KV_HP_L1 = 10;             // 骑士体魄 1 层：每 10 点生命上限 → +1% 移速
+const KV_HP_MIN = 3;             // 叠满后：每 3 点生命上限 → +1% 移速
+const KV_MAX_LV = 5;             // 骑士体魄层数上限（`apply()` 里也是 5，改这里要一起改）
 const ROYAL_CD = 5.0;            // 皇家骑士团：基准 5 秒一名骑兵
 const ROYAL_CD_PER = 0.6;        // 每层 −0.6 秒
 const ROYAL_CD_MIN = 2.0;
@@ -11395,7 +11402,14 @@ function klSpinR() { return (KL_SPIN_R + KL_SPIN_R_PER * Math.max(0, (p.mut.spin
 function klFlyTime(dist) { return Math.max(KL_FLY_T_MIN, Math.min(KL_FLY_T_MAX, dist / KL_FLY_SPD)); }
 function krSweepR() { return (KR_SWEEP_R + KR_SWEEP_R_PER * Math.max(0, (p.mut.recall || 0) - 1)) * effRangeShopMul(); }
 function krSweepDmg() { return knightBuffDmg(knightRamDmg() * KR_SWEEP_DMG_MUL * (1 + KR_SWEEP_DMG_PER * Math.max(0, (p.mut.recall || 0) - 1))); }   // ⚔️ 横扫：本轮 +50%
-function kvHpPer1() { const lv = p.mut.vigor || 0; return Math.max(KV_HP_MIN, KV_HP_L1 - (lv - 1)); }   // 1 层 5 → 叠满 2
+/* 💪 每层「几点生命上限换 1% 移速」：1 层 10 → 叠满（5 层）3，中间**线性过渡**（10 / 8.25 / 6.5 / 4.75 / 3）。
+   ⚠️ 允许小数：直接用 `KV_HP_L1 - (lv-1)` 那种「每层减 1」的写法，从 10 起只能走到 6，够不到 3（用户要求满级 3）。 */
+function kvHpPer1() {
+  const lv = p.mut.vigor || 0;
+  if (lv <= 0) return KV_HP_L1;
+  const stepHp = (KV_HP_L1 - KV_HP_MIN) / (KV_MAX_LV - 1);   // 每层收紧多少点
+  return Math.max(KV_HP_MIN, KV_HP_L1 - stepHp * (lv - 1));
+}
 function kvHpGain() { return Math.max(0, p.maxhp - (p.hp0Max || p.maxhp)); }   // 本局生命上限的增量
 function kvSpdPct() { const lv = p.mut.vigor || 0; return lv <= 0 ? 0 : Math.floor(kvHpGain() / kvHpPer1()); }
 function royalCd() { const lv = p.mut.royal || 0; return Math.max(ROYAL_CD_MIN, ROYAL_CD - ROYAL_CD_PER * Math.max(0, lv - 1)); }
@@ -12884,7 +12898,7 @@ function roninDashCd() { return Math.max(0.5, RONIN_DASH_CD - RONIN_CD_CUT * (p.
 function roninSlashR() { return RONIN_SLASH_R * effRangeMul() * (1 + (coldChargeReady() ? COLD_RNG_PER * (p.mut.cold || 0) : 0)); }
 /* 寒气蓄力：2 秒不闪避 → 下一刀圆弧斩额外乘算（层数越高倍率越高，满 5 层 = 5 倍） */
 function coldChargeReady() { return (p.mut.cold || 0) > 0 && (p.noDashT || 0) >= COLD_CHARGE_T; }
-/* 🗡 祖传宝刀：层数 / 下砸伤害 / 捡起后的增伤倍率（满 5 层 = ×5） */
+/* 🗡 祖传宝刀：层数 / 下砸伤害 / 捡起后的增伤倍率（满 5 层 = ×4 —— 2026-10 用户削弱，原 ×5） */
 function bladeLv() { return p.mut.blade || 0; }
 function bladeSlamDmg() { return Math.max(1, Math.round(30 + p.lvl * 2 + BLADE_DMG_PER * Math.max(0, bladeLv() - 1))); }
 function bladeBuffMul() { return bladeLv() > 0 ? Math.min(BLADE_BUFF_MAX, BLADE_BUFF_BASE + BLADE_BUFF_STEP * (bladeLv() - 1)) : 1; }
@@ -13036,9 +13050,15 @@ function shopRngCost() { return 200 * Math.pow(2, shopN.rng); }
    哈姆杀所有 · 黑洞（无双技）
    持续吸附敌军（Boss/铁骑 无效、战将等大型怪效果减弱）；
    黑洞旁的敌人每 0.5 秒受 3 点伤害并附加灼烧；
-   场上有 Boss 时黑洞主动靠近，接近即爆炸造成巨额伤害。
+   场上有 Boss 时黑洞主动靠近，接近即爆炸造成巨额伤害；
+   **没有 Boss 时：朝「在走的方向」缓慢漂移，站着不动则朝「准星（鼠标）方向」**（用户 2026-10 要求；
+   原来是在原地小范围画 8 字，等于不动）。
    哈姆：攻击范围固定 400%、无攻速加成（取消）；攻击特效化为暗色黑洞风
    ============================================================ */
+/* 无 Boss 时黑洞的漂移速度（px/秒）。⚠️ 用户只说「缓慢移动」没给数值，这个是我定的：
+   黑洞寿命只有 4 秒 → 最多漂 ~240px（比原来的 8 字漂浮快得多，又不至于瞬间飞走）。
+   要调就改这一个常数。 */
+const HAMU_BH_DRIFT_SPD = 60;
 function spawnBlackHoleAt(x, y) {
   blackHoles.push({ x, y, t: 4, bT: 0, ph: rnd(0, TAU), dead: false });   // 黑洞持续 4 秒，存在期满即湮灭爆炸
   dbgBH++;   // 诊断：黑洞生成计数（贴身 Boss 会立即引爆，故用计数而非存活数判定）
@@ -13053,6 +13073,22 @@ function spawnBlackHole() {   // 无双发动：玩家脚下诞生黑洞
   sfx.musou();
   bigBanner('🐹 哈姆 · 黑洞!!', '黑洞吞噬万物灭！');
 }
+/* 🔬 测试钩子：黑洞的实时位置/剩余时长（钉「无 Boss 时会朝移动/准星方向漂移」） */
+window.__musouBlackHoles = () => blackHoles.map(h => ({ x: h.x, y: h.y, t: +h.t.toFixed(3), dead: h.dead ? 1 : 0 }));
+/* 🔬 测试钩子：直接放一个黑洞（跳过无双槽/按键路径）；并清掉场上的 Boss 以走「无 Boss」分支 */
+window.__musouBlackHoleSpawn = () => { if (state !== 'play') return null; spawnBlackHoleAt(p.x, p.y); return window.__musouBlackHoles(); };
+/* 🔬 测试钩子：直接设定角色移动速度（钉「在走 → 按移动方向漂移」） */
+window.__musouSpeedSet = (vx, vy) => { if (state === 'play') { p.vx = vx || 0; p.vy = vy || 0; } return [p.vx, p.vy]; };
+/* 🔬 测试钩子：黑洞「无 Boss 漂移」当前会朝哪个方向（纯读数，不改状态）。
+   ⚠️ 为什么要有它：角色的 `p.vx/p.vy` 每帧由键盘输入重算（`p.vx += (kdMove.x*spd - p.vx)*…`），
+      所以测试**没法**靠 `__musouSpeedSet` 伪造「正在走」（下一帧就被覆盖，本轮踩过）。
+      直接读这个方向函数就能把「在走按移动 / 静止按准星」两条分支都钉死，不用去伪造输入。 */
+window.__musouBHDriftDir = () => {
+  const psp = Math.hypot(p.vx || 0, p.vy || 0);
+  if (psp > 12) return { mode: 'move', dx: (p.vx || 0) / psp, dy: (p.vy || 0) / psp, spd: HAMU_BH_DRIFT_SPD };
+  if (isFinite(p.face)) return { mode: 'face', dx: Math.cos(p.face), dy: Math.sin(p.face), spd: HAMU_BH_DRIFT_SPD };
+  return { mode: 'none', dx: 0, dy: 0, spd: HAMU_BH_DRIFT_SPD };
+};
 /* 黑洞湮灭爆炸（到达 Boss / 寿终正寝 共用）：320px 内 Boss 吃 12% 巨额伤，其余敌军重创+灼烧 */
 function blackHoleBoom(x, y) {
   flashG = Math.max(flashG, 0.4);
@@ -13112,9 +13148,18 @@ function tickBlackHoles(dt) {
         continue;
       }
     } else {
-      h.ph += dt * 0.8;
-      h.x += Math.cos(h.ph) * 12 * dt;
-      h.y += Math.sin(h.ph) * 10 * dt;
+      /* 🌑 没有 Boss：黑洞朝「你要去的方向」缓慢漂移（用户 2026-10 要求；原来是原地画 8 字 ≈ 不动）。
+         · **在走**（速度 > 12）→ 按**角色移动方向**（`p.vx/p.vy`）
+         · **站着不动** → 按**准星方向**（`p.face`：桌面 = 鼠标方向；手机 = 自动锁敌方向）
+           ⚠️ 静止时**不能**沿用「上次的移动方向」—— 那对玩家是「看不见的随机方向」；用准星方向才符合直觉
+              （用户提议「不好做就改成鼠标方向」，所以这里两条都接上了）。
+         · 两者都没有（面朝角也没算出来）→ 不漂，原地待着（安全兜底，绝不把黑洞甩飞）。 */
+      const psp = Math.hypot(p.vx || 0, p.vy || 0);
+      let dx = 0, dy = 0;
+      if (psp > 12) { dx = (p.vx || 0) / psp; dy = (p.vy || 0) / psp; }
+      else if (isFinite(p.face)) { dx = Math.cos(p.face); dy = Math.sin(p.face); }
+      h.x += dx * HAMU_BH_DRIFT_SPD * dt;
+      h.y += dy * HAMU_BH_DRIFT_SPD * dt;
     }
     h.x = Math.max(30, Math.min(W - 30, h.x));
     h.y = Math.max(30, Math.min(H - 30, h.y));
@@ -13493,7 +13538,7 @@ const MUTS = [
   /* —— 战士专属质变（弓箭手候选池自动剔除）—— */
   { id:'clone',   icon:'👥', name:'影分身十字斩', desc:'在地图中心区会出现分身，分身会和你一样使用普通攻击！（分身伤害 20/40/60/80/100% · 本体走出中央幕布，分身立即消失）', cap:5, apply(){ p.mut.clone = Math.min(5, (p.mut.clone || 0) + 1); } },
   /* —— 浪客专属质变（只有战士选了「浪客」才会出现）—— */
-  { id:'blade',   icon:'🗡', name:'祖传宝刀', desc:'从天降一把宝刀攻击，拾起宝刀能在一段时间内提高你的攻击！（每 5 秒一把 · 落点伤害 30+等级×2，再 +20/40/60/80/100 · 拾起后 2/2.75/3.5/4.25/5 倍，持续 8 秒）', cap:5, apply(){ p.mut.blade = Math.min(5, (p.mut.blade || 0) + 1); if (!(p.bladeT > 0)) p.bladeT = BLADE_CD; } },
+  { id:'blade',   icon:'🗡', name:'祖传宝刀', desc:'从天降一把宝刀攻击，拾起宝刀能在一段时间内提高你的攻击！（每 5 秒一把 · 落点伤害 30+等级×2，再 +20/40/60/80/100 · 拾起后 2/2.5/3/3.5/4 倍，持续 8 秒）', cap:5, apply(){ p.mut.blade = Math.min(5, (p.mut.blade || 0) + 1); if (!(p.bladeT > 0)) p.bladeT = BLADE_CD; } },
   { id:'firestep',icon:'🔥', name:'烈焰步', desc:'闪避路径留下一道火墙，贴上的敌人持续灼伤！（存在 1/2/3/4/5 秒）', cap:5, apply(){ p.mut.firestep = Math.min(5, (p.mut.firestep || 0) + 1); } },
   { id:'cold',    icon:'❄️', name:'寒气蓄力', desc:'两秒未出鞘，下一刀将会提高范围以及伤害！（伤害 1.8/2.6/3.4/4.2/5 倍 · 范围 +0.24/0.48/0.72/0.96/1.2 倍 · 蓄满那一刀还会斩灭范围内的敌方射弹）', cap:5, apply(){ p.mut.cold = Math.min(5, (p.mut.cold || 0) + 1); } },
   /* —— 弓箭手专属质变（战士候选池自动剔除）—— */
@@ -13520,7 +13565,7 @@ const MUTS = [
   /* —— 🛡️ 骑士专属质变（选「骑士」才出现；其它职业候选池自动剔除）—— */
   { id:'spin',    icon:'🌀', name:'旋转长枪', desc:'闪避会丢出长枪，造成持续伤害后留下长枪在原地！（每 0.5 秒撞击圈内敌人 · 存在 1/1.5/2/2.5/3 秒）', cap:5, apply(){ p.mut.spin = Math.min(5, (p.mut.spin || 0) + 1); } },
   { id:'recall',  icon:'⚔️', name:'长枪回收', desc:'拾取地上的长枪后，会对周围进行一次横扫攻击！（需先有「旋转长枪」· 半径 +30/60/90/120/150px · 伤害 +35/70/105/140/175%）', cap:5, apply(){ p.mut.recall = Math.min(5, (p.mut.recall || 0) + 1); } },
-  { id:'vigor',   icon:'💪', name:'骑士体魄', desc:'每提升 5 点生命值，会提高 1% 的移动速度！（每层收紧 1 点：满 5 层 = 每 2 点生命值 +1% 移速，同时抬高撞击伤害与骑马阈值）', cap:5, apply(){ p.mut.vigor = Math.min(5, (p.mut.vigor || 0) + 1); } },
+  { id:'vigor',   icon:'💪', name:'骑士体魄', desc:'每提升 10 点生命值，会提高 1% 的移动速度！（每层收紧：满 5 层 = 每 3 点生命值 +1% 移速，同时抬高撞击伤害与骑马阈值）', cap:5, apply(){ p.mut.vigor = Math.min(5, (p.mut.vigor || 0) + 1); } },
   { id:'royal',   icon:'🐎', name:'皇家骑士团', desc:'召唤一名骑兵横穿整个战场！（间隔 5/4.4/3.8/3.2/2.6 秒、最少 2 秒 · 攻击半径 −12/24/36/48/60px · 伤害 −10/20/30/40/50%）', cap:5, apply(){ p.mut.royal = Math.min(5, (p.mut.royal || 0) + 1); if (!(p.royalT > 0)) p.royalT = royalCd(); } },
   { id:'rampage', icon:'💥', name:'横冲直撞', desc:'骑士冲撞的判定范围变大！（范围 +14/28/42/56/70px · 撞击伤害 +15/30/45/60/75%，也吃移速加成）', cap:5, apply(){ p.mut.rampage = Math.min(5, (p.mut.rampage || 0) + 1); } },
   /* —— 🗡️ 武器大师专属质变（选「武器大师」才出现）—— */
@@ -13673,7 +13718,7 @@ const ART_DEFS = {
   rainkeep:  { name:'雨一直下', icon:'☔', desc:'需先有十一月雨（第 20 波必刷）：若无双槽允许，则会自动释放无双技能，每持续 1 秒伤害提高 2%', start:0, w15:0 },
   overheal:  { name:'过量治疗', icon:'💚', desc:'通过夺命获得的生命值会额外变成护盾值。（溢出按 1/5 转护盾，最低 1 点、上限 50 · 其它回血来源不产生护盾）', start:0, w15:0 },
   supershield:{ name:'超级护盾', icon:'🛡', desc:'每波开始时，获得30护盾，并提高护盾值的上限为200', start:0, w15:0 },
-  hamu:      { name:'哈姆杀所有', icon:'🐹', desc:'固定攻速与攻击范围，每 20 生命上限 +8 伤害，将无双技能改为黑洞吞噬万物灭！（黑洞 4 秒、可多个：吸附敌军、旁敌每 0.5 秒 3 伤并灼烧，命中 Boss 或期满爆炸巨伤 · 只在开局第一波拿得到）', start:1, w15:0 },
+  hamu:      { name:'哈姆杀所有', icon:'🐹', desc:'固定攻速与攻击范围，每 10 生命上限 +6 伤害，将无双技能改为黑洞吞噬万物灭！（黑洞 4 秒、可多个：吸附敌军、旁敌每 0.5 秒 3 伤并灼烧，命中 Boss 或期满爆炸巨伤；场上没有 Boss 时黑洞会朝你的移动方向缓慢漂移 · 只在开局第一波拿得到）', start:1, w15:0 },
   tactical:  { name:'战术目镜', icon:'🥽', desc:'士兵专属,子弹可以穿透敌人并且自动索敌！', start:0, w15:0 },
   support:   { name:'支援部队', icon:'🚙', desc:'士兵专属，无双召唤物额外多一支「特种部队车」，他会在地图中巡视并自动攻击敌人！（移速 ×1.3 · 100 血 + 登场无敌 5 秒 · 每秒自修 10 点）', start:0, w15:0 },
   carddeck:  { name:'额外的召唤卡组', icon:'🂡', desc:'牌皇专属，召唤牌的出现概率额外提升！（3% → 5%）', start:0, w15:0 },
@@ -27552,6 +27597,9 @@ window.__musouDebug = () => ({ kills, score, coins, wave, state, alive: p.alive,
      （已经取过整），测试自己拼 `3 + 锐刃 + atkLvBonus` 会因为 0.5 的小数算错（踩过）。 */
   atkLvBonus: atkLvBonus(),
   dmgNowInt: dmgNow(),
+  /* ⚔️ 哈姆杀所有贡献的那一项（每 10 生命上限 +6，用户 2026-10）—— 测试算期望值直接读它，
+     别在测试里拼 `8 × maxhp / 20`（旧口径，改一次公式就要改一堆断言，踩过）。 */
+  hamuDmg: hamuAtkBonus(),
   lvl: p.lvl, xp: Math.round(p.xp), xpNeed: p.xpNeed, pending: p.pending, choosing, shinies, casts, booms,
   shopOn, shopN: Object.assign({ spd: 0, rng: 0 }, shopN), chestN: dbgChestN, chestWin: dbgChestWin,
   bhN: blackHoles.length, bhMade: dbgBH,
@@ -29794,6 +29842,12 @@ window.__musouBHScenario = (mode) => { // 测试钩子：黑洞微场景（离�
     if (!e.dead && e.boss) { parked.push(e); e._px = e.x; e._py = e.y; e.x = -99999; e.y = -99999; }
   }
   const hole = { x: 640, y: 360, t: 4, bT: 0, ph: 0, dead: false };
+  /* 🌑 2026-10：无 Boss 时黑洞会朝「玩家移动方向 / 准星方向」漂移（用户要求）——
+     这个离线微场景是**逐帧手工 tick** 的，若不屏蔽就会让玩家把黑洞拖走（实测黑洞被拖到离靶 5px，
+     灼烧多跳 → 断言假红）。所以整段把玩家速度/朝向钉成「朝正右、静止」，
+     这样漂移方向恒定 = 不影响场景几何（测毕复原）。 */
+  const _pvx = p.vx, _pvy = p.vy, _pface = p.face;
+  p.vx = 0; p.vy = 0; p.face = 0;
   const place = (type, ox, oy, hp) => {
     const e = spawnEnemy(type);
     e.shiny = false;
@@ -29807,6 +29861,7 @@ window.__musouBHScenario = (mode) => { // 测试钩子：黑洞微场景（离�
     blackHoles = [];   // 场景黑洞一律清空，避免残留干扰后续真实按键计数
     for (const e of parked) { e.x = e._px; e.y = e._py; delete e._px; delete e._py; }
     enemiesCompact();   // 🧹 原地压缩（每帧一次，所有职业共用）
+    p.vx = _pvx; p.vy = _pvy; p.face = _pface;   // 还原玩家速度/朝向（见上面钉住的原因）
   };
   if (mode === 'dotpull') {
     blackHoles.push(hole);
