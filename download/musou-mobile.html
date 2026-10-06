@@ -10446,6 +10446,11 @@ function gainXP(n) {
 }
 /* 面板队列：升级 / 质变宝箱 / 奇物 / 武器选择 / 魔法转职 同屏只开一个，按序弹出 */
 function tryOpen() {
+  /* ✨ 刷闪连锁确认页挂起时：**让出面板层**（用户 2026-10 报的「选完分支直接进了选奇物的界面」）。
+     不让位的话，每一帧的 `tryOpen()` 会按 `p.artPend` 把**奇物面板重新弹出来**，和连锁确认页
+     （`sc-confirm` 与 `sc-art` 同为 `z-index:90`）叠在一起打架 → 玩家以为确认页被跳过了。
+     ⚠️ 这里只让位、**不动 `p.artPend`** —— 确定/取消之后它还要按优先级重新弹出来。 */
+  if (chainConfirm) { $('sc-confirm').classList.add('show'); return; }
   /* 🌟 幻之助战：首次拿到时挂起的「幻之宝可梦二选一」（基拉祈 / 谢米）—— 挂在挂起队列里每帧都会被检查 */
   if (p.starPend > 0 && p.starPick === undefined && !choosing) { openStarPick(); return; }
   if (choosing) return;
@@ -19681,6 +19686,14 @@ function openChainConfirm() {
   const body = $('confirm-body');
   const pid = chainPickId();
   const nm = SHINY_SPECIES_NAME[pid] || pid;
+  /* ⚠️⚠️ **先收掉已经在屏幕上的面板**（用户 2026-10 报的「选完分支直接进了选奇物的界面」）：
+     `resetRun()` 里的 `triggerArtPick(0)` 早就弹出了**奇物面板**，连锁确认只是叠在它上面
+     （`sc-confirm` 与 `sc-art` 同为 `z-index:90`）→ 玩家看到两个面板打架，像"跳过了确认页"。
+     这里把奇物面板连同它的「选择中」状态收干净，确认页才是**独占的一页**。
+     ⚠️ 别改用 `hideAllPanels()`：它会把 `choosing` / `curKind` 一起重置，打乱后面的面板队列
+        （奇物面板要能在确定之后再按优先级重新弹出来）。 */
+  $('sc-art').classList.remove('show');
+  curKind = 'level'; curChoices = []; choosing = false;
   if (body) {
     body.innerHTML = '<div class="cdx-sec">✨ 刷闪连锁</div>' +
       '<div class="cdx-item"><span class="ic">🔗</span><b>本次游戏将会消耗你的连锁机会，确定要开始冒险吗？</b>' +
