@@ -10877,10 +10877,15 @@ function isPlainWarrior() { return p.role === 'warrior' && !p.ronin && !p.knight
 function lvRngStep() { return isPlainWarrior() ? 0.10 : 0.18; }   // 「广域」每层加成
 function lvSpdStep() { return isPlainWarrior() ? 0.08 : 0.13; }   // 「疾风」每层加成
 function lvPct(x) { return Math.round(x * 100) + '%'; }
+/* 🗡️ 伤害词条每层加多少「原始值」（用户 2026-10：战士系也要每层 +2）。
+   ⚠️ **不能**直接改成一个常数：弓手 / 法师的伤害公式是 `bonus.dmg × 2`（它们本来就每层 +2），
+      基础值一改就变成每层 +4（实测踩过：锋镞/弹头/牌锋/秘能 全变 +4）。
+   所以：**战士系（战士 / 骑士 / 浪客 / 武器大师）加 2**，其余加 1 由公式乘 2 补上 —— 对外口径都是每层 +2。 */
+function dmgUpStep() { return (isArcher() || isMage()) ? 1 : 2; }
 /* 升级词条池（每级 3 选 1 用的选项；抽成函数便于测试钩子直接取用） */
 function levelPool() {
   return [
-    { id:'dmg', icon:'🗡️', name:'锐刃',   desc:'挥砍伤害 +1', w:3.0, apply(){ p.bonus.dmg += 1; p.pickTimes.dmg++; } },
+    { id:'dmg', icon:'🗡️', name:'锐刃',   desc:'挥砍伤害 +2', w:3.0, apply(){ p.bonus.dmg += dmgUpStep(); p.pickTimes.dmg++; } },
     { id:'rng', icon:'🌀', name:'广域',   desc:'挥砍范围 +' + lvPct(lvRngStep()) + '（最多 10 层）', w:3.0, apply(){ p.bonus.range += lvRngStep(); p.pickN.rng++; p.pickTimes.rng++; } },
     { id:'spd', icon:'⚡', name:'疾风',   desc:'攻击频率 +' + lvPct(lvSpdStep()) + '（最多 10 层）', w:3.0, apply(){ p.bonus.spd = Math.min(0.6, p.bonus.spd + lvSpdStep()); p.pickN.spd++; p.pickTimes.spd++; } },
     { id:'vit', icon:'❤️', name:'强体',   desc:'生命上限 +5，并回复 5 点', w:1.2, apply(){ p.maxhp += 5; p.hp = Math.min(p.maxhp, p.hp + 5); p.pickTimes.vit++; } },
@@ -10895,10 +10900,13 @@ function roleLevelPool() {
   let pool = levelPool();
   /* 魔能：法师专属词条，其他职业不出现 */
   if (!isMage()) pool = pool.filter(u => u.id !== 'mem');
-  /* 弓箭手：伤害/攻速词条弓箭化文案（锋镞每层 +2；远射回归，射程随其成长） */
+  /* 🗡️ 锐刃：**战士系**每层 +2（用户 2026-10 要求；以前 +1）。
+     ⚠️ 弓手 / 法师的公式是 `bonus.dmg × 2`（它们本来就每层 +2），所以**不能**改 `levelPool` 里的原始值
+        （改成 +2 会让锋镞 / 秘能变成每层 +4）。战士系公式是 `+ bonus.dmg × 1`，改基础值正好每层 +2。 */
+  const dmgStepTxt = '+ 2';   // 各职业对外口径统一「每层 +2」（弓/法走公式 ×2，战士系走基础值 +2）
   if (isArcher()) {
     const dm = pool.find(u => u.id === 'dmg');
-    dm.name = '锋镞'; dm.desc = '箭矢伤害 +2';
+    dm.name = '锋镞'; dm.desc = '箭矢伤害 ' + dmgStepTxt;
     const rg = pool.find(u => u.id === 'rng');
     rg.name = '远射'; rg.desc = '射击射程 +18%（最多 10 层）';
     const sp = pool.find(u => u.id === 'spd');
@@ -10931,7 +10939,7 @@ function roleLevelPool() {
   if (isRonin()) {
     pool = pool.filter(u => u.id !== 'spd');
     const dm = pool.find(u => u.id === 'dmg');
-    if (dm) { dm.name = '刃意'; dm.desc = '圆弧斩伤害 +1'; }
+    if (dm) { dm.name = '刃意'; dm.desc = '圆弧斩伤害 ' + dmgStepTxt; }
     const rg = pool.find(u => u.id === 'rng');
     if (rg) { rg.name = '广域'; rg.desc = '圆弧斩半径 +18%（最多 10 层）'; }
   }
@@ -10940,7 +10948,7 @@ function roleLevelPool() {
   if (isKnight()) {
     pool = pool.filter(u => u.id !== 'spd' && u.id !== 'rng');
     const dm = pool.find(u => u.id === 'dmg');
-    if (dm) { dm.name = '枪锋'; dm.desc = '撞击伤害 +1'; }
+    if (dm) { dm.name = '枪锋'; dm.desc = '撞击伤害 ' + dmgStepTxt; }
     const mv = pool.find(u => u.id === 'mvm');
     if (mv) { mv.name = '冲锋'; mv.desc = '移动速度 +10%（最多 10 次）——撞击伤害随移速提升'; }
   }
