@@ -7331,6 +7331,22 @@ function starAidEnsure() {
   /* ⚠️⚠️ 必须**三只一起认**：以前写的是 `starPick === 'shaymin' ? 'shaymin' : 'jirachi'`，
      选了捷拉奥拉就落到 'jirachi' → 队伍里会多出一只基拉祈（用户报过两次的 bug）。 */
   const pick = STAR_PETS.indexOf(p.starPick) >= 0 ? p.starPick : 'jirachi';
+  /* 🌟 清理「别的幻兽」的专属奇物（用户 2026-10 报的商店 bug 的**善后**）：
+     修复前商店能刷出别的幻兽的奇物（截图里千年之愿 + 葛拉西蒂亚花同时出现），
+     **已经买到的**不会因为「以后不再出现」而消失 —— 它会永久留在背包里继续给 +20 级加成。
+     这里每帧兜底清掉（只清 `STAR_ART` 里**不属于已选幻兽**的那两件；自己那件绝不动）。
+     ⚠️ 幂等：`p.art[id] = 0` 之后 `artGot()` 立刻为假，不会再进这个循环。
+     ⚠️⚠️ **必须用 `p.starPick`（真选过）当判据，不能用上面那个带兜底的 `pick`！**
+        上面 `pick` 在「还没选过」时会兜底成 `'jirachi'` —— 拿它来清会把玩家**合法买到的**
+        葛拉西蒂亚花 / 风来城的闪光误删（本轮自查发现的高危误伤，别改回去）。 */
+  const realPick = STAR_PETS.indexOf(p.starPick) >= 0 ? p.starPick : '';
+  if (realPick) {
+    for (const sid of STAR_PETS) {
+      if (sid === realPick) continue;
+      const aid = STAR_ART[sid];
+      if (aid && p.art && p.art[aid]) p.art[aid] = 0;
+    }
+  }
   /* 幻之宝可梦**只能有一只**：另外两只从队伍与场上清掉（面板里也做了，这里是每帧的兜底） */
   starPetOnly(pick);   // 🌟 每帧兜底：只能有一只幻之宝可梦
   if (p.petOwned.indexOf(pick) < 0) petGrant(pick);
