@@ -46,6 +46,13 @@
     display: block; font-size: .32em; letter-spacing: .6em; color: #b9ad8d;
     text-shadow: none; margin-top: 6px; font-weight: 400;
   }
+  /* 🏷️ 主页版本角标（绝对定位在左下角，和右下角的低配开关对称；只在主页显示） */
+  .ver-badge {
+    position: absolute; left: 18px; bottom: 14px; z-index: 20;
+    font-size: 13px; letter-spacing: .06em; color: #8f866c;
+    background: rgba(0,0,0,.42); border: 1px solid rgba(232,193,90,.28);
+    border-radius: 8px; padding: 4px 10px; pointer-events: none;
+  }
   .keys {
     display: grid; grid-template-columns: auto auto; gap: 6px 22px;
     font-size: 15px; color: #cfc9b6; line-height: 1.7; margin: 8px 0;
@@ -470,6 +477,9 @@
       <div class="load-bar"><i id="load-fill"></i></div>
     </div>
     <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.0.4</small></div>
+    <!-- 🏷️ 版本角标（内容由 game.js 的 verBadgePaint() 填）：玩家一眼看出自己跑的是哪一版，
+         省得拿着旧的下载文件来问「怎么没改」 -->
+    <div id="ver-badge" class="ver-badge"></div>
     <div class="keys" id="keys-desk">
       <span><b>WASD</b> / <b>方向键</b></span><span>移动</span>
       <span><b>自动攻击</b></span><span id="kbd-atk-d">自动挥砍，无需按键</span>
@@ -905,6 +915,10 @@
 'use strict';
 /* ============================================================
    草·割无双  MUSOU MOW  —  无双割草 正式版 v1.0.4
+
+   🏷️ **版本角标**：`VER_TXT` / `BUILD_TAG` 就是主页左下角那个角标的内容。
+      改版本号时**只改这两行**（`index.html` 的 `.title small` 也一起改）。
+      作用：玩家（和自己）一眼看出手上这份单文件是哪一版 —— 省得拿着旧的下载文件来问「怎么没改」。
    纯 Canvas 2D + WebAudio 程序化音效，无任何外部资源
    ============================================================ */
 /* ============================================================
@@ -927,6 +941,18 @@
 const cv = document.getElementById('game');
 const ctx = cv.getContext('2d');
 const $ = id => document.getElementById(id);
+/* 🏷️ 版本角标（主页左下角 `#ver-badge`）：`VER_TXT` = 玩家看到的版本号 · `BUILD_TAG` = 这份产物的构建标记。
+   ⚠️ 改版本号时**只改这两行** + `index.html` 的 `.title small`。
+   为什么要它：用户拿旧的下载文件来问「怎么和没改一样」—— 有角标一眼就能看出手上是哪一版。 */
+const VER_TXT = 'v1.0.4';
+const BUILD_TAG = 'build 10-07 03:51';
+function verBadgePaint() {
+  const el = $('ver-badge');
+  if (!el) return;
+  el.style.display = (p && p.lab) ? 'none' : '';   // 试验场里藏起来，免得挡画面
+  el.textContent = '齿轮无双 ' + VER_TXT + ' · ' + BUILD_TAG;
+}
+window.__musouVer = () => ({ ver: VER_TXT, build: BUILD_TAG, text: (($('ver-badge') || {}).textContent) || '' });
 
 /* 视口（画布/屏幕）尺寸固定不变；世界（战场）尺寸 = 视口 ×2.5（长宽各 ×2.5 → 面积 ×6.25）
    摄像机让角色在非边缘区域始终居中 */
@@ -19788,6 +19814,7 @@ $('lab-exit').addEventListener('click', exitBossLab);
   if (b) devToolClick(b.getAttribute('data-dev'));
 }); }
 devLoad();   // 🛠 读取开发者版本开关（localStorage / ?dev=1）并同步主页面板
+verBadgePaint();   // 🏷️ 主页版本角标（哪一版一眼可见；与 devLoad 同在启动收尾处）
 $('btn-restart').addEventListener('click', () => { $('sc-over').classList.remove('show'); initAudio(); storeDel(); resetRun(); state = 'play'; });
 $('btn-win').addEventListener('click', () => { $('sc-win').classList.remove('show'); initAudio(); storeDel(); resetRun(); state = 'play'; });
 /* 主页角色选择：战士（默认）/ 弓箭手 / 法师。角色随新局生效，并写入存档 */
