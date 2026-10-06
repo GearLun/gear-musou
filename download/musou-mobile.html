@@ -46,13 +46,17 @@
     display: block; font-size: .32em; letter-spacing: .6em; color: #b9ad8d;
     text-shadow: none; margin-top: 6px; font-weight: 400;
   }
-  /* 🏷️ 主页版本角标（绝对定位在左下角，和右下角的低配开关对称；只在主页显示） */
+  /* 🏷️ 主页版本角标：**右下角**（用户要求）。
+     ⚠️ 别挪回左下角 —— 那里是「🖥️ 低配置电脑模式」按钮（`#btn-lowspec`，left:18px / bottom:16px），
+        两者会叠在一起（用户报过）。 */
   .ver-badge {
-    position: absolute; left: 18px; bottom: 14px; z-index: 20;
+    position: absolute; right: 18px; bottom: 16px; z-index: 6;
     font-size: 13px; letter-spacing: .06em; color: #8f866c;
     background: rgba(0,0,0,.42); border: 1px solid rgba(232,193,90,.28);
-    border-radius: 8px; padding: 4px 10px; pointer-events: none;
+    border-radius: 8px; padding: 5px 11px; pointer-events: none; opacity: .85;
   }
+  /* 📱 手机端主页整体 zoom 0.5 → 角标也跟着缩（与 #btn-lowspec 同款处理） */
+  body.touch #ver-badge { right: 10px; bottom: 10px; font-size: 20px; padding: 8px 14px; }
   .keys {
     display: grid; grid-template-columns: auto auto; gap: 6px 22px;
     font-size: 15px; color: #cfc9b6; line-height: 1.7; margin: 8px 0;
