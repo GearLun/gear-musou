@@ -469,7 +469,7 @@
       <div class="load-tip">游戏正在加载中，请稍后,若长时间无法加载，请刷新网页。</div>
       <div class="load-bar"><i id="load-fill"></i></div>
     </div>
-    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.0.3</small></div>
+    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.0.4</small></div>
     <div class="keys" id="keys-desk">
       <span><b>WASD</b> / <b>方向键</b></span><span>移动</span>
       <span><b>自动攻击</b></span><span id="kbd-atk-d">自动挥砍，无需按键</span>
@@ -731,7 +731,7 @@
   <!-- 出征前确认：覆盖正在进行的存档 -->
   <div class="screen" id="sc-confirm">
    <div class="ui-inner">
-    <div class="over-title" style="font-size:38px;color:#ffb199;">⚠ 覆 盖 存 档 ?</div>
+    <div class="over-title" style="font-size:38px;color:#ffb199;" id="confirm-title">⚠ 覆 盖 存 档 ?</div>
     <div class="cdx-panel" id="confirm-body" style="max-height:40vh;"></div>
     <div class="start-btns">
       <button class="btn btn2" id="btn-confirm-cancel">↩ 取 消</button>
@@ -903,7 +903,7 @@
 <script>
 'use strict';
 /* ============================================================
-   草·割无双  MUSOU MOW  —  无双割草 正式版 v1.0.3
+   草·割无双  MUSOU MOW  —  无双割草 正式版 v1.0.4
    纯 Canvas 2D + WebAudio 程序化音效，无任何外部资源
    ============================================================ */
 /* ============================================================
@@ -10587,6 +10587,23 @@ function pickPanelOpen(kind) {
   if (hi) hi.textContent = '点击或按 ' + (h.k === '2' ? '1 / 2' : h.k === '3' ? '1 / 2 / 3' : '1 / 2 / 3 / 4');
   $('sc-weapon').classList.add('show');
 }
+/* 🧢 训练家开局：**三只御三家一起上**（用户要求），第 5 波清剿后才三选一（另外两只离队，见 `petStarterWaveEnd`）。
+   ⚠️ 单独抽成函数是**必须**的，因为选训练家有**三条**入口都要建好宝可梦：
+      ① 正常点武器卡 ② 「刷闪连锁」确认面板的「确定继续」 ③ **`doStartGame()` → `resetRun()` 末尾**（下面 `p.weapon==='trainer'` 那行）。
+   ⚠️⚠️ **幂等**：已经建过（`p.petOwned` 有内容）就只 `petSummonSync()` 补上场，**不重置段位与等级** ——
+      否则「先选训练家 → doStartGame 又建一次」会把开局那三只的进度抹掉。
+   ⚠️ 别再把它抄回 `apply()` 里（用户 2026-10 报的「选训练家 + 连锁 → 宝可梦全消失」就是那么来的）。 */
+function setupTrainerStart() {
+  if (!p.petOwned || !p.petOwned.length) {
+    p.petKind = PET_STARTERS[0];
+    p.petOwned = PET_STARTERS.slice();
+    p.trainLv = 0;
+  }
+  p.starterPend = 0;
+  petSummonSync();
+  petHeadLoad();
+  addText(p.x, p.y - 60, '🧢 训练家 · 三只御三家全员出动！', 20, '#ffd166', '#3a2a00');
+}
 function openWeaponUp() {
   if (p.weaponPend <= 0) return;
   curKind = 'weapon';
@@ -10600,20 +10617,16 @@ function openWeaponUp() {
     apply() {
       p.weapon = w.id;
       if (w.id === 'trainer' && chainReady() && chainPickId()) {   // 只有「有机会 + 选好了目标」才值得问一句
-        openChainConfirm();   // ✨ 先问「本次游戏将会消耗你的连锁机会，确定要开始冒险吗？」
+        /* ⚠️⚠️ **先把训练家建好，再弹连锁确认面板**（用户 2026-10 报的 bug：
+           「选训练家 → 连锁确认 → 无论按哪个按钮，宝可梦全都消失了」）。
+           老代码这里直接 `return` 去弹面板，把下面那段「三只御三家入队」整个跳过；
+           而确认面板的「确定继续」又直接 `doStartGame()` → **从头到尾没有人创建过宝可梦**。
+           现在统一走 `setupTrainerStart()`（与正常选训练家同一份逻辑，别再抄第二份）。 */
+        setupTrainerStart();
+        openChainConfirm();   // ✨ 问「本次游戏将会消耗你的连锁机会，确定要开始冒险吗？」
         return;
       }
-      if (w.id === 'trainer') {
-        /* 🧢 训练家：**开局三只御三家一起上**（用户要求），第 5 波清剿后才三选一（另外两只离队，见 petStarterWaveEnd） */
-        p.petKind = PET_STARTERS[0];
-        p.petOwned = PET_STARTERS.slice();
-        p.trainLv = 0;
-        p.starterPend = 0;
-        petSummonSync();
-        petHeadLoad();
-        addText(p.x, p.y - 60, '🧢 训练家 · 三只御三家全员出动！', 20, '#ffd166', '#3a2a00');
-        return;
-      }
+      if (w.id === 'trainer') { setupTrainerStart(); return; }
       const txt = w.id === 'gun' ? '🔫 现代枪械 · 士兵就位!' : (w.id === 'card' ? '🃏 牌皇 · 开局手牌就绪' : '🏹 传统弓');
       addText(p.x, p.y - 60, txt, 20, '#9fe08a', '#0c2f12');
     }
@@ -17267,7 +17280,15 @@ function thunderHit(e, dmg, chainFrom, depth, visited) {
       }
     }
   }
-  if (depth > 0 && !e.dead) {
+  /* ⚡ 闪电链：向 300px 内另外至多 3 名敌人传导，伤害与闪电球一致。
+     ⚠️⚠️ **判据只能用 `depth > 0`，绝对不要加 `!e.dead`**（用户 2026-10 报的 bug：
+        「闪电球直接击杀了敌人，闪电链就不会出现」）。
+        原因：`hitEnemy()` 是**立即结算**的 —— 如果这一发把目标打死了，`e.dead` 在下面这行就已经是 true，
+        于是连锁整段被跳过 → 玩家看到的就是「能秒杀的时候反而没有连锁」。
+        正确语义：**闪电球打中谁，就以谁为起点放电**，不管它死没死。
+     ⚠️ 还要**先把坐标存下来**：`killEnemy()` 之后实体可能被回收/挪走，用 `e.x/e.y` 会画到错的地方。 */
+  if (depth > 0) {
+    const srcX = e.x, srcY = e.y;
     /* 闪电链：向 300px 内另外 3 名敌人传导，伤害与闪电球一致 */
     const hitSet = visited || new Set();
     hitSet.add(e);
@@ -17275,11 +17296,11 @@ function thunderHit(e, dmg, chainFrom, depth, visited) {
       let best = null, bd = 300;
       for (const o of enemies) {
         if (o.dead || hitSet.has(o)) continue;
-        const d2 = Math.hypot(o.x - e.x, o.y - e.y);
+        const d2 = Math.hypot(o.x - srcX, o.y - srcY);
         if (d2 < bd) { bd = d2; best = o; }
       }
       if (!best) break;
-      arcs.push({ x1: e.x, y1: e.y, x2: best.x, y2: best.y, t: 0, life: 0.2, w: 3 });
+      arcs.push({ x1: srcX, y1: srcY, x2: best.x, y2: best.y, t: 0, life: 0.2, w: 3 });
       dbgChainN++;
       thunderHit(best, dmg, e, depth - 1, hitSet);   // 链到的目标不再继续传导
     }
@@ -18608,6 +18629,10 @@ function loadGame() {
    重置 / 开局
    ============================================================ */
 function resetRun() {
+  /* 🧢 训练家的「预先选好的武器」要在清空**之前**读出来：`doStartGame()` 会调本函数，
+     而本函数下面会把 `p.weapon` 清成 `''` —— 末尾要靠这个值决定「要不要补建三只御三家」
+     （用户 2026-10 报的「选训练家后宝可梦全消失」就出在这里）。 */
+  const preWeapon = p.weapon;
   p.chainRun = 0; p.chainId = '';   // ✨ 刷闪连锁只作用于一局
   /* 🌟 幻之助战：**每一局都要重新选**（上一局选了谁不能带进新的一局 —— 用户报过
      「回到主页再进试验场 / 放弃进度重开一局，第一次拿到幻之助战时面板不弹、被自动定了基拉祈」） */
@@ -18709,7 +18734,13 @@ function resetRun() {
   meteors = []; firePits = []; p.mageT = 0; p.memT = 0; p.mem = memMax(); mMeteorFx = [];   // 法师：法术条重置为满（+ 清掉就地陨石的落地动画）
   thunderClouds = []; arcs = [];
   p.rageT = 0; p.rageBonus = 0; p.manapoolT = 0; p.lavaTick = 0; p.lastBlink = 0;
-  p.jobPend = 0; p.jetOn = 0; p.jetTick = 0; p.waterBurstT = 0;   // 转职状态跨局保留（不重置 p.job）
+  /* 🧙 魔法转职：**每一局都要重选**（用户 2026-10 报的 bug：
+     「第 5 波转成雷法师 → 被击败 → 再来一把，还是雷法师」）。
+     ⚠️ 老代码这里写着「转职状态跨局保留（不重置 `p.job`）」—— 那是错的：`resetRun()` 是**新一局的起点**，
+        元素专精是**本局**的成长（和 `p.starPick` / 奇物 / 质变同性质），不能继承到下一局。
+     ⚠️ 读档不受影响：`loadGame()` 先 `resetRun()`（这里清空）→ 随后按存档把 `p.job` 还原回来。 */
+  p.job = ''; p.jobPend = 0;
+  p.jetOn = 0; p.jetTick = 0; p.waterBurstT = 0;
   p.waterRampT = 0; p.waterOrbN = 0; p.waterFullPrev = 0; p.waterExtraT = 0;         // 🌊 水法师：喷射加成 / 吸取计数 / 「法力条满」上升沿标记 / 无双每 2 秒两道激光的计时
   p.lightJetOn = 0; p.lightJetTick = 0; p.lightJetPrev = null; lightBeams = [];
   p.mag = gunMagMax(); p.reloadT = 0; p.nadeN = 0; p.deployCd = 0;
@@ -18744,6 +18775,10 @@ function resetRun() {
   p.knightSpinT = 0; p.blockFxT = 0;
   dbgKnightRams = 0; dbgKnightSpins = 0; dbgKnightBlocks = 0; dbgKnightBossRams = 0; dbgKnightCavBreaks = 0;
   triggerArtPick(0);   // 出发前：第一个奇物
+  /* 🧢 训练家：`resetRun()` 上面会把 `p.petOwned` 清空，所以**宝可梦必须在清空之后再补建**。
+     ⚠️⚠️ 但这里**不能**用 `p.weapon` 判断 —— 本函数上面刚把 `p.weapon` 清成 `''` 了！
+        真正的出入口在 `doStartGame()`：它先把武器存进 `preWeapon`、调完本函数再还原 `p.weapon`，
+        并调用 `setupTrainerStart()`（见那里的注释）。本轮先写成「在本函数里判断」，结果永远不成立 → 踩过。 */
 }
 function showOver() {
   state = 'over';
@@ -18931,8 +18966,35 @@ function doStartGame(carry) {
   storeDel();          // 新游戏：清除旧存档
   p.role = selRole;    // 出征前选定的角色（主页角色卡）
   diffMode = selDiff;  // 出征前选定的难度（主页难度卡）
+  /* 🧢✨ **出征前已经定好的东西要能穿过 `resetRun()`**（用户 2026-10 报的 bug 的核心）：
+     选「训练家」走的是**武器面板 → 连锁确认面板 → 确定继续 → 本函数**这条路，
+     而 `resetRun()` 会把 `p.weapon` 清成 `''`、`p.petOwned` 清成 `[]`、**`p.chainRun` / `p.chainId` 也清 0**
+     → 玩家进游戏后发现自己变回「传统弓」、宝可梦全没了、连锁也没生效。
+     这里先把它们存住，`resetRun()` 之后再还原。
+     ⚠️ 别改成「在 resetRun 里读」—— 那时已经被清空了（本轮踩过两次）。 */
+  const preWeapon = p.weapon, preChain = p.chainRun, preChainId = p.chainId;
   resetRun();
+  if (preWeapon === 'trainer' && trainerOn()) {
+    p.weapon = 'trainer';
+    /* ⚠️⚠️ **`weaponPend` 必须一起清 0**：`resetRun()` 里写着 `p.weaponPend = isArcher() ? 1 : 0`
+       （弓手要重选武器），不清的话选武器的面板会**再弹一次** → 玩家点一下就把训练家换回传统弓。 */
+    p.weaponPend = 0;
+    /* ⚠️ 再显式收掉「选武器」面板并复位面板状态：`resetRun()` 会把 `weaponPend` 设成 1，
+       面板层可能已经被它打开过（`curKind` 停在 'weapon'）→ 留着就是个**陷阱**：
+       玩家随手一点就把刚定好的训练家换成传统弓（本轮实测 `weapon: trainer → bow`）。 */
+    $('sc-weapon').classList.remove('show');
+    if (curKind === 'weapon') { curKind = 'level'; curChoices = []; choosing = false; }
+    setupTrainerStart();
+    p.chainRun = preChain; p.chainId = preChainId;   // ✨ 连锁的本局标记（被 resetRun 清了）
+  }
   state = 'play';
+  /* ⚠️⚠️ **收尾必须无条件把面板层重新推导一次**（不能写成 `if (!choosing) tryOpen()`）：
+     `resetRun()` 里有 `triggerArtPick(0)`，它会**先弹奇物面板**；而武器/战法那种「开局先选」的面板
+     优先级更高 —— 如果此时 `choosing` 已经被奇物面板置成 true，`tryOpen()` 就被跳过，
+     结果开局顺序错乱（该先弹的「选武器」不弹，玩家直接掉进奇物面板）。
+     先把面板状态清回「无面板」，再让 `tryOpen()` 按优先级重排（武器 → 奇物）。 */
+  choosing = false; curKind = 'level'; curChoices = [];
+  tryOpen();
   if (carry > 0) {
     bigBanner('上 一 局 已 放 弃', '传承带出 +' + carry);
     addText(p.x, p.y - 60, '💠 传承带出 +' + carry, 19, '#ffd166', '#3a2a00');
@@ -19600,8 +19662,22 @@ function syncLabBar(force) {
 let startConfirm = false;
 /* ✨ 刷闪连锁的出征确认（复用 #sc-confirm · 按钮处理里看 chainConfirm 分支） */
 let chainConfirm = false;
+/* 🧵 `#sc-confirm` 被**两套**流程复用（和「几选一面板」同款做法）：⚠ 覆盖存档 / ✨ 刷闪连锁。
+   标题与两颗按钮的文案必须**按模式换** —— 否则连锁确认页上会写着「🔥 放弃并重开」，
+   玩家一点就被踢回选职业（用户 2026-10 报的：「这里两个选项都不对」）。默认 = 覆盖存档那套。 */
+const CONFIRM_TEXT = {
+  save: { title: '⚠ 覆 盖 存 档 ?', cancel: '↩ 取 消', ok: '🔥 放弃并重开' },
+  chain: { title: '✨ 刷 闪 连 锁', cancel: '↩ 取 消（不消耗）', ok: '✅ 确定继续' },
+};
+function fillConfirmText(mode) {
+  const t = CONFIRM_TEXT[mode] || CONFIRM_TEXT.save;
+  const ti = $('confirm-title'); if (ti) ti.textContent = t.title;
+  const c = $('btn-confirm-cancel'); if (c) c.textContent = t.cancel;
+  const o = $('btn-confirm-ok'); if (o) o.textContent = t.ok;
+}
 function openChainConfirm() {
   chainConfirm = true;
+  fillConfirmText('chain');
   const body = $('confirm-body');
   const pid = chainPickId();
   const nm = SHINY_SPECIES_NAME[pid] || pid;
@@ -19609,7 +19685,9 @@ function openChainConfirm() {
     body.innerHTML = '<div class="cdx-sec">✨ 刷闪连锁</div>' +
       '<div class="cdx-item"><span class="ic">🔗</span><b>本次游戏将会消耗你的连锁机会，确定要开始冒险吗？</b>' +
       '<small>连锁目标：<b style="color:#ffe08a;">' + (nm || '（未选择）') + '</b> —— 这一局「刷闪！」来访的宝可梦只会是它</small></div>' +
-      '<div class="cdx-item"><span class="ic">🧢</span><b>消耗条件</b><small>只有选「训练家」才会消耗；选其它职业 / 分支不会消耗连锁机会</small></div>';
+      '<div class="cdx-item"><span class="ic">🧢</span><b>消耗条件</b><small>只有选「训练家」才会消耗；选其它职业 / 分支不会消耗连锁机会</small></div>' +
+      /* ⚠️ 这段是**行为说明**：确定之后本局从头开始（用户要求「正常触发连锁开始新的游戏」） */
+      '<div class="cdx-item"><span class="ic">✅</span><b>确定继续</b><small>消耗 1 次连锁机会 → 开始新的一局（三只御三家已经就位）</small></div>';
   }
   $('sc-confirm').classList.add('show');
 }
@@ -19617,6 +19695,7 @@ function openStartConfirm() {
   const s = saveWaveInfo();
   if (!s) { doStartGame(0); return; }
   startConfirm = true;
+  fillConfirmText('save');
   const carry = Math.floor((s.coinsTotal || 0) * CARRY_RATE);
   const body = $('confirm-body');
   if (body) {
@@ -19644,21 +19723,33 @@ function bankAbandonedSave() {
 }
 const confirmCancel = $('btn-confirm-cancel');
   if (confirmCancel) confirmCancel.addEventListener('click', () => {
-    if (chainConfirm) {   // ✨ 取消 → 不消耗、不开局，回到武器选择
+    if (chainConfirm) {
+      /* ✨ 取消 → **不消耗连锁机会、不开局**，直接回主页（用户 2026-10 要求）。
+         ⚠️ 老代码这里是 `p.weaponPend = 1; openWeaponUp();` → 把玩家踢回「选职业」，
+            而且 `chainConfirm` 虽然清了、武器却已经改成 trainer，状态半残（用户报的「两个选项都不对」）。
+         ⚠️⚠️ **必须把出征前选的那次职业选择清掉**（`p.weapon = ''` + 弓手重新挂起武器面板）：
+            否则 `p.weapon` 会以 `'trainer'` 的形态留到下一次「开始游戏」，
+            让 `doStartGame()` 误以为「这次已经选好职业了」→ 跳过选武器 → 连锁确认再也不会弹（本轮实测踩过）。 */
       chainConfirm = false;
       $('sc-confirm').classList.remove('show');
-      p.weaponPend = 1; openWeaponUp();
+      p.weapon = ''; p.weaponPend = isArcher() ? 1 : 0;
+      $('sc-start').classList.add('show');
+      state = 'title';
+      refreshContinue();
+      syncMetaBtn();
       return;
     }
     startConfirm = false; $('sc-confirm').classList.remove('show');
   });
 const confirmOk = $('btn-confirm-ok');
   if (confirmOk) confirmOk.addEventListener('click', () => {
-    if (chainConfirm) {   // ✨ 刷闪连锁：确定 → 消耗机会，本局「刷闪！」只来访选中的那只
+    if (chainConfirm) {   // ✨ 刷闪连锁：确定继续 → 消耗机会，本局「刷闪！」只来访选中的那只
       chainConfirm = false;
       $('sc-confirm').classList.remove('show');
       p.chainRun = 1; p.chainId = chainPickId();
       if (meta.chain) { meta.chain = 0; metaSave(); }
+      /* ⚠️ `doStartGame()` 内部会 `resetRun()`（把 `p.petOwned` 清空）→ 训练家的三只御三家由
+         `resetRun()` 末尾按 `preWeapon === 'trainer'` **补建**（见那里的注释），这里不用再管。 */
       doStartGame(0);
       return;
     }
