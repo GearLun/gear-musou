@@ -7560,12 +7560,12 @@ function petWaveEvoCheck(wave) {
   }
   return n;
 }
-/* 🎀 **仙子伊布（#700）**：用户要求「伊布在游戏内等级达到 50 级进化」——
+/* 🎀 **仙子伊布（#700）**：用户要求「伊布在游戏内等级达到 SYLVEON_LV 级进化」（2026-10 由 50 提到 60）——
    注意它走的是**道具进化那条线**（`PET_ITEM_EVO.eevee`），所以等级进化（`petEvoCheck`）本来会跳过伊布；
-   这里单独加一条：**角色等级 ≥ 50 且伊布还没用过进化石** → 直接把它定成仙子伊布
+   这里单独加一条：**角色等级 ≥ `SYLVEON_LV`（现为 60 级）且伊布还没用过进化石** → 直接把它定成仙子伊布
    （写 `p.petEvoPick.eevee = 'sylveon'`，与买石头走**同一套**换皮/技能/数值流程）。
    ⚠️ 一旦是仙子伊布，商店里那三块石头就**不再售卖**（见 `petShopItems`）—— 用户要求。 */
-const SYLVEON_LV = 50;
+const SYLVEON_LV = 60;   // 🎀 用户 2026-10：伊布进化为仙子伊布的等级 **50 → 60**
 function petSylveonCheck() {
   if (!isTrainer()) return 0;
   if (p.lvl < SYLVEON_LV) return 0;
@@ -9226,7 +9226,7 @@ const PET_ITEMS = [
   { id: 'maliciousarmor', name: '咒术之铠', img: 'MALICIOUS_ARMOR', forId: 'charcadet', form: 'ceruledge', evo: '苍炎刃鬼', dex: 937 }
 ];
 /* 这家店该摆哪几件：训练家 · 队伍里有伊布/炭小侍 · **还没买过**（买过就整局不再刷）
-   🎀 **伊布已经进化成仙子伊布（50 级那条路）→ 水/雷/火之石一律不再售卖**（用户要求）：
+   🎀 **伊布已经进化成仙子伊布（SYLVEON_LV 那条路）→ 水/雷/火之石一律不再售卖**（用户要求）：
    它已经不是「能选择进化方向的那只伊布」了，再卖石头没有意义（买了也不会生效）。 */
 function petShopItems() {
   if (!isTrainer()) return [];
@@ -10355,7 +10355,7 @@ function gainXP(n) {
     p.pending++;
     p.xpNeed = Math.round(5 + Math.pow(p.lvl, 1.5) * 2.6);
     petEvoCheck();       // 🧬 角色等级 15 / 25 → 宝可梦进化（换模型 + 头像 + 名字）
-    petSylveonCheck();   // 🎀 伊布在角色等级 50 时进化成仙子伊布（用户要求）
+    petSylveonCheck();   // 🎀 伊布在角色等级 SYLVEON_LV（现为 60）时进化成仙子伊布（用户要求）
   }
   tryOpen();
 }
@@ -18787,7 +18787,7 @@ function devLevelUp(n) {
   p.hp = p.maxhp;
   /* ⚠️⚠️ **升级必须顺手跑一遍宝可梦进化判定**（用户报的 bug：「试验场的 50 级伊布没进化」）：
      这里以前只加等级、直接把 `petEvoCheck` 漏了 —— 于是试验场里**任何等级进化都不发生**
-     （御三家 20/30 级、波克比换招、以及 🎀 伊布 50 级 → 仙子伊布全都不触发），
+     （御三家 20/30 级、波克比换招、以及 🎀 伊布 SYLVEON_LV 级 → 仙子伊布全都不触发），
      只有 `__musouSetLvl`（测试钩子）那条路是好的，所以冒烟一直没抓到。
      现在与真实升级路径（`gainXP` 的 while 循环）**完全同款**：先 `petEvoCheck()` 再 `petSylveonCheck()`。 */
   petEvoCheck();
@@ -29295,7 +29295,7 @@ window.__musouPetPanel = (act) => {   // 测试钩子：'open' / 'close' / 'togg
 window.__musouPetSetSkill = (id, sid) => petSkillSet(id, sid);
 /* 🐉 测试钩子：直接跑一次「波次进化」判定（大器晚成三条线：20 波一段 / 25 波二段） */
 window.__musouPetWaveEvo = (w) => petWaveEvoCheck(w === undefined ? wave : (w | 0));
-/* 🎀 测试钩子：仙子伊布（伊布 50 级进化）的读数 —— 进化判据 / 商店还有没有那三块石头 / 两招数值 / 计数器 */
+/* 🎀 测试钩子：仙子伊布（伊布 SYLVEON_LV 级进化，现为 60）的读数 —— 进化判据 / 商店还有没有那三块石头 / 两招数值 / 计数器 */
 /* 🎀 测试钩子：现在有没有「魅惑之声的扇形特效」还挂在场上（换招后必须归 0） */
 window.__musouSectorDrawn = () => allyUnits.filter(u => u.kind === 'pet' && u.secDraw).length;
 /* 测试钩子：场上宝可梦的坐标 / 状态（把靶子放到它脚边用，宝可梦会自己满场飞） */
