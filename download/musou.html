@@ -15255,6 +15255,15 @@ $('btn-pause-home').addEventListener('click', () => {
      以前存当前进度 → 玩家能在同一波里刷等级/金币，退出再进来接着刷（第 1 波就能堆很高）。
      现在「继续」永远是**这一波刚开始**的样子，本波内刷到的东西一律作废。 */
   saveGameAtWaveStart();
+  /* ⚠️⚠️ **回主页 = 本局结束，必须清掉本局的出征残留**（用户 2026-10 报的 bug：
+     「连锁局 → 退出 → 重开 → 选弓箭手 → 被强制进训练家、选不了别的分支」）。
+     `p.weapon` / `p.weaponPend` / `p.chainRun` 都是挂在 `p` 上的**跨局状态**，不清就会留到下一局，
+     让 `doStartGame()` 误以为「这次已经选好职业了」→ 分支页不弹、还强制训练家。
+     ⚠️ 存档是 `saveGameAtWaveStart()` **先写好的**（写的是当时的 `p.weapon`，读档会还原），
+        所以这里清**不影响「▶ 继续」**；而 `weaponPend` 清成 0 正是「下次进来是读档、不是新出征」的记号
+        （`doStartGame()` 就靠它区分「要不要把武器当残留清掉」）。 */
+  p.weapon = ''; p.weaponPend = 0;
+  chainRunClear();   // ✨ 连锁标记也一起清（本局结束 = 连锁的那一套「只作用于一局」的状态全收）
   $('sc-pause').classList.remove('show');
   $('sc-start').classList.add('show');
   state = 'title';
@@ -18553,6 +18562,11 @@ function loadGame() {
   p.wmStock = p.wm ? wmRollStock() : null;
   p.wmMusouT = 0; p.wmThrustT = 0;
   p.roninPend = 0;    // 读档：战法已定，不再弹战法面板
+  /* ⚠️⚠️ **读档也要关掉「选武器」这条出征流程**：`resetRun()` 里写着 `p.weaponPend = isArcher() ? 1 : 0`，
+     读档时它会把弓手的 `weaponPend` 又置回 1 → 面板层会**再弹一次选武器**，
+     而 `p.weapon` 已经从存档还原（例如 'trainer'）→ 玩家随手一点就把职业换掉。
+     读档语义 = 「武器早就定了」，所以这里连 `weaponPend` 一起清 0。 */
+  p.weaponPend = 0;
   selRole = p.role;
   diffMode = (s.diff === 'easy') ? 'easy' : (s.diff === 'hell') ? 'hell' : (s.diff === 'endless' ? 'endless' : 'hard');        // 存档绑定难度（旧档缺省困难）
   selDiff = diffMode;
@@ -18997,13 +19011,22 @@ function doStartGame(carry) {
   storeDel();          // 新游戏：清除旧存档
   p.role = selRole;    // 出征前选定的角色（主页角色卡）
   diffMode = selDiff;  // 出征前选定的难度（主页难度卡）
-  /* 🧢✨ **出征前已经定好的东西要能穿过 `resetRun()`**（用户 2026-10 报的 bug 的核心）：
+  /* 🧢✨ **出征前已经定好的东西要能穿过 `resetRun()`**：
      选「训练家」走的是**武器面板 → 连锁确认面板 → 确定继续 → 本函数**这条路，
      而 `resetRun()` 会把 `p.weapon` 清成 `''`、`p.petOwned` 清成 `[]`、**`p.chainRun` / `p.chainId` 也清 0**
      → 玩家进游戏后发现自己变回「传统弓」、宝可梦全没了、连锁也没生效。
      这里先把它们存住，`resetRun()` 之后再还原。
      ⚠️ 别改成「在 resetRun 里读」—— 那时已经被清空了（本轮踩过两次）。 */
   const preWeapon = p.weapon, preChain = p.chainRun, preChainId = p.chainId;
+  /* ⚠️⚠️ **只认「本次出征」里选的武器**（用户 2026-10 报的 bug：
+     「连锁局 → 退出 → 重开 → 选弓箭手 → 却被强制进训练家、选不了别的分支」）。
+     `p.weapon` 会**跨局残留在 `p` 上**（上一局选了训练家 → 保存并回主页 → 再开一局，
+     这里读到残留的 `'trainer'` → 误以为「这次已经选好职业了」→ 分支页不弹、还强制训练家）。
+     ✅ 判据 = **`p.weaponPend > 0`**：只有**一次真正的新出征**开始时 `resetRun()` 才会把它置 1
+        （弓手要选武器）；「连锁确定继续 / 读档继续」这两条路都会显式清成 0（见各自注释）。
+     ✅ 所以：`weaponPend > 0` → 这是一次新出征，**清掉上一局的残留**，让分支页正常弹出；
+        `weaponPend === 0` → 是「连锁确定继续」或「读档」，`p.weapon` 是**刚选/刚存**的，原样保留。 */
+  if (p.weaponPend > 0) p.weapon = '';
   resetRun();
   if (preWeapon === 'trainer' && trainerOn()) {
     p.weapon = 'trainer';
@@ -19017,6 +19040,12 @@ function doStartGame(carry) {
     if (curKind === 'weapon') { curKind = 'level'; curChoices = []; choosing = false; }
     setupTrainerStart();
     p.chainRun = preChain; p.chainId = preChainId;   // ✨ 连锁的本局标记（被 resetRun 清了）
+    /* ⚠️⚠️ **宝可梦入队之后必须重拍「本波基准」快照**（用户 2026-10 报的「宝可梦消失」真因）：
+       `snapWaveStart()` 是在第 1 波**刚开始**时拍的，那时训练家的三只御三家还没入队
+       （它们是本函数在 `resetRun()` 之后才建的）→ 快照里 `petOwned = []`。
+       玩家如果在**第 1 波内**就「保存并回主页」→ 写的是这份快照 → 「▶ 继续」回来**宝可梦全没了**。
+       重拍一次即可（快照语义本来就是"这一波开始时的样子"，而此刻才是真正的开局状态）。 */
+    if (typeof snapWaveStart === 'function') snapWaveStart(wave);
   }
   state = 'play';
   /* ⚠️⚠️ **收尾必须无条件把面板层重新推导一次**（不能写成 `if (!choosing) tryOpen()`）：
