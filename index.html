@@ -400,6 +400,11 @@
     font-size: 16px; padding: 10px 22px; letter-spacing: .12em;
     border-color: #8ff0e8; color: #d8fbf7;
   }
+  /* 🎟️ 大乐透：先付钱再开奖（和上面那颗「一键三换」并排、同款金色描边） */
+  .btn.btn2.shop-lotto {
+    font-size: 16px; padding: 10px 22px; letter-spacing: .12em;
+    border-color: #ffd166; color: #ffe9a8;
+  }
   .up-key {
     font-family: Consolas, monospace; font-weight: 700; color: var(--gold);
     border: 1px solid #6b6a4a; border-radius: 6px; width: 22px; height: 22px;
@@ -662,6 +667,11 @@
     <!-- 🔄 一键三换（2026-10 改版）：把上面三个自选奇物**一起**换掉，价格逐次翻倍 2000 / 4000 / 8000 … -->
     <div class="up-list" style="margin-top:8px;">
       <button class="btn btn2 shop-reroll-all" id="shop-reroll-all">🔄 刷新三个奇物 · 2000 金币</button>
+    </div>
+    <!-- 🎟️ 大乐透（2026-10 新增）：先付钱再开奖 · 首轮价 = 进店次数 ×1000，之后逐次翻倍 · 三次满送一件自选奇物 -->
+    <div class="shop-sec">🎟️ 大乐透 · 先付钱再开奖（40% 全损 / 40% 原数返还 / 20% 双倍返还 · 一家店最多 3 次 · 首轮价 = 第几次进店 ×1000，本店内逐次翻倍）</div>
+    <div class="up-list">
+      <button class="btn btn2 shop-lotto" id="shop-lotto">🎟️ 参与大乐透 · 1000 金币</button>
     </div>
     <!-- 🎁 质变宝箱（1000 / 2000 / 3000 · **一家店最多 3 次** · 买下立刻开「质变三选一」）-->
     <div class="shop-sec">🎁 质变宝箱 · 1000 / 2000 / 3000 金币（一家店最多 3 次）</div>
@@ -1090,6 +1100,26 @@ const SHOP_PICK_COST = 10000;   // 自选一件奇物：**10000 金币**
 const SHOP_RAND_COST = 7000;    // 随机奇物：**7000 金币**
 const SHOP_REROLL_BASE = 2000;  // 🔄 一键三换的第 1 次价格（之后 ×2 递增）
 const SHOP_RAND_MAX = 1;        // 每次开店**只能买一次**随机奇物
+/* 🎟️ 商店·**大乐透**（用户 2026-10 新增）：先付钱 → 再开奖。
+   · 一家店**最多参与 3 次**，价格**逐次翻倍**：第 1 次 1000 / 第 2 次 2000 / 第 3 次 4000
+   · 开奖概率：**40% 全损 / 40% 原数返还 / 20% 双倍返还**
+   · **三次全参与完 → 可以从「自选奇物」里免费拿走一件**（`shopLottoFreePick`）
+   · 💡 **首轮价格取决于「进入商店的次数」**（用户 2026-10 追加）：**第 n 次进店 → 首轮 = n × 1000**
+     （第 1 次进店 1000/2000/4000 · 第 4 次进店（第 19 波后的那家店）4000/8000/16000）
+     计数 `shopVisitN`：**每次开店 +1**（见 `openShop`）· 新局归零 · 进存档（读档继续时不会重数）
+   ⚠️ 顺序铁律：**必须先 `spendCoins()` 扣钱、再开奖** —— 这样这笔钱会正常计入
+      「消费战术」（每花 1000 +2%）与「触底反弹」（返还 60% 已花），用户明确点名要求。
+   ⚠️ 旧的 `SHOP_LOTTO_*` 之类不要另起炉灶，本块就是大乐透的唯一数值定义点。 */
+const SHOP_LOTTO_COST = 1000;   // 首轮的基准额：第 n 次进店 → 首轮 = n × 此值（见 `shopLottoFirstCost()`）
+const SHOP_LOTTO_MAX = 3;       // 一家店最多参与次数（参与满 3 次 → 送一件自选奇物）
+const SHOP_LOTTO_LOSE = 0.4;    // 40%：支付的**全部**金币损失
+const SHOP_LOTTO_BACK = 0.4;    // 40%：原数返还（净亏 0）
+const SHOP_LOTTO_DOUBLE = 0.2;  // 20%：双倍返还（净赚 = 支付额）
+let shopLottoN = 0;             // 本次开店已参与的大乐透次数
+let shopLottoFree = 0;          // 本次开店「三次满」后还没领的那件免费自选奇物（1 = 可领）
+let shopLottoLog = [];          // 诊断/测试读数：本次开店每把的 { cost, roll, ret }
+let shopLottoForce = null;       // 🔬 只给测试用：强制下一把的开奖结果（null = 走真随机；玩法代码别碰它）
+let shopVisitN = 0;              // 🎟️ 本局**进入商店的次数**（大乐透首轮价 = 次数 × 1000；每次开店 +1 · 进存档）
 const FANG_CAP = 100, FANG_DUR = 10;   // 奇物·贪狼之牙：每次击杀 +1% 伤害、上限 +100%，限时 10 秒（每次击杀续满）
 const COINPOW_PER = 0.04;              // 奇物·金币的力量：每 1000 金币 +4% 伤害（用户 2026-10 由 +6% 下调）
 let shopPicks = [];             // 本次开店的三个自选格 [{ id, sold }]
@@ -13330,6 +13360,12 @@ function shopPaint() {
       continue;
     }
     b.classList.remove('sold');
+    /* 🎟️ 大乐透三等奖到手时（三次全参与完）：三格变成「免费拿走一件」——点哪格白拿哪件 */
+    if (shopLottoFree) {
+      mk(b, ART_DEFS[s.id].icon, '🎁 免费拿：' + ART_DEFS[s.id].name,
+        shopPlainDesc(s.id) + '（大乐透三次全参与 · 这一件不要钱）', false);
+      continue;
+    }
     mk(b, ART_DEFS[s.id].icon, ART_DEFS[s.id].name + ' · ' + SHOP_PICK_COST + ' 金币',
       shopPlainDesc(s.id) + (coins < SHOP_PICK_COST ? '（金币不足）' : ''), coins < SHOP_PICK_COST);
   }
@@ -13345,6 +13381,26 @@ function shopPaint() {
         ? '本店已经没有别的奇物可换了'
         : (canAny ? '一次性把三个自选奇物全部换掉（已买走的不受影响）'
           : '三个格子都已买走，没什么可换的了');
+    }
+  }
+  /* 🎟️ 大乐透按钮状态（与三格 / 一键三换同一段） */
+  {
+    const lb = $('shop-lotto');
+    if (lb) {
+      if (shopLottoFree) {
+        /* 已经三次满、还没领那件免费奇物 → 按钮转成提示（领取入口在三个自选格上） */
+        lb.textContent = '🎟️ 大乐透已满 · 去上面三格里免费点一件';
+        lb.disabled = true;
+      } else if (shopLottoN >= SHOP_LOTTO_MAX) {
+        lb.textContent = '🎟️ 大乐透（本店已参与满 ' + SHOP_LOTTO_MAX + ' 次）';
+        lb.disabled = true;
+      } else {
+        const lc = shopLottoCost();
+        lb.textContent = '🎟️ 参与大乐透 · ' + lc + ' 金币（第 ' + (shopLottoN + 1) + ' / ' + SHOP_LOTTO_MAX + ' 次）';
+        lb.disabled = coins < lc;
+      }
+      lb.title = '先付钱再开奖：40% 全损 / 40% 原数返还 / 20% 双倍返还；三次全参与完可从自选奇物里免费拿走一件。'
+        + '首轮价 = 这是本局第 ' + Math.max(1, shopVisitN | 0) + ' 次进店 → ' + shopLottoFirstCost() + ' 金币，本店内逐次翻倍';
     }
   }
   /* 🔮 进化道具那一栏（训练家专属）：没有可卖的就整栏隐藏；有就一格一件（道具图标是内嵌的 PET_ITEM_IMG） */
@@ -13377,6 +13433,8 @@ function openShop(nextWave) {
   rollShopPicks();          // 三个自选奇物格：每次开店重新抽
   shopRandBought = 0;       // 随机奇物：每次开店重置「只能买一次」
   shopRerollN = 0;          // 🔄 一键三换：每次开店从 2000 重新起算
+  shopLottoN = 0; shopLottoFree = 0; shopLottoLog = [];   // 🎟️ 大乐透：每次开店重置（一家店最多 3 次）
+  shopVisitN = (shopVisitN | 0) + 1;   // 🎟️ 进店次数 +1 → 本店大乐透首轮价 = 次数 × 1000（用户口径）
   shopMutBought = 0;        // 🎁 质变宝箱：每次开店重置（一家店最多 3 个：1000 / 2000 / 3000）
   $('sc-shop').classList.add('show');
   shopPaint();
@@ -13501,6 +13559,8 @@ function shopBuyPick(i) {
     addText(p.x, p.y - 60, '先把上一件奇物的事处理掉（换个位置或放弃）', 15, '#ff9d7a', '#3a1400');
     return;
   }
+  /* 🎟️ 大乐透三等奖：三次全参与完 → **这一格免费拿走**（不花钱；语义见 `shopLottoFreePick()`） */
+  if (shopLottoFree) { shopLottoFreePick(i); return; }
   const s = shopPicks[i];
   if (!s || !s.id || s.sold) return;
   if (coins < SHOP_PICK_COST) { addText(p.x, p.y - 60, '金币不足（自选奇物需 ' + SHOP_PICK_COST + '）', 16, '#ff9d7a', '#3a1400'); return; }
@@ -13552,6 +13612,84 @@ function shopRerollAll() {
   burst(p.x, p.y, 14, '#8ff0e8', 300);
   shopPaint();
   saveGame(shopWaveNext, 0);
+}
+/* ============================================================
+   🎟️ 商店·大乐透（用户 2026-10 新增 · 与上面的商店逻辑同一段）
+   ============================================================
+   玩法：**先付钱 → 再开奖**。
+     第 n 次参与的价格 = `SHOP_LOTTO_COST × 2^(n-1)` → 1000 / 2000 / 4000（一家店最多 3 次）
+     开奖：40% 全损（拿不回）· 40% 原数返还 · 20% 双倍返还
+     **三次全参与完 → 可以从「自选奇物」里免费拿走一件**（`shopLottoFree`，见 `shopLottoFreePick()`）
+   ⚠️⚠️ **顺序不能反**：必须 `spendCoins(cost)` **先扣钱**，之后才掷骰。
+      用户点名要求「支付的金币也会计算进消费战术和触底反弹」—— 而这两个奇物读的都是
+      `coinsSpent`（唯一记账口在 `spendCoins()`），所以只要先扣钱就自动计入。 */
+/* 本店**首轮**的价格 = 「进入商店的次数」× 基准额（用户 2026-10 明确口径：
+   第 1 次进店首轮 1000 · 第 4 次进店（第 19 波后的那家店）首轮 4000）。
+   ⚠️ 计数用 `max(1, shopVisitN)` 兜底：万一某条路径没走到 `openShop`（测试钩子/老存档），也不会算成 0 或负数。 */
+function shopLottoFirstCost() { return SHOP_LOTTO_COST * Math.max(1, shopVisitN | 0); }
+function shopLottoCost() { return shopLottoFirstCost() * Math.pow(2, shopLottoN || 0); }   // 第 (已参与+1) 次的价格（逐次翻倍）
+function shopLottoLeft() { return Math.max(0, SHOP_LOTTO_MAX - (shopLottoN || 0)); }
+/* 掷一次：返回 'lose' / 'back' / 'double'（概率用常量，别在别处再写一遍 0.4/0.2） */
+function shopLottoRoll() {
+  if (shopLottoForce) { const f = shopLottoForce; shopLottoForce = null; return f; }   // 🔬 测试强制
+  const r = Math.random();
+  if (r < SHOP_LOTTO_LOSE) return 'lose';
+  if (r < SHOP_LOTTO_LOSE + SHOP_LOTTO_BACK) return 'back';
+  return 'double';
+}
+/* 参与一次（真实入口：按钮 / 测试钩子都走它） */
+function shopLottoPlay() {
+  if (!shopOn || state !== 'play') return false;
+  if (shopLottoN >= SHOP_LOTTO_MAX) { addText(p.x, p.y - 60, '这家店的大乐透已经买满了（最多 ' + SHOP_LOTTO_MAX + ' 次）', 16, '#ff9d7a', '#3a1400'); return false; }
+  const cost = shopLottoCost();
+  if (coins < cost) { addText(p.x, p.y - 60, '金币不足（大乐透需 ' + cost + '）', 16, '#ff9d7a', '#3a1400'); return false; }
+  /* ① 先付钱（进 `coinsSpent` → 消费战术 / 触底反弹 都算这一笔） */
+  if (!spendCoins(cost)) return false;
+  shopLottoN++;
+  /* ② 再开奖 */
+  const roll = shopLottoRoll();
+  const ret = roll === 'lose' ? 0 : (roll === 'back' ? cost : cost * 2);
+  if (ret > 0) addCoins(ret);
+  shopLottoLog.push({ cost: cost, roll: roll, ret: ret });
+  if (shopLottoLog.length > 16) shopLottoLog.shift();
+  /* 三次满 → 解锁「自选奇物免费拿一件」 */
+  if (shopLottoN >= SHOP_LOTTO_MAX) shopLottoFree = 1;
+  /* 演出 + 飘字（三种结果各有颜色/文案） */
+  const txt = roll === 'lose' ? '🎟️ 大乐透 · 💸 全损 −' + cost
+    : (roll === 'back' ? '🎟️ 大乐透 · 🔁 原数返还 ' + cost : '🎟️ 大乐透 · ✨ 双倍返还 +' + cost);
+  addText(p.x, p.y - 60, txt, 21, roll === 'lose' ? '#ff9d7a' : '#ffe9a8', roll === 'lose' ? '#3a1400' : '#5a3a00');
+  addRing(p.x, p.y, roll === 'double' ? '#ffe066' : (roll === 'back' ? '#8ff0e8' : '#ff9d7a'), 12);
+  burst(p.x, p.y, roll === 'double' ? 26 : 14, roll === 'double' ? '#ffe066' : '#8ff0e8', 340);
+  if (roll === 'double') { flashG = Math.max(flashG, 0.18); if (sfx.fanfare) sfx.fanfare(); else sfx.musou(); } else sfx.pick();
+  shopPaint();
+  saveGame(shopWaveNext, 0);   // 每笔成交即时存档，防刷新丢单
+  return true;
+}
+/* 三次满之后，从「自选奇物」三格里**免费**拿走一件（不花钱，但仍受奇物槽上限约束） */
+function shopLottoFreePick(i) {
+  if (!shopOn || state !== 'play' || !shopLottoFree) return false;
+  /* 💰 复用商店同一条购买闸门：一次只允许一笔未决的「换奇物」交易 */
+  if (pendArtId || curKind === 'slot' || shopPendingPick || shopPendingRand) {
+    addText(p.x, p.y - 60, '先把上一件奇物的事处理掉（换个位置或放弃）', 15, '#ff9d7a', '#3a1400');
+    return false;
+  }
+  const s = shopPicks[i];
+  if (!s || !s.id || s.sold) return false;
+  if (artFull()) {          // 槽满：照走替换面板；放弃则**不消耗**这次免费机会（与花钱买那两条不同，不用退款）
+    shopPendingPick = { i: i, id: s.id, free: 1 };
+    pendArtId = s.id;
+    openSlotUp();
+    return true;
+  }
+  if (artGain(s.id) === false) return false;
+  s.sold = true;
+  shopLottoFree = 0;        // 这次免费机会用掉了
+  sfx.pick();
+  burst(p.x, p.y, 22, '#ffe066', 380);
+  addText(p.x, p.y - 60, '🎟️ 大乐透三等奖 · 免费拿走 ' + ART_DEFS[s.id].name, 20, '#ffe9a8', '#5a3a00');
+  shopPaint();
+  saveGame(shopWaveNext, 0);
+  return true;
 }
 /* ============================================================
    奇物·挖金矿咯：宝箱
@@ -13976,14 +14114,16 @@ function slotPick(i) {
   else if (rand) { shopPendingRand = 0; shopPaint(); saveGame(shopWaveNext, 0); }   // 随机奇物：钱在买入时已扣，这里只是落账
   else tryOpen();
 }
-/* 放弃这次奇物（商店买的会退款） */
+/* 放弃这次奇物（商店买的会退款；🎟️ 大乐透免费拿的那次**不退钱、也不消耗机会**） */
 function slotSkip() {
   if (curKind !== 'slot' || !pendArtId) return;
   const lostId = pendArtId;
   addText(p.x, p.y - 62, '放弃了 ' + ART_DEFS[lostId].icon + ART_DEFS[lostId].name, 15, '#ff9d7a', '#3a1400');
   const shop = shopPendingPick, rand = shopPendingRand;
   closeSlotUp();
-  if (shop) { coins += SHOP_PICK_COST; shopPendingPick = null; shopPaint(); saveGame(shopWaveNext, 0); }
+  /* 🎟️ 免费拿那次：**没花过钱 → 不退款**，而且**保留 `shopLottoFree`**（机会没用掉，回去还能再点一格） */
+  if (shop && shop.free) { shopPendingPick = null; shopPaint(); saveGame(shopWaveNext, 0); }
+  else if (shop) { coins += SHOP_PICK_COST; shopPendingPick = null; shopPaint(); saveGame(shopWaveNext, 0); }
   else if (rand) {   // 随机奇物：原价退回 + 把「本店已买过一次」的次数也退回（等于这笔交易没发生）
     coins += SHOP_RAND_COST;
     shopRandBought = Math.max(0, (shopRandBought || 0) - 1);
@@ -14993,6 +15133,7 @@ for (let i = 0; i < SHOP_PICK_N; i++) {
   if (pb) pb.addEventListener('click', () => shopBuyPick(i));
 }
 { const ra = $('shop-reroll-all'); if (ra) ra.addEventListener('click', shopRerollAll); }
+{ const lt = $('shop-lotto'); if (lt) lt.addEventListener('click', shopLottoPlay); }   // 🎟️ 大乐透（先付钱再开奖）
 /* 🔮 商店·进化道具三格（训练家专属，买下即给对应宝可梦进化） */
 for (let i = 0; i < 3; i++) {
   const ib = $('shop-i' + i);
@@ -18261,6 +18402,9 @@ function buildSaveData(nextWave, artDueWv) {
     pickN: Object.assign({ rng: 0, spd: 0, mem: 0, mvm: 0 }, p.pickN),
     pickTimes: Object.assign({ dmg: 0, rng: 0, spd: 0, vit: 0, mvm: 0, mus: 0, mem: 0, heal: 0 }, p.pickTimes || {}),
     shopN: Object.assign({ spd: 0, rng: 0 }, shopN),
+    /* 🎟️ 大乐透的「进入商店的次数」必须进存档：它决定首轮价（次数 × 1000），读档继续时不能重数。
+       ⚠️ `shopLottoN`（本店已参与几把）**故意不存** —— 商店是瞬时的，关店/读档本来就重开一家新店。 */
+    shopVisitN: shopVisitN | 0,
     mut: Object.assign({}, p.mut),
     art: Object.assign({}, p.art),
     role: p.role,                  // 角色：warrior / archer / mage
@@ -18385,6 +18529,8 @@ function loadGame() {
   syncSidekick();
   p.memT = 0;
   shopN = Object.assign({ spd: 0, rng: 0 }, s.shopN || {});
+  /* 🎟️ 大乐透的进店次数：读回来（首轮价 = 次数 × 1000）。老存档没有这个字段 → 0（下次开店会 +1 成第 1 次） */
+  shopVisitN = Math.max(0, s.shopVisitN | 0);
   p.mut = Object.assign({ bonus: 0, shield: 0, drone: 0, chi: 0, whirl: 0, blink: 0, dash: 0, master: 0, leech: 0, thunder: 0, mstor: 0, mdura: 0, giant: 0, shieldbash: 0, forge: 0, clone: 0, blade: 0, firestep: 0, cold: 0, bounce: 0, split: 0, xbow: 0, wallb: 0, lava: 0, manapool: 0, rage: 0, multicast: 0, mastery: 0, mag: 0, grenade: 0, decoy: 0, sidekick: 0, deck: 0, wild: 0, possess: 0, multishot: 0, spin: 0, recall: 0, vigor: 0, royal: 0, rampage: 0, skyfall: 0, mom: 0, favor: 0, pack: 0, shopq: 0, sale: 0, trainsoul: 0, starhelp: 0, miracle: 0, shinymut: 0 }, s.mut || {});
   p.art = Object.assign({ nohand: 0, missile: 0, amplifier: 0, scroll: 0, cat: 0, hagen: 0, talisman: 0, turtle: 0, fang: 0, crane: 0, burns: 0, killhand: 0, grind: 0, ion: 0, sari: 0, coinpow: 0, goldbox: 0, spendpow: 0, rebound: 0, goldmine: 0, hamu: 0, overheal: 0, supershield: 0, tactical: 0, charm: 0, hotdrink: 0, buy1get1: 0, nohand: 0, novrain: 0, rainkeep: 0, carddeck: 0, support: 0, wish: 0 }, s.art || {});
   /* 🧢 训练家：箭雨体系一律不给 —— **老存档里可能已经带着**（这条禁令是后加的），读档时就地摘掉，
@@ -18525,6 +18671,8 @@ function resetRun() {
   hellGiftArt();   // 地狱模式：本轮起**不再**白送「闪耀护符」（留空函数，便于以后再加开局赠礼）
   shopN = { spd: 0, rng: 0 }; shopOn = false; shopPend = 0; shopWaveNext = 1; shopPicks = []; shopShown = new Set();
   shopMutBought = 0;   // 🎁 质变宝箱的「本店已买几档」随新局归零
+  shopLottoN = 0; shopLottoFree = 0; shopLottoLog = [];   // 🎟️ 大乐透的「本店已参与次数 / 免费领」随新局归零
+  shopVisitN = 0;                                        // 🎟️ 进店次数随新局归零（大乐透首轮价 = 次数 × 1000）
   shopRandBought = 0; shopPendingPick = null; pendArtId = null; slotList = [];   // 商店随机奇物次数 / 奇物槽挂起状态
   hpBoost = 0;   // 敌人血量「Boss 后额外翻倍」计数随本局清零
   dbgChestN = 0; dbgChestWin = 0;
@@ -29807,6 +29955,15 @@ window.__musouShopPicks = () => shopPicks.map(s => ({ id: s.id, sold: s.sold ? 1
 window.__musouShopShown = () => Array.from(shopShown);   // 测试钩子：本店已经出现过的奇物（刷新不会重复撞见）
 window.__musouShopBuyPick = (i) => { shopBuyPick(i | 0); return shopPicks[i | 0] ? shopPicks[i | 0].sold === true : false; }; // 测试钩子：走真实购买流程
 window.__musouShopRerollAll = () => { const b4 = shopPicks.map(s => s && s.id); shopRerollAll(); return { cost: shopRerollAllCost(), n: shopRerollN, before: b4, after: shopPicks.map(s => s && s.id) }; }; // 测试钩子：走真实「一键三换」流程
+/* 🎟️ 测试钩子（大乐透）：`Play` 走真实流程（**先付钱再开奖**）· `Force` 强制下一次开奖结果 ·
+   `FreePick` 走真实「免费拿走一件」· `Info` 全部读数（含概率常量与「这一笔有没有进 coinsSpent」）。 */
+window.__musouShopLotto = () => ({ n: shopLottoN, max: SHOP_LOTTO_MAX, free: shopLottoFree, left: shopLottoLeft(),
+  visitN: shopVisitN, first: shopLottoFirstCost(), cost: shopLottoCost(), base: SHOP_LOTTO_COST,
+  pLose: SHOP_LOTTO_LOSE, pBack: SHOP_LOTTO_BACK, pDouble: SHOP_LOTTO_DOUBLE,
+  log: shopLottoLog.slice(), spent: coinsSpent, coins: coins });
+window.__musouShopLottoPlay = () => { const c0 = coins, s0 = coinsSpent; const ok = shopLottoPlay(); return { ok: ok, paid: coinsSpent - s0, coinsDelta: coins - c0, last: shopLottoLog[shopLottoLog.length - 1] || null, n: shopLottoN, free: shopLottoFree }; };
+window.__musouShopLottoForce = (v) => { shopLottoForce = (v === 'lose' || v === 'back' || v === 'double') ? v : null; return shopLottoForce; };   // 下一把强制结果（null = 走真随机）
+window.__musouShopLottoFreePick = (i) => shopLottoFreePick(i | 0);
 window.__musouCoins = (v) => { if (state === 'play') coins = Math.max(0, v | 0); }; // 测试钩子：直接设定金币
 /* 🧰 一次性奇物读数（金币宝箱 / 触底反弹）：`先` 记下已经触发的次数与累计金额，测试据此判定「确实拿到了」——
    ⚠️ 它们**得即离槽**（`p.art[id]` 立刻回 0），所以不能靠「谁从 0 变 1」来检测（踩过）。 */
@@ -30022,7 +30179,7 @@ window.__musouEndlessBossAt = (k) => endlessBossAt(clampWave(k));   // 测试钩
 window.__musouWaveComp = (k) => waveComp(clampWave(k)).slice();   // 测试钩子：某一层的完整出怪构成（含地狱/无量的 ×1.5 补量）
 window.__musouWaveBosses = (k) => waveComp(clampWave(k)).filter(t => ETYPES[t] && ETYPES[t].boss);   // 测试钩子：某一层的 Boss 单位
 window.__musouHpBoost = (v) => { if (v !== undefined) hpBoost = Math.max(0, Math.min(2, v | 0)); return hpBoost; };   // 测试钩子：设定「Boss 后额外翻倍」档位
-window.__musouShopInfo = () => ({ on: shopOn ? 1 : 0, coins: coins, spent: coinsSpent, randBought: shopRandBought, randMax: SHOP_RAND_MAX, pickCost: SHOP_PICK_COST, rerollCost: shopRerollAllCost(), rerollBase: SHOP_REROLL_BASE, rerollN: shopRerollN, randCost: SHOP_RAND_COST, picks: shopPicks.map(s => ({ id: s.id, sold: s.sold ? 1 : 0 })), pool: shopArtPool().length, mutBought: shopMutBought, mutCost: shopMutCost(), mutCosts: SHOP_MUT_COSTS.slice(), mutMax: SHOP_MUT_COSTS.length });   // 测试钩子：商店价格与本次开店状态（含 🎁 质变宝箱档位 / 🔄 一键三换当前价）
+window.__musouShopInfo = () => ({ on: shopOn ? 1 : 0, coins: coins, spent: coinsSpent, randBought: shopRandBought, randMax: SHOP_RAND_MAX, pickCost: SHOP_PICK_COST, rerollCost: shopRerollAllCost(), rerollBase: SHOP_REROLL_BASE, rerollN: shopRerollN, lottoN: shopLottoN, lottoFree: shopLottoFree, lottoCost: shopLottoCost(), randCost: SHOP_RAND_COST, picks: shopPicks.map(s => ({ id: s.id, sold: s.sold ? 1 : 0 })), pool: shopArtPool().length, mutBought: shopMutBought, mutCost: shopMutCost(), mutCosts: SHOP_MUT_COSTS.slice(), mutMax: SHOP_MUT_COSTS.length });   // 测试钩子：商店价格与本次开店状态（含 🎁 质变宝箱档位 / 🔄 一键三换当前价 / 🎟️ 大乐透进度）
 window.__musouShopBuyMut = () => shopBuyMut();   // 测试钩子：买一个质变宝箱（走真实流程：扣钱 → 弹质变三选一）
 window.__musouShopWaveAt = (k) => shopWaveOn(k | 0) ? 1 : 0;   // 测试钩子：第 k 层清剿后是否进商店（每 5 层一次 = 4/9/14/19/…）
 window.__musouArtWaveAt = (k) => artWaveOn(k | 0);             // 测试钩子：第 k 层是不是「免费奇物」波（每 10 层 · 0 不算）
