@@ -4061,7 +4061,7 @@ function slimeSplit(e) {
 /* @@PET_DATA@@ */
 /* ===== 🐸🔥💧 宝可梦（御三家 × 三段进化）+ 属性攻击特效内嵌素材 —— 由 tools/pet-build.js 生成，请勿手改 =====
    形态（键）：bulba=妙蛙种子（GRASS，assets/pets/bulba.png） · bulba2=妙蛙草（GRASS，assets/pets/bulba2.png） · bulba3=妙蛙花（GRASS，assets/pets/bulba3.png） · charm=小火龙（FIRE，assets/pets/charm.png） · charm2=火恐龙（FIRE，assets/pets/charm2.png） · charm3=喷火龙（FIRE，assets/pets/charm3.png） · squirt=杰尼龟（WATER，assets/pets/squirt.png） · squirt2=卡咪龟（WATER，assets/pets/squirt2.png） · squirt3=水箭龟（WATER，assets/pets/squirt3.png） · toge=波克比（NORMAL，assets/pets/toge.png） · eevee=伊布（NORMAL，assets/pets/eevee.png） · charcadet=炭小侍（FIRE，assets/pets/charcadet.png） · vaporeon=水伊布（WATER，assets/pets/vaporeon.png） · jolteon=雷伊布（ELECTRIC，assets/pets/jolteon.png） · flareon=火伊布（FIRE，assets/pets/flareon.png） · sylveon=仙子伊布（FAIRY，assets/pets/sylveon.png） · armarouge=红莲铠骑（FIRE，assets/pets/armarouge.png） · ceruledge=苍炎刃鬼（FIRE，assets/pets/ceruledge.png） · egg=宝可梦蛋（NORMAL，assets/pets/egg.png） · dreepy=多龙梅西亚（DRAGON，assets/pets/dreepy.png） · dreepy2=多龙奇（DRAGON，assets/pets/dreepy2.png） · dreepy3=多龙巴鲁托（DRAGON，assets/pets/dreepy3.png） · dratini=迷你龙（DRAGON，assets/pets/dratini.png） · dratini2=哈克龙（DRAGON，assets/pets/dratini2.png） · dratini3=快龙（DRAGON，assets/pets/dratini3.png） · jirachi=基拉祈（PSYCHIC，assets/pets/jirachi.png） · kyogre=盖欧卡（WATER，assets/pets/kyogre.png） · groudon=固拉多（GROUND，assets/pets/groudon.png） · rayquaza=烈空坐（DRAGON，assets/pets/rayquaza.png） · kyogre1=原始盖欧卡（WATER，assets/pets/kyogre1.png） · groudon1=原始固拉多（GROUND，assets/pets/groudon1.png） · rayquaza1=原始烈空坐（DRAGON，assets/pets/rayquaza1.png） · beldum=铁哑铃（STEEL，assets/pets/beldum.png） · metang=金属怪（STEEL，assets/pets/metang.png） · metagross=巨金怪（STEEL，assets/pets/metagross.png） · gible=圆陆鲨（GROUND，assets/pets/gible.png） · gabite=尖牙陆鲨（GROUND，assets/pets/gabite.png） · garchomp=烈咬陆鲨（GROUND，assets/pets/garchomp.png） · shaymin=谢米（GRASS，assets/pets/shaymin.png） · shaymin1=天空谢米（GRASS，assets/pets/shaymin1.png） · zeraora=捷拉奥拉（ELECTRIC，assets/pets/zeraora.png） · victini=比克提尼（PSYCHIC，assets/pets/victini.png）
-   物种线：PET_FORM[物种] = [bulba: bulba/bulba2/bulba3 · charm: charm/charm2/charm3 · squirt: squirt/squirt2/squirt3 · toge: toge · eevee: eevee/vaporeon/jolteon/flareon/sylveon · charcadet: charcadet/armarouge/ceruledge · egg: egg · dreepy: dreepy/dreepy2/dreepy3 · dratini: dratini/dratini2/dratini3 · beldum: beldum/metang/metagross · gible: gible/gabite/garchomp · jirachi: jirachi · shaymin: shaymin/shaymin1 · zeraora: zeraora · kyogre: kyogre/kyogre1 · groudon: groudon/groudon1 · rayquaza: rayquaza/rayquaza1]
+   物种线：PET_FORM[物种] = [bulba: bulba/bulba2/bulba3 · charm: charm/charm2/charm3 · squirt: squirt/squirt2/squirt3 · toge: toge · eevee: eevee/vaporeon/jolteon/flareon/sylveon · charcadet: charcadet/armarouge/ceruledge · egg: egg · dreepy: dreepy/dreepy2/dreepy3 · dratini: dratini/dratini2/dratini3 · beldum: beldum/metang/metagross · gible: gible/gabite/garchomp · jirachi: jirachi · shaymin: shaymin/shaymin1 · zeraora: zeraora · victini: victini · kyogre: kyogre/kyogre1 · groudon: groudon/groudon1 · rayquaza: rayquaza/rayquaza1]
    两套贴图：PET_FR[形态][0] = 普通（Normal）· PET_FR[形态][1] = 闪光（Shiny）
    五个动作（8 方向逐帧）：idle 待机 / walk 移动 / atk 攻击 / hurt 受击 / jump 跳跃
    每帧 = [图集x, 图集y, 宽, 高, 源画布裁剪x, 源画布裁剪y]；PET_META 里是源画布 sw×sh、每帧时长 dt 与**逐方向**地面线 gy[8]
@@ -4889,6 +4889,7 @@ const PET_FORM = {
   jirachi: ['jirachi'],
   shaymin: ['shaymin'],
   zeraora: ['zeraora'],
+  victini: ['victini'],
   kyogre: ['kyogre'],
   groudon: ['groudon'],
   rayquaza: ['rayquaza']
@@ -4908,6 +4909,7 @@ const PET_FORM_NAME = {
   jirachi: ['基拉祈'],
   shaymin: ['谢米'],
   zeraora: ['捷拉奥拉'],
+  victini: ['比克提尼'],
   kyogre: ['盖欧卡'],
   groudon: ['固拉多'],
   rayquaza: ['烈空坐']
@@ -4927,6 +4929,7 @@ const PET_BRANCH_FORM = {
   jirachi: [],
   shaymin: ['shaymin1'],
   zeraora: [],
+  victini: [],
   kyogre: ['kyogre1'],
   groudon: ['groudon1'],
   rayquaza: ['rayquaza1']
@@ -5346,6 +5349,18 @@ const ZERA_ART = 'windflash';      // ⚡ 捷拉奥拉的专属奇物「风来�
 /* 🔥 比克提尼**没有专属奇物**（用户没给）→ 这里不给它挂 `STAR_ART` 键，
    `STAR_ART['victini']` 就是 undefined → `artGot(undefined)` 恒假 → 它只吃幻之助战层数的等级（50 级封顶）。 */
 const STAR_ART = { jirachi: 'wish', shaymin: 'gracidea', zeraora: ZERA_ART };   // 各自的专属奇物（拿到就 +20 级）
+/* 📛 幻兽面板上那句「等级50级时学会「X」,专属奇物「Y」。」的**唯一数据源**（加幻兽时在这里加一行）。
+   ⚠️ 以前是内联的三元表达式（`id === 'jirachi' ? … : (id === 'shaymin' ? … : …)`）——
+      加第四只比克提尼时**必然落到 else 里显示捷拉奥拉那套文案**（用户报过：比克提尼写着「等离子闪电拳 / 风来城的闪光」）。
+   ⚠️ 比克提尼的专属奇物「胜利之星」**还没实现**（用户说待会自己加）→ 这里先写名字，
+      等奇物做好后把它的 id 补进 `STAR_ART`（补上之前 `artGot(undefined)` 恒假，等于没有加成，不会报错）。 */
+const STAR_PET_TEXT = {
+  jirachi: { skill: '破灭之愿', art: '千年之愿' },
+  shaymin: { skill: '种子闪光', art: '葛拉西蒂亚花' },
+  zeraora: { skill: '等离子闪电拳', art: '风来城的闪光' },
+  victini: { skill: 'V热焰', art: '胜利之星' },
+};
+const starPetText = (id) => STAR_PET_TEXT[id] || { skill: '新技能', art: '专属奇物' };
 const STAR_LV_BONUS = 20;                                                          // 专属奇物的等级加成
 function starLv(id) { return Math.round(JIRACHI_TOP_LV * ((p.mut && p.mut.starhelp) || 0) / STARHELP_CAP) + (artGot(STAR_ART[id]) ? STAR_LV_BONUS : 0); }
 function jirachiLv() { return starLv('jirachi'); }
@@ -5354,20 +5369,23 @@ function jirachiLv() { return starLv('jirachi'); }
 function shayminLv() { return starLv('shaymin'); }
 function zeraoraLv() { return starLv('zeraora'); }
 function petLevelOf(id) {
-  if (id === 'jirachi') return jirachiLv();
-  if (id === 'shaymin') return shayminLv();
-  if (id === 'zeraora') return zeraoraLv();   // ⚡ 与基拉祈 / 谢米同一套「跟幻之助战层数」的口径（+风来城的闪光 20 级）
+  /* 🌟 幻之宝可梦（基拉祈 / 谢米 / 捷拉奥拉 / 比克提尼）：**等级一律跟「幻之助战」层数走**，不吃训练家等级。
+     ⚠️⚠️ 这里**必须用 `STAR_PETS` 名单统一判**，不要一只只 `if (id === 'xxx')` 列举 ——
+        本轮加比克提尼时就漏了一行 → 它连等级都没吃到（面板 81/13，而其它幻兽 143/46，用户报的「基础值不对」）。
+        加新幻兽时这里**一行都不用改**（进了 STAR_PETS 就自动生效）。 */
+  if (STAR_PETS.indexOf(id) >= 0) return starLv(id);
   return (p.trainLv || 0);
 }
 /* 这只**技能表**走第几段（⚠️ 与「进化段位」`petStageOf` 不是一回事：这两只不进化但会换招）：
    · 🐣 波克比：角色等级 20 / 30 → 帮助☆ / 生命水滴☆
    · ☆ 基拉祈：**50 级**（= 星之助战满层）→ 解锁破灭之愿 */
 function petSkillStage(id) {
-  /* 🌸 谢米：**50 级解锁种子闪光**（天空谢米换成 ☆ 版，见 petSkillList） */
-  if (id === 'shaymin') return shayminLv() >= JIRACHI_TOP_LV ? 1 : 0;
-  if (id === 'zeraora') return zeraoraLv() >= JIRACHI_TOP_LV ? 1 : 0;   // ⚡ 50 级学「等离子闪电拳」那一档
+  /* 🌟 幻之宝可梦（基拉祈 / 谢米 / 捷拉奥拉 / 比克提尼）：**50 级（幻之助战满层）解锁最后一招**那一档。
+     ⚠️⚠️ 这条**必须用 `STAR_PETS` 名单统一判**，不能漏 —— 下面 `petStageOf(id)` 对幻兽恒返回 **1**
+        （「进化过一次」的数值段位），拿它当技能段位会让所有幻兽一进来就是最后一段（50 级前那档永远取不到）。
+     ⚠️ 基拉祈的历史行为是 `JIRACHI_SKILL_STAGES - 1`；本名单统一用「满级 → 最后一段」（两者当前等价）。 */
+  if (STAR_PETS.indexOf(id) >= 0) return starLv(id) >= JIRACHI_TOP_LV ? 1 : 0;
   if (id === 'toge') return p.lvl >= PET_EVO_LV[1] ? 2 : (p.lvl >= PET_EVO_LV[0] ? 1 : 0);
-  if (id === 'jirachi') return jirachiLv() >= JIRACHI_TOP_LV ? (JIRACHI_SKILL_STAGES - 1) : 0;
   return petStageOf(id);
 }
 /* 🌸 天空谢米（492-1）：拿到奇物「葛拉西蒂亚花」且谢米在队伍里 → 形态换成 shaymin1
@@ -10990,7 +11008,7 @@ const PICK_HEAD = {
   starter: { t: '🧢 御 三 家 · 三 选 一', c: '#ffd166', k: '3' },
   catch:   { t: '🐾 捕 捉 宝 可 梦', c: '#ffe9a8', k: '2' },
   legend:  { t: '🌟 神 兽 · 三 选 一', c: '#ffd166', k: '3' },
-  star:    { t: '🌟 幻 之 宝 可 梦 · 三 选 一', c: '#ffd166', k: '3' },
+  star:    { t: '🌟 幻 之 宝 可 梦 · 四 选 一', c: '#ffd166', k: '4' },   // ⚠️ k = 面板最多几项（STAR_PETS 有几只就写几）· 加幻兽时同步改
 };
 function pickPanelOpen(kind) {
   const h = PICK_HEAD[kind] || PICK_HEAD.weapon;
@@ -11136,16 +11154,14 @@ function openStarPick() {
   addRing(p.x, p.y, '#ffd166', 14);
   addRing(p.x, p.y, '#ffb0e0', 9);
   sfx.musou ? sfx.musou() : sfx.mut();
-  bigBanner('🌟 幻 之 宝 可 梦 · 三 选 一', '队伍中加入一只幻之宝可梦！他们会在 50 级时学会新的技能！');
+  bigBanner('🌟 幻 之 宝 可 梦 · 四 选 一', '队伍中加入一只幻之宝可梦！他们会在 50 级时学会新的技能！');
   curChoices = STAR_PETS.map(id => {
     const S2 = PET_SUMMON[id], sk = petSkillList(id), dex = PET_DEX[petFormKey(id)];
     return {
       id, icon: '<img class="up-ic-img" src="' + PET_HEAD[petFormKey(id)] + '" alt="">',
       name: S2.name + (dex ? '（No.' + dex + '）' : ''),
       desc: sk.filter(Boolean).map(x => x.name).join(' / ') + '<br>生命 ' + petSummonHp(id) + ' · 伤害 ' + petHitDmgBase(id, 1)   // filter(Boolean)：表里混进空值也不崩面板
-        + '<br>' + (id === 'jirachi' ? '等级50级时学会「破灭之愿」,专属奇物「千年之愿」。'
-          : (id === 'shaymin' ? '等级50级时学会「种子闪光」,专属奇物「葛拉西蒂亚花」。'
-            : '等级50级时学会「等离子闪电拳」,专属奇物「风来城的闪光」。')),
+        + '<br>' + ('等级50级时学会「' + starPetText(id).skill + '」,专属奇物「' + starPetText(id).art + '」。'),
       apply() {
         p.starPick = id;
         /* ⚠️ 幻之宝可梦**只能有一只**：把另一只从队伍与场上清掉（用户报过「基拉祈和谢米一起进队」） */
@@ -11160,7 +11176,7 @@ function openStarPick() {
       }
     };
   });
-  const lv = $('wp-lv'); if (lv) lv.textContent = '幻之助战 · 幻之宝可梦二选一';
+  const lv = $('wp-lv'); if (lv) lv.textContent = '幻之助战 · 幻之宝可梦 ' + STAR_PETS.length + ' 选一';
   const st = $('wp-stats'); if (st) st.innerHTML = '选择不同的幻之宝可梦，后续刷新的专属奇物也不同';
   rerollLeft = 0;
   pickPanelOpen('star');   // ⚠️⚠️ 必须显式调用，否则 sc-weapon 不会被 show → 面板不可见却冻结世界（用户报的卡死）
@@ -11767,7 +11783,7 @@ const SHINY_TEXT_LIFE = 1.8;     // 巨大飘字停留多久（秒）
    （用户后来点名「固拉多，盖欧卡，烈空坐，也会进入刷闪的名单中」——
     它们的 `PET_FR[形态][1]` 闪光条带本来就随生成器一起出好了，所以直接列进来即可）。
    ⚠️ 加物种必须同步 `SHINY_SPECIES_NAME`（面板/横幅按 id 取中文名），否则横幅会显示英文 id。 */
-const SHINY_SPECIES = ['bulba', 'charm', 'squirt', 'eevee', 'charcadet', 'dreepy', 'dratini', 'beldum', 'gible', 'shaymin', 'zeraora', 'jirachi', 'toge', 'kyogre', 'groudon', 'rayquaza'];   // 🥊 铁哑铃 / 🦈 圆陆鲨（用户 2026-10 点名加进刷闪名单）
+const SHINY_SPECIES = ['bulba', 'charm', 'squirt', 'eevee', 'charcadet', 'dreepy', 'dratini', 'beldum', 'gible', 'shaymin', 'zeraora', 'jirachi', 'victini', 'toge', 'kyogre', 'groudon', 'rayquaza'];   // 🥊 铁哑铃 / 🦈 圆陆鲨（用户 2026-10 点名加进刷闪名单）· 🔥 比克提尼（幻之助战第四只）
 const SHINY_HP_MUL = 5;   // 🟢 闪光词条·绿身体：血量倍率（本轮由 2 倍提高到 5 倍）
 const CARD_ONLY_MUTS = ['deck', 'wild', 'possess', 'multishot'];   // 🃏 牌皇专属四件套（传统弓/士兵/其它职业都拿不到）
 /* 🃏 牌皇专属质变的数值（放在 MUTS 之前：MUTS 数组字面量里要引用这些 cap）
@@ -15797,7 +15813,7 @@ $('meta-body').addEventListener('click', (ev) => {
    遇到过的显示头像 + 「✅ 闪光外观 / ⚪ 普通外观」切换；没遇到过的显示 🔒 与获取提示。
    收录与启用都写进局外存档（`meta.shinyDex` / `meta.shinyOn`）→ **换局、读档都在**，只有删档才清。
    启用的效果：训练家出战时那一只（**含进化后的形态**，按物种 id 记）走 `PET_FR[形态][1]` 闪光贴图。 */
-const SHINY_SPECIES_NAME = { bulba: '妙蛙种子', charm: '小火龙', squirt: '杰尼龟', eevee: '伊布', charcadet: '炭小侍', dreepy: '多龙梅西亚', dratini: '迷你龙', beldum: '铁哑铃', gible: '圆陆鲨', shaymin: '谢米', zeraora: '捷拉奥拉', jirachi: '基拉祈', toge: '波克比', kyogre: '盖欧卡', groudon: '固拉多', rayquaza: '烈空坐' };
+const SHINY_SPECIES_NAME = { bulba: '妙蛙种子', charm: '小火龙', squirt: '杰尼龟', eevee: '伊布', charcadet: '炭小侍', dreepy: '多龙梅西亚', dratini: '迷你龙', beldum: '铁哑铃', gible: '圆陆鲨', shaymin: '谢米', zeraora: '捷拉奥拉', jirachi: '基拉祈', victini: '比克提尼', toge: '波克比', kyogre: '盖欧卡', groudon: '固拉多', rayquaza: '烈空坐' };
 
 /* 🧪 测试钩子：刷闪名单与已收录的闪光（图鉴用同一份表） */
 window.__musouShinyInfo = () => ({
@@ -18885,12 +18901,21 @@ function saveGame(nextWave, artDueWv) {
   storeSet(JSON.stringify(buildSaveData(nextWave, artDueWv)));
 }
 /* 🏠 中途退出（暂停 → 保存并回主页）专用：**写本波基准快照**，不写当前状态。
-   这样「继续」回到本波开头，同波内刷的等级/金币一律作废（防刷）。 */
+   这样「继续」回到本波开头，同波内刷的等级/金币一律作废（防刷）。
+   ⚠️⚠️ **只有「波次基准」这几个字段能用旧快照，其余一律用当前状态**
+      （用户 2026-10 报的严重 bug：「选好职业/分支 → 退出回主页 → 再进来变回默认职业」）：
+      `snapWaveStart()` 是在 `startWave()` **里面**拍的，而「战士之道 / 选武器 / 挑御三家」这些
+      开局选择是玩家在**那一波的开局面板里**才做的 → 旧快照里 `role / weapon / ronin / knight / wm /
+      job / petOwned` 全是**没选之前**的默认值。只写它的话，**整个第一波（乃至该波）的存档都是默认职业**，
+      「继续」回来自然就变回战士 / 传统弓 / 没有宝可梦了。
+   · 保留自快照的：`pickTimes`（同波刷等级防刷的基准）· `artDueWv`（本波开场补发已处理过）
+   · 其余全部取**当前**（`buildSaveData`）—— 也就是"这一波开头的样子 + 你此刻的身份"。 */
 function saveGameAtWaveStart() {
   const snap = waveStartSave || buildSaveData(wave, 0);
-  snap.wave = wave;          // 回到本波开头
-  snap.artDueWv = 0;         // 本波的开场补发在 startWave 时已经处理过
-  storeSet(JSON.stringify(snap));
+  const data = buildSaveData(wave, 0);
+  data.pickTimes = snap.pickTimes;   // ✅ 唯一必须沿用旧快照的字段（防同波刷等级）
+  data.artDueWv = 0;                 // 本波的开场补发在 startWave 时已经处理过
+  storeSet(JSON.stringify(data));
 }
 function hasSave() {
   const s = storeGet();
@@ -30412,6 +30437,17 @@ window.__musouPetDmg = (id, mul, skId) => {
   return petHitDmg(pid, mul === undefined ? 1 : mul, sk);
 };
 window.__musouPetHitDmg = (id, mul) => petHitDmgBase(id || 'bulba', mul === undefined ? 1 : mul);   // ⚖️ 同上，但**不消耗**帮助蓄力（纯读数）
+/* 🧪 测试钩子：某只宝可梦的**数值三件套**（段位 / 物种基准 / 实际生效值）——
+   对齐「幻兽之间基础值应相同」这类要求时，只看这一个钩子就够（别再去猜面板怎么算的）。
+   · st   = `petStageOf(id)`（幻兽恒为 1 = 「已经进化过一次」）
+   · base = `PET_SUMMON[id]` 的 hp / dmg（物种原始基准）
+   · real = 实际进场的生命上限 / 普通攻击伤害（已乘等级与进化倍率） */
+window.__musouPetStat = (id) => ({
+  id: id, name: (PET_SUMMON[id] || {}).name || id, element: (PET_SUMMON[id] || {}).element || '',
+  st: petStageOf(id), stage: petStage(id), lv: petLevelOf(id), evoMul: +petEvoMul(petStageOf(id)).toFixed(4),
+  base: { hp: (PET_SUMMON[id] || {}).hp || 0, dmg: (PET_SUMMON[id] || {}).dmg || 0, spd: (PET_SUMMON[id] || {}).spd || 0 },
+  real: { hp: petSummonHp(id), dmg: petSummonDmg(id) }
+});
 /* 🧪 测试钩子：查「用户的技能数值表」对某只宝可梦的某一招给出的倍率（没写就 null）。
    用途：验「表真的被查到了」——这张表曾经因为作用域 bug（`petFormNameOf` 拿不到 `petFormKey`）
    整张失效、静默回退到代码里的原始倍率，所以必须有钩子能直接读到表值。 */
@@ -30890,6 +30926,19 @@ window.__musouRerollState = () => {   // 测试钩子：三选一面板的刷新
     kind: curKind, hidden: el.style.display === 'none' ? 1 : 0, disabled: el.disabled ? 1 : 0,
     text: String(el.textContent || ''), reroll: rerollLeft, possible: rerollPossible() ? 1 : 0
   };
+};
+/* 🧪 测试钩子：给「开局先选」的那几个面板挂起标记（`roninPend` / `weaponPend` / `starterPend` / `jobPend`）。
+   ⚠️ 为什么需要它：这些面板的 open 函数都有 `xxxPend > 0` 的前置（防误弹），
+      而 `__musouOpenPanel()` 又不会替你把 pend 立起来 → 直接调它会静默 return，
+      测试就变成"以为开了面板、其实什么都没发生"（本轮踩过：六项断言全绿却什么都没测）。 */
+window.__musouPanelPend = (kind, v) => {
+  const on = v === undefined ? 1 : (v ? 1 : 0);
+  if (kind === 'ronin') p.roninPend = on;
+  else if (kind === 'weapon') p.weaponPend = on;
+  else if (kind === 'starter') p.starterPend = on;
+  else if (kind === 'job') p.jobPend = on;
+  else return false;
+  return true;
 };
 window.__musouOpenPanel = (kind) => { // 测试钩子：直接弹出指定面板（level/mut/art/job/weapon/ronin/starter）
   if (state !== 'play' || !p.alive || choosing) return false;
