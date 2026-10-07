@@ -480,7 +480,7 @@
       <div class="load-tip">游戏正在加载中，请稍后,若长时间无法加载，请刷新网页。</div>
       <div class="load-bar"><i id="load-fill"></i></div>
     </div>
-    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.0.5</small></div>
+    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.0.6</small></div>
     <!-- 🏷️ 版本角标（内容由 game.js 的 verBadgePaint() 填）：玩家一眼看出自己跑的是哪一版，
          省得拿着旧的下载文件来问「怎么没改」 -->
     <div id="ver-badge" class="ver-badge"></div>
@@ -918,7 +918,7 @@
 <script>
 'use strict';
 /* ============================================================
-   草·割无双  MUSOU MOW  —  无双割草 正式版 v1.0.5
+   草·割无双  MUSOU MOW  —  无双割草 正式版 v1.0.6
 
    🏷️ **版本角标**：`VER_TXT` / `BUILD_TAG` 就是主页左下角那个角标的内容。
       改版本号时**只改这两行**（`index.html` 的 `.title small` 也一起改）。
@@ -948,8 +948,8 @@ const $ = id => document.getElementById(id);
 /* 🏷️ 版本角标（主页左下角 `#ver-badge`）：`VER_TXT` = 玩家看到的版本号 · `BUILD_TAG` = 这份产物的构建标记。
    ⚠️ 改版本号时**只改这两行** + `index.html` 的 `.title small`。
    为什么要它：用户拿旧的下载文件来问「怎么和没改一样」—— 有角标一眼就能看出手上是哪一版。 */
-const VER_TXT = 'v1.0.5';
-const BUILD_TAG = 'build 10-07 06:05';
+const VER_TXT = 'v1.0.6';
+const BUILD_TAG = 'build 10-07 21:40';
 function verBadgePaint() {
   const el = $('ver-badge');
   if (!el) return;
@@ -14757,10 +14757,21 @@ function sylveonCharmOk(e) {
   if (e.charmProbe === 0) return false;
   return true;
 }
-/* 倒戈友军退场：紫烟 + 光环，然后从数组里摘掉（并标记 e.dead 让外观不再被画） */
+/* 倒戈友军退场：紫烟 + 光环，然后从数组里摘掉（并标记 e.dead 让外观不再被画）
+   💰 **经验在退场时结算**（用户 2026-10 报的 bug：「夺舍敌人好像不会增加经验值」）：
+   ⚠️⚠️ 被夺舍的敌人**再也没走过 `killEnemy()`** ——
+     ① `killEnemy()` 里那条「致命一击 + 掷中夺舍概率 → `charmConvert(e)` 后直接 `return`」把击杀经验也一起 return 掉了；
+     ② 之后它作为**友军**退场只有这一个出口（寿命到 / 撞够次数 / 箭射完），原来这里只标记 `e.dead` `+ 紫烟`，**一个经验都不给**。
+     结果：整局靠夺舍打的输出**全是白打**（玩家体感就是这句）。
+   现在统一在**退场这一刻**补上击杀经验 —— 口径与 `killEnemy` 完全一致（`XPBY[e.type]`，闪光 ×5）；
+   ⚠️ 用 `u.xpPaid` 去重，避免「已 dead 走 13905 那条」与正常退场同时结算两次。 */
 function charmVanish(u, fx) {
   const e = u.src;
   if (e) {
+    if (!u.xpPaid) {   // 💰 击杀经验（与 killEnemy 同口径；只给一次）
+      u.xpPaid = 1;
+      gainXP((XPBY[e.type] || 1) * (e.shiny ? 5 : 1));
+    }
     if (fx !== false) {
       burst(e.x, e.y, 14, '#c9b8ff', 280);
       rings.push({ x: e.x, y: e.y, r: 6, vr: 480, life: 0.26, max: 0.26, color: '#c9b8ff', width: 4 });
