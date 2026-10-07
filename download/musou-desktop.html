@@ -11325,10 +11325,15 @@ function openLegendUp() {
   paintChoices('legend');
   pickPanelOpen('legend');
 }
-/* 🧢 训练家升级：不弹词条面板，直接给所有宝可梦 +0.5 伤害 / +1 生命上限 / +5% 无双充能效率 */
+/* 🧢 训练家升级：不弹词条面板，直接给所有宝可梦 +0.5 伤害 / +1 生命上限 / +5% 无双充能效率
+   ⚡ **伤害不需要在这里"刷"**：`petSummonDmg(id) = (基础 + 0.5×petLevelOf(id)) × 进化倍率`
+   是**即时算的**（`petLevelOf` 对训练家读的就是 `p.trainLv`）→ 加完 `p.trainLv` 下一次出手就是新伤害。
+   ⚠️ 这里原来有个 `const dmgUp = petSummonDmg(...)` 后面跟一句 `void dmgUp;`（算完就扔的死代码），
+      已删 —— 留着一来没用，二来会让人误以为"伤害要手动同步"。
+   **生命上限必须同步**：`u.maxhp` 是挂在单位上的**快照**（不是每帧现算），不同步的话
+   升级只涨读数、实际血条不动。 */
 function trainerSkillUp() {
   p.trainLv = (p.trainLv || 0) + 1;
-  const dmgUp = petSummonDmg(p.petKind || 'bulba');
   addText(p.x, p.y - 58, '🧢 宝可梦强化 Lv' + p.trainLv + '：伤害 +0.5 · 生命上限 +1 · 无双充能 +5%', 18, '#ffd166', '#3a2a00');
   addRing(p.x, p.y, '#ffd166', 9);
   burst(p.x, p.y, 14, '#ffe9a8', 280);
@@ -11340,7 +11345,6 @@ function trainerSkillUp() {
     rings.push({ x: u.x, y: u.y, r: 6, vr: 420, life: 0.25, max: 0.25, color: '#ffe9a8', width: 3 });
   }
   dbgPetLevels++;
-  void dmgUp;
 }
 /* ============================================================
    🧢 宝可梦管理面板（训练家专属 · **战斗中按 C / 手机端点暂停键左边的 🧢**）
@@ -30634,9 +30638,29 @@ window.__musouPetStat = (id) => ({
   base: { hp: (PET_SUMMON[id] || {}).hp || 0, dmg: (PET_SUMMON[id] || {}).dmg || 0, spd: (PET_SUMMON[id] || {}).spd || 0 },
   real: { hp: petSummonHp(id), dmg: petSummonDmg(id) }
 });
-/* 🧪 测试钩子：查「用户的技能数值表」对某只宝可梦的某一招给出的倍率（没写就 null）。
-   用途：验「表真的被查到了」——这张表曾经因为作用域 bug（`petFormNameOf` 拿不到 `petFormKey`）
-   整张失效、静默回退到代码里的原始倍率，所以必须有钩子能直接读到表值。 */
+/* 🧪 测试钩子：**玩家所有派生战斗数值一次带出**（用来钉「存档往返之后加成不许失效」）。
+   为什么需要它：这些数值全部是**即时算的**（读 `p.mut` / `p.bonus` / `p.pickN` / `p.art` / `p.lvl`），
+   文件里**没有任何"缓存派生值"的字段** —— 但「读档把某个乘数漏还原」这种 bug 只有**逐项比对**才抓得到，
+   所以需要一个能把它们一次快照下来的入口（用户 2026-10 问过「中途退出再进来加成会不会失效」）。 */
+window.__musouStatSnapshot = () => ({
+  lvl: p.lvl, trainLv: p.trainLv || 0,
+  hp: Math.round(p.hp), maxhp: Math.round(p.maxhp), shieldC: p.shieldC || 0, oshield: Math.round(p.oshield || 0),
+  atk: Math.round(atkDmgNow()),                       // 当前职业的普攻伤害（战士/弓/法各自口径）
+  musouCap: musouCap(), memMax: Math.round(memMax()), mag: p.mag || 0,
+  bonus: Object.assign({}, p.bonus),                  // 升级词条（伤害/范围/攻速/移速/无双）
+  pickN: Object.assign({}, p.pickN),                  // 广域/疾风/魔能/冲锋 的层数
+  pickTimes: Object.assign({}, p.pickTimes),
+  mut: Object.assign({}, p.mut),                      // 质变层数（唯一真值）
+  art: Object.assign({}, p.art),                      // 奇物（唯一真值）
+  petSoul: +petSoulMul().toFixed(4),                  // 训练家之魂：宝可梦伤害乘数
+  rage: +(p.rageBonus || 0), rageT: +(p.rageT || 0).toFixed(2),
+  musouDmg: +musouDmgMul().toFixed(4),                // 无双伤害倍率
+  spdCdRed: +effSpdRed().toFixed(4), spdMul: +effSpdMul().toFixed(4),
+  rangeMul: +effRangeMul().toFixed(4),                // 总范围倍率
+  moveSpd: Math.round(moveSpeed()),                   // 实际移速（含所有加成）
+  pets: (p.petOwned || []).map(id => ({ id: id, lv: petLevelOf(id), st: petStageOf(id),
+    hp: petSummonHp(id), dmg: petSummonDmg(id) }))     // 🐾 每只宝可梦的等级/段位/生命/攻击（**即时算**）
+});
 window.__musouPetUserMul = (id, skId) => {
   try {
     const sk = petSkillList(id).filter(s => s.id === skId)[0] || null;
@@ -30781,6 +30805,11 @@ window.__musouSetLvl = (n) => {   // 测试钩子：直接把角色等级设到 
   petEvoCheck(true); petSylveonCheck();
   return p.lvl;
 };
+/* 🧪 测试钩子：设定当前经验值（用来把角色顶到「**差 1 点经验升级**」，再杀一只就触发**真实的升级链路**）。
+   用途：钉「训练家升级 → 宝可梦数值当场变」——直接改等级是不行的（`__musouSetLvl` 不走 `gainXP`，
+   `p.pending` 不涨 → `trainerSkillUp()` 永不执行 → `p.trainLv` 不动）。
+   ⚠️ 高等级时一级要上千经验（角色 60 级 ≈ 1213），靠真打要两百只怪，所以需要这个入口。 */
+window.__musouSetXp = (v) => { if (state !== 'play') return -1; p.xp = Math.max(0, Math.round(v)); return p.xp; };
 /* 🗡 祖传宝刀测试钩子：状态快照 / 指定落点强制天降 / 直接捡起 / 清空场上宝刀 */
 window.__musouBladeInfo = () => ({
   n: bladeLv(), cd: BLADE_CD, warn: BLADE_WARN, life: BLADE_LIFE, hitR: BLADE_HIT_R, pickR: BLADE_PICK_R, buffT: BLADE_BUFF_T,
