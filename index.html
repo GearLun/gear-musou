@@ -14081,12 +14081,15 @@ function shopBuy(kind) {
     if (coins < SHOP_RAND_COST || !pool.length) return;
     if ((shopRandBought || 0) >= SHOP_RAND_MAX) { addText(p.x, p.y - 60, '每次开店只能买一次随机奇物', 16, '#ff9d7a', '#3a1400'); return; }
     spendCoins(SHOP_RAND_COST);
-    shopRandBought = (shopRandBought || 0) + 1;
     const id = pool[Math.floor(Math.random() * pool.length)];
-    /* ⚠️ 槽满时 `artTryGain()` 只是挂起 + 弹「替换」面板、并返回 false —— 以前这条路**不登记挂起状态**，
-       玩家在替换面板点「放弃」时 `shopPendingPick` 是 null → 5000 金币不退、奇物也没拿到（钱货两空），
-       而「自选奇物（7000）」那条路是退款的 → 两条口径必须一致。 */
-    if (artFull()) {
+    shopRandPick = id;   // 🧪 读数：这一抽抽到了谁（测试用；正常玩法不看）
+    /* ⚙️ 走商店的统一出口（`artShopGain`）：一次性奇物（金币宝箱 / 触底反弹）**不占格、不弹面板**，
+       普通奇物槽满才挂起 + 弹「丢掉一件」。这条口径**只在这里定义一次**，别再自己判 `artFull()`。 */
+    const r47 = artShopGain(id);
+    if (r47 === 'pend') {
+      /* ⚠️ 名额只在**真的要占格的那一笔**上消耗：一次性奇物是白送性质的，
+         它照样吃掉「本店只能买一次」的名额就等于让玩家白花钱买了个寂寞。 */
+      shopRandBought = (shopRandBought || 0) + 1;
       shopPendingRand = 1;
       pendArtId = id;
       openSlotUp();
@@ -14095,20 +14098,33 @@ function shopBuy(kind) {
       saveGame(shopWaveNext, 0);
       return;
     }
-    if (artTryGain(id) === false) {   // 互斥等异常情况：原价退回，别让玩家白花
-      coins += SHOP_RAND_COST;
-      shopRandBought = Math.max(0, (shopRandBought || 0) - 1);
-      addText(p.x, p.y - 60, '这件奇物与已持有的互斥，买不了', 16, '#ff9d7a', '#3a1400');
-      shopPaint();
-      return;
-    }
+    if (r47 === 'ok') shopRandBought = (shopRandBought || 0) + 1;   // 直接入账那笔才算用掉名额
+    sfx.pick();
+    shopPaint();
+    saveGame(shopWaveNext, 0);
+    return;
   } else return;
   sfx.pick();
   burst(p.x, p.y, 14, '#ffd166', 300);
   shopPaint();
   saveGame(shopWaveNext, 0);   // 每笔成交即时存档，防刷新丢单
 }
-/* 商店·自选奇物：买下第 i 格（5000 金币） */
+/* ⚙️ 商店「拿到一件奇物」的**统一出口**（三条购买路径 + 大乐透免费拿都必须走它）。
+   返回：`'instant'` = 一次性奇物（得即离槽，**不占格、不弹面板**，调用方不用登记任何挂起状态）
+        `'pend'`    = 槽满且是普通奇物（调用方**自己**登记挂起状态再弹面板；退款口径各不相同）
+        `'ok'`      = 已入账
+   ⚠️⚠️ 为什么必须收口：这里原来有**三条独立的 `if (artFull()) { … openSlotUp(); }`**
+      （随机奇物 / 自选奇物 / 大乐透免费拿），`artTryGain()` 里那条「一次性奇物要在 `artFull()` 之前拦掉」
+      只修到了它自己那条路 → 用户 2026-10 在商店买「💰 金币宝箱」照样弹「丢掉一件」面板、
+      丢了一件才拿到它（**净亏一件奇物**，截图报的 bug）。
+      **以后再加第四条获取路径，照调这个函数，别再自己判 `artFull()`。** */
+function artShopGain(id) {
+  if (!ART_DEFS[id]) return 'pend';
+  if (ART_INSTANT[id]) { artGain(id); return 'instant'; }   // 一次性：直接结算（artGain 内部会把自己清掉）
+  if (artFull()) return 'pend';
+  return artGain(id) === false ? 'pend' : 'ok';
+}
+/* 商店·自选奇物：买下第 i 格（10000 金币） */
 function shopBuyPick(i) {
   if (!shopOn || state !== 'play') return;
   /* 💰 同一道购买闸门（见 shopBuy 里的说明）：一次只允许一笔未决的「换奇物」交易 */
@@ -14122,18 +14138,14 @@ function shopBuyPick(i) {
   if (!s || !s.id || s.sold) return;
   if (coins < SHOP_PICK_COST) { addText(p.x, p.y - 60, '金币不足（自选奇物需 ' + SHOP_PICK_COST + '）', 16, '#ff9d7a', '#3a1400'); return; }
   spendCoins(SHOP_PICK_COST);
-  if (artFull()) {   // 奇物槽满：先扣钱、弹出替换面板（面板里再决定丢哪件；放弃则退款）
+  const r = artShopGain(s.id);
+  if (r === 'pend') {   // 槽满 + 普通奇物：先扣钱、弹出替换面板（面板里再决定丢哪件；放弃则退款）
     shopPendingPick = { i, id: s.id };
     pendArtId = s.id;
     openSlotUp();
     return;
   }
-  if (artGain(s.id) === false) {   // 理论不会发生（互斥奇物不会同池），保险起见回滚
-    coins += SHOP_PICK_COST;
-    addText(p.x, p.y - 60, '这件奇物与已持有的互斥，买不了', 16, '#ff9d7a', '#3a1400');
-    shopPaint();
-    return;
-  }
+  /* 'instant' 与 'ok' 都算成交：一次性奇物已经自己结算过了（`sold` 照标、钱照收） */
   s.sold = true;
   sfx.pick();
   burst(p.x, p.y, 18, '#8ff0e8', 340);
@@ -14232,13 +14244,13 @@ function shopLottoFreePick(i) {
   }
   const s = shopPicks[i];
   if (!s || !s.id || s.sold) return false;
-  if (artFull()) {          // 槽满：照走替换面板；放弃则**不消耗**这次免费机会（与花钱买那两条不同，不用退款）
+  const r = artShopGain(s.id);   // ⚙️ 统一出口：一次性奇物**不占格、不弹面板**（见 artShopGain 的注释）
+  if (r === 'pend') {            // 槽满 + 普通奇物：照走替换面板；放弃则**不消耗**这次免费机会（不用退款）
     shopPendingPick = { i: i, id: s.id, free: 1 };
     pendArtId = s.id;
     openSlotUp();
     return true;
   }
-  if (artGain(s.id) === false) return false;
   s.sold = true;
   shopLottoFree = 0;        // 这次免费机会用掉了
   sfx.pick();
@@ -14527,6 +14539,7 @@ const SPENDPOW_PER = 0.02;
 function spendPowMul() { return 1 + SPENDPOW_PER * Math.floor((coinsSpent || 0) / 1000); }
 const ART_INSTANT = { goldbox: 1, rebound: 1 };   // 「得即离槽」名单（加新的只要往这里加一行 + 下面的 apply 分支）
 let artGainN = 0;                    // 累计**获得**过的奇物件数（含一次性奇物；`artCount()` 是当前持有数）
+let shopRandPick = '';               // 🧪 商店「随机奇物」这一抽抽到的 id（只作读数 / 测试用）
 let artInstantN = 0;                 // 诊断/测试读数：一次性奇物一共触发过几次
 let artInstantLast = null;           // 最近一次 { id, gain, spent }
 let artInstantLog = [];              // 最近的触发记录（测试用）
@@ -15782,7 +15795,19 @@ $('btn-pause-home').addEventListener('click', () => {
         （`doStartGame()` 就靠它区分「要不要把武器当残留清掉」）。 */
   p.weapon = ''; p.weaponPend = 0;
   chainRunClear();   // ✨ 连锁标记也一起清（本局结束 = 连锁的那一套「只作用于一局」的状态全收）
-  $('sc-pause').classList.remove('show');
+  /* ⚠️⚠️ **回主页必须把所有面板一起收掉 + 清干净挂起队列**（用户 2026-10 视频报的 bug）：
+     这里原来**只收 `sc-pause`**，`sc-slot`（奇物替换）/ `sc-shop`（商店）/ `sc-art` 全都还挂在 show 上 →
+     主页上**盖着一排可点按钮**（「丢弃 XXX」「买下这一格」…），而 `tryOpen()` 每帧还会按挂起队列
+     把它们**重新弹出来**。玩家在主页手一抖点到「选武器」那排按钮，就会把 `p.weapon` 改成 `'bow'`
+     **并写进存档** → 「▶ 继续」回来就从训练家变成传统弓（本局拿到的质变/奇物都还在，只有职业被刷掉，与用户截图完全一致）。
+     现在：先写档（上面那行），再 `hideAllPanels()` 收掉全部面板，最后**把挂起队列清干净**
+     （`p.pending` / `mutPending` / `artPend` / 宝可梦相关那几个 / 商店）——回主页 = 本局结束，这些都不该跨局。 */
+  hideAllPanels();
+  p.pending = 0; mutPending = 0; p.artPend = 0;
+  p.starterPend = 0; p.catchPend = 0; p.legendPend = 0; p.starPend = 0; p.roninPend = 0; p.jobPend = 0;
+  chainConfirm = false; shopPend = 0;
+  /* 商店/替换面板的「未决交易」也一起放弃（钱不退是既有的「放弃」语义；但不该跨局带到主页） */
+  pendArtId = ''; shopPendingPick = null; shopPendingRand = 0; curKind = 'level'; curChoices = []; choosing = false;
   $('sc-start').classList.add('show');
   state = 'title';
   refreshContinue();
@@ -17368,7 +17393,17 @@ function doCast() {
   const cost = memCost();
   const musou = p.musouT > 0;
   /* 无双期间不消耗法术条；其余时候法术条未回满（或不够一发）→ 停止普攻，等回满后再继续 */
-  if (!musou && (p.memT > 0 || p.mem < cost)) { p.atkCd = 0.12; return; }
+  if (!musou && (p.memT > 0 || p.mem < cost)) {
+    /* ⚠️⚠️ **死锁自救**（用户 2026-10 报的恶性 bug：「法师从存档回到战斗，法力条空且无法恢复」）：
+       本行的 `return` 是"不能出手就等着"，而 `p.memT` **只在出手见底那一刻**才被设成 `memFullT()`。
+       于是「法力条不够一发、又不在回复中」就是个**永久死锁**：打不出手 → 进不了见底分支 → 永远不回复。
+       存档把 `mem` 存成个位数就会触发（`loadGame` 还把下限钳在 1 → 恰好卡在这个缝里）。
+       这里补一刀：**只要没在回复、又不够一发，就主动进入回复**（2 秒回满）→ 最多顿一下，绝不死锁。
+       ⚠️ 放在**本函数里**而不是 `updateGame` 的法力条那段：水法师的水柱走自己的循环（见 updateWaterJet），
+          它靠 `mem <= 0` 触发「见底吸蓝球」；在 `updateGame` 里提前设 `memT` 会把那个机制整个抢掉（冒烟 S56 变红过）。 */
+    if (!musou && p.memT <= 0 && p.mem < cost) p.memT = memFullT();
+    p.atkCd = 0.12; return;
+  }
   /* 施法间隔 0.35s（= 上一版 0.52s 再提速 1.5 倍）
      ⚠️ 用户本轮：「火法师开启无双技能后**不会加高伤害节奏**」→ 无双期间**不再**把间隔压到 0.15s，
      出手节奏与平时完全一致（无双只让火球伤害 ×1.5，见 `fireBallDmg()`）。 */
@@ -19114,6 +19149,10 @@ function loadGame() {
   p.pickN = Object.assign({ rng: 0, spd: 0, mem: 0 }, s.pickN || {});
   p.pickTimes = Object.assign({ dmg: 0, rng: 0, spd: 0, vit: 0, mvm: 0, mus: 0, mem: 0, heal: 0 }, s.pickTimes || {});
   p.mem = Math.max(1, Math.min(memMax(), typeof s.mem === 'number' ? s.mem : memMax()));   // 法术条（需在 pickN 之后算上限）
+  /* ⚠️ 读档后**法术条的状态要归零**：`memT`（回复倒计时）不进存档 —— 留着一个旧值会让
+     「不满一发 + 不在回复」的卡死状态带进新局（见 updateGame 里那条「卡死自救」）。
+     这里显式清 0，让法师进来就是「能出手 / 或按需回复」的正常态。 */
+  p.memT = 0; p.manapoolT = 0;
   p.mag = Math.max(0, Math.min(gunMagMax(), typeof s.mag === 'number' ? s.mag : gunMagMax()));   // 士兵弹夹（装弹中读档则视为已装满）
   if (p.mag <= 0) p.mag = gunMagMax();
   p.reloadT = 0; p.nadeN = 0; p.deployCd = 0;
@@ -19605,6 +19644,7 @@ let devToolsTxt = '';       // 调试面板上次渲染的内容（变了才写 
 let devClass = { role: 'warrior', ronin: 0, knight: 0, wm: 0, weapon: '', job: '' };   // 面板里选中的职业
 const DEV_DUMMY_HP = 1e9;   // 假人血量池（每帧回满，只用来记伤害）
 const LAB_COIN_INF = 999999999;   // 🧪🛠 试验场：金币无限（每帧把手上的金币补到这个数；`coinsTotal` 不受影响）
+let labCoinOff = false;           // 🧪 测试钩子用：临时停掉「试验场无限金币」，好让商店扣钱/退款的账目能被断言
 let devDummyE = null;       // 场上的假人实体（挂在 enemies 里，但走独立分支：不动、不打人、不死）
 let devDmg = { total: 0, hits: 0, best: 0, bestDps: 0, log: [] };   // 假人伤害统计（log = 最近 5 秒的 [时间, 伤害]）
 /* 面板上的「转职」预设：role / ronin(浪客) / knight(骑士) / wm(武器大师) / weapon(弓·枪·牌) / job(法系元素) */
@@ -24440,7 +24480,7 @@ function pushApart(a, b) {
 function updateGame(dt, rawDt) {
   /* 🧪🛠 试验场：**金币无限**（每帧补满，买东西/刷货架不心疼）
      —— 只补「手上金币」，`coinsTotal`（本局总金币）一分不加，所以**不影响传承 1% 带出** */
-  if (p.lab === 1) coins = Math.max(coins, LAB_COIN_INF);
+  if (p.lab === 1 && !labCoinOff) coins = Math.max(coins, LAB_COIN_INF);
   /* 🧪🛠 试验场：**无双槽时刻保持最大**（用户本轮要求）——这样随时能按 U / 点奥义键
      试各职业的无双；补的是「当前无双值」，`p.musouT`（无双持续时间）不碰 */
   if (p.lab === 1) p.musou = musouCap();
@@ -25349,6 +25389,11 @@ function updateGame(dt, rawDt) {
   /* 法师法术条：见底后自动回复，默认 2 秒回满（回满前普攻停止） */
   if (isMage()) {
     const mm = memMax();
+    /* ⚠️⚠️ 这里**不要**加「不够一发就自动进入回复」的自救分支（我加过又撤了）：
+       水法师的「**见底 → 自动吸取全图蓝球**」是靠 `p.mem <= 0` 那一刻触发的，
+       自救会在它之前把 `memT` 设成正数 → **吸球机制整个失效**（冒烟 S56 当场变红）。
+       法力条卡死的真因在**读档**（`memT` 不进存档 + `loadGame` 把下限钳成 1）→
+       已经在 `loadGame` 里归零修掉了（见那行注释），战斗中的时序一律不动。 */
     if (p.memT > 0) {
       p.memT = Math.max(0, p.memT - dt);
       p.mem = p.memT > 0 ? Math.max(0, mm * (1 - p.memT / memFullT())) : mm;
@@ -30697,7 +30742,10 @@ window.__musouSpend = (n) => spendCoins(n | 0);   // 测试钩子：走真实扣
 window.__musouSetHp = (v) => { if (state === 'play' && p.alive) p.hp = Math.max(1, Math.min(p.maxhp, v)); }; // 测试钩子：直接设定生命（绕过护盾/玄龟/回血干扰）
 window.__musouMaxHp = (v) => { if (state === 'play') { p.maxhp = Math.max(1, v | 0); p.hp = Math.min(p.hp, p.maxhp); } }; // 测试钩子：设定生命上限（血量体系缩放测试用）
 window.__musouLeechK = (v) => { if (state === 'play') p.leechK = Math.max(0, v | 0); }; // 测试钩子：设定夺命累计击杀进度（隔离历史残值）
-window.__musouMana = (v, t) => { if (state === 'play') { p.mem = Math.max(0, Math.min(memMax(), v | 0)); p.memT = t > 0 ? t : 0; return p.mem; } return -1; }; // 测试钩子：设定法师法术条（第二参数为剩余回复秒数）
+window.__musouMana = (v, t) => { if (state === 'play') { p.mem = Math.max(0, Math.min(memMax(), v | 0)); p.memT = t > 0 ? t : 0; return p.mem; } return -1; };
+/* 🧪 测试钩子：法力条读数（当前值 / 回复倒计时 / 每发消耗 / 上限）。
+   用途：钉死「从存档回到战斗后法力条不会卡死」（`mem < cost` 且 `memT <= 0` 就是死锁态）。 */
+window.__musouManaInfo = () => ({ mem: +p.mem.toFixed(2), memT: +(p.memT || 0).toFixed(3), cost: memCost(), max: memMax(), fullT: +memFullT().toFixed(2) }); // 测试钩子：设定法师法术条（第二参数为剩余回复秒数）
 window.__musouWaterRamp = (v) => { p.waterRampT = Math.max(0, +v || 0); return waterRampSec(); };   // 🌊 测试钩子：直接设「本波已喷射秒数」（水柱伤害加成 = 1 + 0.08×整秒数）
 window.__musouWaterOrb = (v) => { p.waterOrbN = Math.max(0, v | 0); return p.waterOrbN; };           // 🌊 测试钩子：设「已累计吸取的法术球数」（诊断读数，不再触发激光）
 window.__musouWaterBeamsNow = (force) => waterMasteryBeams(force !== undefined ? !!force : true);   // 🌊 测试钩子：立刻射出两道激光（默认**强制**射，无视术有专攻；force=false 走正常门槛。返回命中次数）
@@ -30905,6 +30953,22 @@ window.__musouWaveBosses = (k) => waveComp(clampWave(k)).filter(t => ETYPES[t] &
 window.__musouHpBoost = (v) => { if (v !== undefined) hpBoost = Math.max(0, Math.min(2, v | 0)); return hpBoost; };   // 测试钩子：设定「Boss 后额外翻倍」档位
 window.__musouShopInfo = () => ({ on: shopOn ? 1 : 0, coins: coins, spent: coinsSpent, randBought: shopRandBought, randMax: SHOP_RAND_MAX, pickCost: SHOP_PICK_COST, rerollCost: shopRerollAllCost(), rerollBase: SHOP_REROLL_BASE, rerollN: shopRerollN, lottoN: shopLottoN, lottoFree: shopLottoFree, lottoCost: shopLottoCost(), randCost: SHOP_RAND_COST, picks: shopPicks.map(s => ({ id: s.id, sold: s.sold ? 1 : 0 })), pool: shopArtPool().length, mutBought: shopMutBought, mutCost: shopMutCost(), mutCosts: SHOP_MUT_COSTS.slice(), mutMax: SHOP_MUT_COSTS.length });   // 测试钩子：商店价格与本次开店状态（含 🎁 质变宝箱档位 / 🔄 一键三换当前价 / 🎟️ 大乐透进度）
 window.__musouShopBuyMut = () => shopBuyMut();   // 测试钩子：买一个质变宝箱（走真实流程：扣钱 → 弹质变三选一）
+/* 🧪 测试钩子：商店「随机奇物」这一抽抽到了谁（`null` = 还没抽过）。
+   用途：验证「抽到一次性奇物（金币宝箱 / 触底反弹）时**不弹**「丢掉一件」面板」——
+   测试侧拿它判断这一抽是不是一次性奇物（不是就重抽，不去人肉猜随机数）。 */
+window.__musouShopRandPick = () => shopRandPick || null;
+/* 🧪 测试钩子：临时**停掉试验场的无限金币**（`LAB_COIN_INF` 每帧会把金币补满，
+   不关掉就永远测不了商店的「扣钱 / 退款」账目）。传 true 恢复。 */
+window.__musouLabCoin = (off) => { labCoinOff = !!off; return labCoinOff; };
+/* 🧪 测试钩子：把「自选奇物」第 i 格换成指定 id（**只作测试**，用来钉「买到一次性奇物不占槽」这类路径）。
+   返回是否改成功（商店没开 / 格子不存在 / id 不认识 → false）。 */
+window.__musouShopPickSet = (i, id) => {
+  const s = shopPicks[i | 0];
+  if (!shopOn || !s || !ART_DEFS[id]) return false;
+  s.id = id; s.sold = false;
+  if (typeof shopPaint === 'function') shopPaint();
+  return true;
+};
 window.__musouShopWaveAt = (k) => shopWaveOn(k | 0) ? 1 : 0;   // 测试钩子：第 k 层清剿后是否进商店（每 5 层一次 = 4/9/14/19/…）
 window.__musouArtWaveAt = (k) => artWaveOn(k | 0);             // 测试钩子：第 k 层是不是「免费奇物」波（每 10 层 · 0 不算）
 window.__musouShopPrice = (what) => ({                          // 测试钩子：商店三个价格（改价一律改常量，别在测试里写死）
