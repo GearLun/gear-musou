@@ -19033,6 +19033,18 @@ function buildSaveData(nextWave, artDueWv) {
        ⚠️ `shopLottoN`（本店已参与几把）**故意不存** —— 商店是瞬时的，关店/读档本来就重开一家新店。 */
     shopVisitN: shopVisitN | 0,
     mut: Object.assign({}, p.mut),
+    /* ✨ 质变全满后的「闪光追猎」计数器：每斩一只闪光敌人 +1% 最终伤害（见 `mutFullDmgMul()`）。
+       ⚠️⚠️ **必须进存档** —— 它是个**累计值**（不是即时从别的状态推出来的），
+       漏存的话「中途退出再进来」这一局的加成会**从 0 重新算**（用户 2026-10 报的 bug）。 */
+    mutFullKills: p.mutFullKills | 0,
+    /* ⚔️ 另外三个**质变/奇物的累计进度**，同样是「退出再进来就会被重置」的那一类（用户 2026-10 一并排查出来的）：
+       · `leechK` = 质变·夺命的累计击杀进度（每 2~10 杀回 1 血，见 killEnemy）
+       · `thunC`  = 质变·落雷的累计击杀进度（攒够 3~6 杀劈一次天雷）
+       · `swingN` = 累计斩击数（质变·连击每 3 斩追加、质变·气每 5 斩放波）→ **它决定"下一次是第几斩"**
+       ⚠️ 判据：这几个都是**跨波累计、且直接决定下一次触发时机**的进度值 → 属于「必须存」；
+         而「本波内清空」的（`waterRampT` 喷射秒数等）**故意不存**（`startWave` 会清）。 */
+    leechK: p.leechK | 0, thunC: p.thunC | 0, swingN: p.swingN | 0,
+    /* （🦷 贪狼之牙的 `fangN` / `fangT` 上面已经存过了，这里**不要再写一份** —— 一个定义点） */
     art: Object.assign({}, p.art),
     role: p.role,                  // 角色：warrior / archer / mage
     job: p.job,                    // 法师元素专精：'' / 'fire' / 'water' / 'thunder' / 'light'
@@ -19178,6 +19190,14 @@ function loadGame() {
   shopVisitN = Math.max(0, s.shopVisitN | 0);
   p.mut = Object.assign({ bonus: 0, shield: 0, drone: 0, chi: 0, whirl: 0, blink: 0, dash: 0, master: 0, leech: 0, thunder: 0, mstor: 0, mdura: 0, giant: 0, shieldbash: 0, forge: 0, clone: 0, blade: 0, firestep: 0, cold: 0, bounce: 0, split: 0, xbow: 0, wallb: 0, lava: 0, manapool: 0, rage: 0, multicast: 0, mastery: 0, mag: 0, grenade: 0, decoy: 0, sidekick: 0, deck: 0, wild: 0, possess: 0, multishot: 0, spin: 0, recall: 0, vigor: 0, royal: 0, rampage: 0, skyfall: 0, mom: 0, favor: 0, pack: 0, shopq: 0, sale: 0, trainsoul: 0, starhelp: 0, miracle: 0, shinymut: 0 }, s.mut || {});
   p.art = Object.assign({ nohand: 0, missile: 0, amplifier: 0, scroll: 0, cat: 0, hagen: 0, talisman: 0, turtle: 0, fang: 0, crane: 0, burns: 0, killhand: 0, grind: 0, ion: 0, sari: 0, coinpow: 0, goldbox: 0, spendpow: 0, rebound: 0, goldmine: 0, hamu: 0, overheal: 0, supershield: 0, tactical: 0, charm: 0, hotdrink: 0, buy1get1: 0, nohand: 0, novrain: 0, rainkeep: 0, carddeck: 0, support: 0, wish: 0 }, s.art || {});
+  /* ✨ 质变全满后的「闪光追猎」累计层数（每只 +1% 最终伤害）—— 必须一起读回来，
+     否则「中途退出再进来」这一局的加成从 0 重算（用户 2026-10 报的 bug）。老存档没有这个字段 → 0。 */
+  p.mutFullKills = Math.max(0, s.mutFullKills | 0);
+  /* ⚔️ 三个**质变累计进度**同理（老存档没有 → 0）：见 buildSaveData 里的说明。
+     `swingN` 是「累计斩击数」，它决定下一次连击/气波落在第几斩上，也必须一起读回来。 */
+  p.leechK = Math.max(0, s.leechK | 0);
+  p.thunC = Math.max(0, s.thunC | 0);
+  p.swingN = Math.max(0, s.swingN | 0);
   /* 🧢 训练家：箭雨体系一律不给 —— **老存档里可能已经带着**（这条禁令是后加的），读档时就地摘掉，
      否则无双会被「十一月雨」顶成箭雨，玩不到「无双号令」 */
   if (isTrainer()) { p.art.novrain = 0; p.art.rainkeep = 0; }
@@ -28699,6 +28719,8 @@ function frame(now) {
 requestAnimationFrame(frame);
 /* 调试钩子（供无头测试使用，浏览器中无副作用） */
 window.__musouDebug = () => ({ kills, score, coins, wave, state, alive: p.alive, enemies: enemies.length,
+  mutFullKills: p.mutFullKills | 0,   // ✨ 质变全满后斩闪光的累计次数（每只 +1% 最终伤害；必须跨存档保留）
+  leechK: p.leechK | 0, thunC: p.thunC | 0, swingN: p.swingN | 0,   // ⚔️ 质变累计进度（夺命 / 落雷 / 连击·气 的斩击数；必须跨存档保留）
   /* 💾 「本波开头」快照的读数（中途退出存的就是它）：波次 + 词条次数 —— 冒烟用它钉「不许把同波刷的带走」 */
   waveBaseTimes: waveStartSave ? Object.assign({}, waveStartSave.pickTimes) : null,
   waveBaseWave: waveStartSave ? waveStartSave.wave : null,
@@ -29664,13 +29686,16 @@ window.__musouDealTo = (i, dmg) => {
 };
 /* 🌟 测试钩子：在玩家身边放一只**指定类型**的静止探针（弓兵/妖法师这类远程敌人的行为要用它 —— 默认兵卒）
    `boss=1` 时按 Boss 级目标处理（验证「始源之海 / 德尔塔气流对 Boss 只造成 1/40」） */
-window.__musouSpawnFoe = (type, dx, dy, hp, boss) => {
+window.__musouSpawnFoe = (type, dx, dy, hp, boss, shiny) => {
   if (state !== 'play' || !p.alive || !ETYPES[type]) return -1;
-  const e = spawnEnemy(type, false, true);
-  e.shiny = false; e.aff = null;
+  /* ✨ 第 6 参 `shiny`：让 `spawnEnemy` **按真实流程**给这一只挂闪光 + 词条（不传 = 照旧不是闪光）。
+     用途：验「质变全满后再斩闪光敌人 +1% 伤害」那条链路 —— 真实概率 1~3% 没法稳定复现。
+     ⚠️ 别在这里手写 `e.shiny = true`：那样会跳过 `spawnEnemy` 里的词条结算（`e.aff` 恒 null）。 */
+  const e = spawnEnemy(type, !!shiny, !shiny);
+  if (!shiny) { e.shiny = false; e.aff = null; }
   e.x = Math.max(60, Math.min(W - 60, p.x + (dx || 0)));
   e.y = Math.max(60, Math.min(H - 60, p.y + (dy || 0)));
-  e.hp = e.maxhp = hp || 500000;
+  e.hp = e.maxhp = hp || 500000;   // 血量在最后统一钉（覆盖闪光词条的 ×5），保证探针数值可预期
   if (boss) { e.boss = 1; e.bossUnit = 1; }
   e.spd = 0; e.resist = 0; e.atkCd = 999;   // 定身：不走位、不推飞、不接触攻击
   probeTgt.push(e);
@@ -30810,6 +30835,9 @@ window.__musouSetLvl = (n) => {   // 测试钩子：直接把角色等级设到 
    `p.pending` 不涨 → `trainerSkillUp()` 永不执行 → `p.trainLv` 不动）。
    ⚠️ 高等级时一级要上千经验（角色 60 级 ≈ 1213），靠真打要两百只怪，所以需要这个入口。 */
 window.__musouSetXp = (v) => { if (state !== 'play') return -1; p.xp = Math.max(0, Math.round(v)); return p.xp; };
+/* 🧪 测试钩子：✨「质变全满后斩闪光」的累计加成读数 —— 次数 + 最终伤害倍率 `mutFullDmgMul()`。
+   用途：钉「中途退出再进来这个加成不许从 0 重算」（用户 2026-10 报的 bug）。 */
+window.__musouMutFull = () => ({ n: p.mutFullKills | 0, mul: +mutFullDmgMul().toFixed(4), per: MUT_FULL_DMG_PER, coin: MUT_FULL_COIN });
 /* 🗡 祖传宝刀测试钩子：状态快照 / 指定落点强制天降 / 直接捡起 / 清空场上宝刀 */
 window.__musouBladeInfo = () => ({
   n: bladeLv(), cd: BLADE_CD, warn: BLADE_WARN, life: BLADE_LIFE, hitR: BLADE_HIT_R, pickR: BLADE_PICK_R, buffT: BLADE_BUFF_T,
