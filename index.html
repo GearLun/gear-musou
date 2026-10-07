@@ -5322,12 +5322,20 @@ function petItemForm(id) { return (p.petEvoPick && p.petEvoPick[id]) || ''; }
 function petItemStage(id) { return petItemForm(id) ? 1 : 0; }
 /* **这一只**现在几段：大器晚成看波次 · 道具进化看有没有用过道具 · 其余（御三家 / 波克比）看等级 */
 function petStageOf(id) {
-  /* 🌟 幻之宝可梦（基拉祈 / 谢米 / 捷拉奥拉）：**默认视为已经进化过一次**（用户 2026-10）
+  /* 🌟 幻之宝可梦（基拉祈 / 谢米 / 捷拉奥拉 / 比克提尼）：**默认视为已经进化过一次**（用户 2026-10）
      → 攻击力 / 生命吃 1 段进化加成 ×1.3；谢米的天空形态算**再一次**（2 段 ×1.69） */
   if (STAR_PETS.indexOf(id) >= 0) return (id === 'shaymin' && shayminSkyOn()) ? 2 : 1;
   if (id === 'shaymin' && shayminSkyOn()) return 1;   // 🌸 变天空谢米 = 一次进化（属性 ×1.5）
   if (PET_WAVE_EVO[id]) return petWaveStage(id);
-  if (PET_ITEM_EVO[id]) return petItemStage(id);
+  /* 🔮 **道具进化（伊布 / 炭小侍）：形态一旦换过就是 1 段** ——
+     ⚠️⚠️ 判据必须是 `petItemForm(id)`（形态真的换过），**不能用 `petItemStage(id)`**：
+        伊布系有**两条**换形态的路 —— ① 用水/雷/火之石（写 `p.petEvoPick.eevee`）
+        ② **角色 60 级自动进化成仙子伊布**（`petSylveonCheck()` 也写 `p.petEvoPick.eevee='sylveon'`）。
+        `petItemStage` 只认「之石」那条（查 `PET_ITEM_FORM_POOL`），走②进来的会返回 0 →
+        **形态已经是仙子伊布、技能段位却还停在 0（伊布那两招）→ 月亮之力 / 魅惑之声永远选不到**
+        （本轮核对出手间隔时抓到）。
+     属性口径不变：`petEvoMul(1)` = ×1.3，与走之石进化完全一致。 */
+  if (PET_ITEM_EVO[id]) return petItemForm(id) ? 1 : 0;
   return petStage();
 }
 /* 这一只吃不吃**等级进化**（大器晚成与道具进化都不吃，各走各的路） */
@@ -5797,6 +5805,11 @@ const PET_RIDE_HP_MUL = 0.2;       // 🧢 骑乘惩罚（用户要求）：被�
    杰尼龟水柱的**结算间隔**同倍率（0.5s → 0.25s 一跳），但「连喷 5 秒 / 歇 2 秒」的节奏保持不变。
    想再调快/调慢只改这一个数（与无双号令的 ×1.5 叠乘）。 */
 const PET_ATK_RATE = 2;
+/* ⏱️ **手写 `cd` 的换算助手**：技能对象里的 `cd` 是**内部值**，引擎实际用的是
+   `petSkillCd(SK) / petRateMul()`（`petRateMul() = PET_ATK_RATE`，基础攻速 ×2）。
+   所以「想要 N 秒一次」要写 `PET_CD_SEC(N)` —— 直接写 `cd: N` 会变成 N/2 秒一次（本轮核对出手间隔时抓到两次）。
+   本文件后半段所有 `cd:` 照旧（它们是历史值，别动）；**新写的 / 调频率的**一律用它。 */
+const PET_CD_SEC = (sec) => sec * PET_ATK_RATE;
 function petRateMul() { return PET_ATK_RATE * petMusouSpdMul(); }
 /* 🏹 **闪焰冲锋的出手间隔倍率**（用户：「闪焰冲锋的攻击间隔降低至现在的 70%」）：
    喷火龙的闪焰冲锋是**手动技**（骑乘时按闪避键才放），它自己**没有 cd** → 实际出手间隔就是
@@ -6747,8 +6760,11 @@ const PET_SKILL_ZENHEADBUTT = {
    碰到敌人就**爆炸（范围伤害）**；**每 0.7 秒**用一次；伤害 = **宝可梦攻击力 × 3**。
    ⚠️ 三颗火团**各自独立追踪**（`f.homing`，见 `updatePetTrioFlame`），不是扇形散射 —— 用户要的是"三个方位 + 追踪"。 */
 const PET_SKILL_MAGICFLAME = {
-  id: 'magicflame', name: '魔法火焰', icon: '🔥', kind: 'trioflame', cd: 0.7, range: 520, fxEl: 'FIRE', def: 1,
-  desc: '从自身的上方、左下、右下三个方位各放出一颗追踪火团，命中即爆炸（范围伤害）· 伤害 ×3 · ' + petCdText(0.7),
+  id: 'magicflame', name: '魔法火焰', icon: '🔥', kind: 'trioflame', cd: PET_CD_SEC(1), range: 520, fxEl: 'FIRE', def: 1,
+  desc: '从自身的上方、左下、右下三个方位各放出一颗追踪火团，命中即爆炸（范围伤害）· 伤害 ×3 · ' + petCdText(PET_CD_SEC(1)),
+  /* ⏱️ 出手间隔 = **1 秒**（用户 2026-10 由 0.7 秒改成 1 秒）。
+     ⚠️ `cd` 是**内部值**，实际间隔 = `cd / petRateMul()` → 一律用 `PET_CD_SEC(秒)` 换算，
+        直接写 `cd: 1` 会变成 0.5 秒一次（本轮核对出手间隔时抓到）。 */
   trioflame: {
     n: 3,                 // 三颗
     mul: 3,               // 伤害 = 宝可梦攻击力 × 3（爆炸也是这个数）
@@ -6775,19 +6791,33 @@ const PET_SKILL_VICTINI_ZEN = {
    用户口径：「每 0.5 秒对附近敌人造成 1x 宝可梦攻击力的伤害」→ 3 秒 ≈ 6 跳。
    ⚠️ 效果**类似骑士无双**（拉怪 + 边走边烤），但按铁律**从头独立做**：新 kind、新数组 `petVHeats`、新绘制函数。 */
 const PET_SKILL_VHEAT = {
-  id: 'vheat', name: 'Ｖ热焰', icon: '🔻', kind: 'vheat', cd: 6.5, range: 900, fxEl: 'FIRE',
-  desc: '头顶燃起 V 字火焰，朝最近的敌人冲刺 3 秒；期间**自动吸引**附近敌人，并**每 0.5 秒**对身边敌人造成 1× 宝可梦攻击 · ' + petCdText(6.5),
+  id: 'vheat', name: 'Ｖ热焰', icon: '🔻', kind: 'vheat', cd: PET_CD_SEC(1.5), range: 900, fxEl: 'FIRE',
+  desc: '头顶燃起 V 字火焰，朝最近的敌人冲刺 3 秒；期间**自动吸引**附近敌人，并**每 0.5 秒**对身边敌人造成 1.8× 宝可梦攻击 · ' + petCdText(PET_CD_SEC(1.5)),
   vheat: {
     dur: 3,               // 冲刺持续 3 秒（用户指定）
     /* 🏃 冲刺速度：用户 2026-10 追加「冲刺时会加快比克提尼的移动速度 200%」
        → = 比克提尼移速 250 × (1 + 200%) = **750 px/s**（写成表达式，改移速时它会自己跟着走） */
     spd: 250 * 3,
-    r: 96,                // 伤害半径
-    tick: 0.5,            // 每 0.5 秒结算一次
-    tickMul: 1,           // 每跳 = 宝可梦攻击力 × 1
+    /* 🎯 伤害半径 = **150px**（用户 2026-10：「攻击范围判定太小，改为 150px 左右」；旧值 96） */
+    r: 150,
+    tick: 0.5,            // 每 0.5 秒结算一次（用户口径）
+    tickMul: 1.8,         // 每跳 = 宝可梦攻击力 × 1.8（用户 2026-10：「伤害改为 x1.8」；旧值 1）
     pullR: 330,           // 吸引半径
     pullSpd: 210,         // 吸引速度（敌人被拉向 V 热焰）
     turn: 4.0,            // 冲刺方向每帧朝最近敌人转向的速率（rad/s）
+    /* 🔻 头顶 V 字的大小 = **宝可梦模型本身的 2 倍**（用户 2026-10：「头顶的 V 字不够大」）。
+       模型在屏幕上的高度 = `PET_META[形态][动作].sh × u.petScale`（比克提尼 idle = 48 × 1.67 ≈ 80px）——
+       ⚠️ 用 `sh`（帧高）**不是** `PET_ATLAS` 那个整张图集的高；也别写死像素，否则小图集和大图集的宝可梦看起来差一倍。
+       **V 的视觉高度 = `arm × (1 + vGradK)`**（上臂 + 下臂，量的是**包围盒**不是臂长）：
+       反解「= 模型高 × 2」→ `armK = 2 / 1.8 ≈ 1.11`（配 `vGradK = 0.8`）。
+       宽度 = `2 × spread` ≈ 模型 ×1.9（配合高度，看起来是"两倍大"的 V 而不是一根细线）。
+       ⚠️ 第一版把 `armK` 写成 1.0、`vUpK` 写成 0.45，用绘制代理量出来只有 103px（目标 160）——
+          改这两个系数时**必须用 `tools/_verify-vheat-size.js` 量一遍**，别凭感觉。
+       全部按 `u` 实时算 → 换形态 / 进化 / 换动作自动跟着变。 */
+    vArmK: 1.27,          // V 单臂长（上臂）= 模型高 × 这个数
+    vSpreadK: 1.09,       // V 两侧展开 = 模型高 × 这个数
+    vUpK: 0.25,           // V 的中心挂在脚下的高度 = 模型高 × 这个数（≈ 头顶）
+    vGradK: 0.8,          // 下臂 / 上臂 的比例（V 的视觉高 = arm × (1 + 它)）
     fxK: 5
   }
 };
@@ -7063,9 +7093,10 @@ const PET_FORMSKILL_SYLVEON = [
     desc: '正前方 120° 扇形（射程 ' + 375 + ' = 强力鞭打同款）：每 0.5 秒对扇形里每个敌人造成 宝可梦攻击力 ×2 的伤害；' +
       '被这一招击败的敌人有 5% 概率被夺舍（倒戈成友军 · Boss 免疫）',
     sector: { r: 375, arc: Math.PI * 2 / 3, tick: 0.5, mul: 2, charm: 0.05, fxK: 6 } },
-  { id: 'moonblast', name: '月亮之力', icon: '🌙', kind: 'moons', cd: 1, range: 900, fxEl: 'FAIRY',
+  { id: 'moonblast', name: '月亮之力', icon: '🌙', kind: 'moons', cd: PET_CD_SEC(1), range: 900, fxEl: 'FAIRY',
     desc: '一次放出三个圆形月亮，自动追踪敌人：碰到就炸开 ' + Math.round(150 * 1.5 * 1.5) + ' 半径的大范围（= 破灭之愿★ 的大小）·' +
-      ' 爆炸伤害 = 宝可梦伤害 ×10 · ' + petCdText(1),
+      ' 爆炸伤害 = 宝可梦伤害 ×10 · ' + petCdText(PET_CD_SEC(1)),
+    /* ⏱️ 出手间隔 = **1 秒**（用户 2026-10 指定）→ 内部 `cd` 用 `PET_CD_SEC(1)` 换算，别写死 2。 */
     moons: { n: 3, r: 337.5, mul: 10, spd: 520, boom: 150 * 1.5 * 1.5, fxK: 6 } }
 ];
 /* 👻 苍炎刃鬼（937）：悔念剑（**大斩刀**那套：蓄力 0.5 秒甩半圆 · 范围 ×0.8 ·
@@ -8386,35 +8417,66 @@ function updatePetVHeats(dt) {
   petVHeats = petVHeats.filter(c => !c.dead);
 }
 /* Ｖ热焰的「V 字火焰」：两道斜线在头顶拼成一个 V（在宝可梦身上画，不在实体上 —— 实体一直在移动） */
+/* 🔻 **Ｖ热焰的「V 字火焰」**：大小 = **宝可梦模型本身的 2 倍**（用户 2026-10 要求「头顶的 V 字不够大」）。
+   模型在屏幕上的高度 = `PET_META[形态][当前动作].sh × u.petScale`（例：比克提尼 idle 48 × 1.67 ≈ 80px）
+   → V 的臂长 / 展开 / 挂高都按它乘系数（`V.vScaleK / vSpreadK / vUpK`），**换形态或进化会自动跟着变**。
+   ⚠️ 别写死像素：写死的话 24×48 的小图集（比克提尼）和 40×48 的（基拉祈）看起来差一倍。 */
+function vheatModelH(u) {
+  const fk = u && u.petForm ? u.petForm : petFormKey(u ? u.petId : 'victini');
+  const anim = (PET_META[fk] && PET_META[fk][(u && u.petA) || 'idle']) ? u.petA : 'idle';
+  const M = (PET_META[fk] || {})[anim] || (PET_META[fk] || {}).idle || null;
+  const sh = M ? M.sh : 48;
+  return sh * ((u && u.petScale) || 1.67);
+}
 function drawPetVHeats() {
   if (!petVHeats.length) return;
   for (const c of petVHeats) {
+    const V = c.sk.vheat;
     const fade = Math.max(0.2, 1 - c.t / c.dur);
-    const w = 15 + 6 * Math.sin(time * 18);
+    const mh = vheatModelH(c.u);                    // 模型高度（屏幕像素）
+    const arm = mh * (V.vArmK || 1.235);            // V 单臂长度（上臂）
+    const spread = mh * (V.vSpreadK || 0.70);       // V 两侧展开
+    const up = mh * (V.vUpK || 0.45);               // V 挂在脚下的高度（≈ 头顶）
+    const lowK = (V.vGradK || 0.62);                // 下臂比例
+    const flick = 1 + 0.08 * Math.sin(time * 18);   // 火苗抖动
     ctx.save();
-    ctx.translate(c.x, c.y - 30);
-    ctx.rotate(c.ang + Math.PI / 2);          // V 的开口朝冲刺方向
+    ctx.translate(c.x, c.y - up);
+    ctx.rotate(c.ang + Math.PI / 2);                // V 的开口朝冲刺方向
     ctx.lineCap = 'round';
+    ctx.scale(flick, flick);
     for (const side of [-1, 1]) {
-      const gr = ctx.createLinearGradient(0, -w * 1.7, side * w, w * 1.1);
-      gr.addColorStop(0, 'rgba(255,236,170,' + (0.95 * fade).toFixed(2) + ')');
-      gr.addColorStop(0.55, 'rgba(255,140,40,' + (0.85 * fade).toFixed(2) + ')');
-      gr.addColorStop(1, 'rgba(200,40,0,0)');
+      const gr = ctx.createLinearGradient(0, -arm, side * spread, arm * lowK);
+      gr.addColorStop(0, 'rgba(255,246,214,' + (0.98 * fade).toFixed(2) + ')');
+      gr.addColorStop(0.35, 'rgba(255,206,96,' + (0.95 * fade).toFixed(2) + ')');
+      gr.addColorStop(0.7, 'rgba(255,132,32,' + (0.85 * fade).toFixed(2) + ')');
+      gr.addColorStop(1, 'rgba(190,36,0,0)');
       ctx.strokeStyle = gr;
-      ctx.lineWidth = 9;
-      ctx.shadowColor = '#ff9d3a'; ctx.shadowBlur = 18;
+      ctx.lineWidth = Math.max(6, mh * 0.13);       // 笔画粗细也跟着模型走
+      ctx.shadowColor = '#ff9d3a'; ctx.shadowBlur = 26;
       ctx.beginPath();
-      ctx.moveTo(0, -w * 1.7);
-      ctx.lineTo(side * w, w * 1.1);
+      ctx.moveTo(0, -arm * flick);
+      ctx.lineTo(side * spread, arm * lowK);
+      ctx.stroke();
+    }
+    /* 内芯亮线（看起来是"火焰"而不是一条光带） */
+    ctx.shadowBlur = 12;
+    ctx.strokeStyle = 'rgba(255,252,236,' + (0.75 * fade).toFixed(2) + ')';
+    ctx.lineWidth = Math.max(2, mh * 0.035);
+    for (const side of [-1, 1]) {
+      ctx.beginPath();
+      ctx.moveTo(0, -arm * flick * 0.94);
+      ctx.lineTo(side * spread * 0.92, arm * lowK * 0.9);
       ctx.stroke();
     }
     ctx.restore();
-    /* 脚下的灼烧环（每 0.5 秒那一跳的视觉提示） */
-    const k = 1 - Math.max(0, c.tick) / c.sk.vheat.tick;
+    /* 脚下的灼烧环（每跳一次的视觉提示）——半径直接用判定半径，**所见即所得** */
+    const k = 1 - Math.max(0, c.tick) / V.tick;
     ctx.save();
-    ctx.globalAlpha = 0.5 * fade;
-    ctx.strokeStyle = '#ffb066'; ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.ellipse(c.x, c.y, c.sk.vheat.r * (0.5 + 0.5 * k), c.sk.vheat.r * 0.42 * (0.5 + 0.5 * k), 0, 0, TAU); ctx.stroke();
+    ctx.globalAlpha = 0.55 * fade;
+    ctx.strokeStyle = '#ffb066'; ctx.lineWidth = 5;
+    ctx.beginPath(); ctx.ellipse(c.x, c.y, V.r * (0.55 + 0.45 * k), V.r * 0.42 * (0.55 + 0.45 * k), 0, 0, TAU); ctx.stroke();
+    ctx.globalAlpha = 0.3 * fade;
+    ctx.beginPath(); ctx.ellipse(c.x, c.y, V.r, V.r * 0.42, 0, 0, TAU); ctx.stroke();
     ctx.restore();
   }
 }
@@ -28869,6 +28931,14 @@ window.__musouAllyHp = (i, v) => { const a = allyUnits[i]; if (!a || a.dead) ret
 window.__musouAllyInv = (i, v) => { const a = allyUnits[i]; if (!a || a.dead) return -1; if (typeof v === 'number') a.invT = Math.max(0, v); return +(a.invT || 0).toFixed(2); }; // 测试钩子：读取/设定部署单位无敌剩余秒数
 window.__musouAllyHurt = (i, dmg) => { const a = allyUnits[i]; if (!a || a.dead) return -1; hurtAlly(a, dmg === undefined ? 10 : dmg, 0, 0); return Math.round(a.hp); }; // 测试钩子：直接对部署单位造成伤害（验证无敌）
 window.__musouAllyList = () => allyUnits.filter(u => !u.dead).map(u => ({ k: u.kind, hp: Math.round(u.hp), x: Math.round(u.x), y: Math.round(u.y) })); // 测试钩子：当前部署单位
+/* 🧪 测试钩子：在场**宝可梦**的出手读数 —— `atkT` 就是「距离下一次出手还有几秒」，
+   而出招那一刻它会被设成 `petSkillCd(SK) / petRateMul()`，**那个数就是两次出手的间隔**。
+   用途：核对「某招每 N 秒一次」（比"跑 10 秒数出手次数"稳得多，不受目标/切招/进化链干扰）。 */
+window.__musouPetAtk = () => allyUnits.filter(u => !u.dead && u.kind === 'pet')
+  .map(u => ({ petId: u.petId, skill: petSkillOf(u.petId).id, atkT: +(u.atkT || 0).toFixed(3), cd: petSkillCd(petSkillOf(u.petId)), rateMul: petRateMul() }));
+/* 🧪 测试钩子：**只画 Ｖ热焰的 V 字那一层**（不跑整帧）。
+   用途：用绘制代理量 V 字的真实包围盒（整帧里还有别的 stroke，混在一起量不准 —— 本轮踩过）。 */
+window.__musouDrawVHeatOnly = () => { drawPetVHeats(); return petVHeats.length > 0; };
 window.__musouEnemy = (dx, dy, type) => { // 测试钩子：在玩家附近放一只会正常行动的敌人（索敌/假人优先级探针）
   if (state !== 'play' || !p.alive) return -1;
   const e = spawnEnemy(type || 'grunt');
