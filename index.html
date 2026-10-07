@@ -5354,9 +5354,9 @@ const WISH_LV_BONUS = 20;      // 🌠 奇物·千年之愿：基拉祈**当前�
    🔥 比克提尼（494）= 用户 2026-10 新增的第四只（技能：魔法火焰 / 意念头锤 / 50 级 V 热焰）。 */
 const STAR_PETS = ['jirachi', 'shaymin', 'zeraora', 'victini'];
 const ZERA_ART = 'windflash';      // ⚡ 捷拉奥拉的专属奇物「风来城的闪光」（另外几件是 'wish' / 'gracidea'）
-/* 🔥 比克提尼**没有专属奇物**（用户没给）→ 这里不给它挂 `STAR_ART` 键，
-   `STAR_ART['victini']` 就是 undefined → `artGot(undefined)` 恒假 → 它只吃幻之助战层数的等级（50 级封顶）。 */
-const STAR_ART = { jirachi: 'wish', shaymin: 'gracidea', zeraora: ZERA_ART };   // 各自的专属奇物（拿到就 +20 级）
+const VICT_ART = 'victstar';       // 🔥 比克提尼的专属奇物「胜利之星」（等级 +20 并解锁 Ｖ热焰☆）
+/* 🔥 比克提尼**有专属奇物了**（用户 2026-10 追加）→ 和另外三只一样挂进 `STAR_ART`（拿到就 +20 级）。 */
+const STAR_ART = { jirachi: 'wish', shaymin: 'gracidea', zeraora: ZERA_ART, victini: VICT_ART };   // 各自的专属奇物（拿到就 +20 级）
 /* 📛 幻兽面板上那句「等级50级时学会「X」,专属奇物「Y」。」的**唯一数据源**（加幻兽时在这里加一行）。
    ⚠️ 以前是内联的三元表达式（`id === 'jirachi' ? … : (id === 'shaymin' ? … : …)`）——
       加第四只比克提尼时**必然落到 else 里显示捷拉奥拉那套文案**（用户报过：比克提尼写着「等离子闪电拳 / 风来城的闪光」）。
@@ -6801,7 +6801,10 @@ const PET_SKILL_VHEAT = {
     /* 🎯 伤害半径 = **150px**（用户 2026-10：「攻击范围判定太小，改为 150px 左右」；旧值 96） */
     r: 150,
     tick: 0.5,            // 每 0.5 秒结算一次（用户口径）
-    tickMul: 1.8,         // 每跳 = 宝可梦攻击力 × 1.8（用户 2026-10：「伤害改为 x1.8」；旧值 1）
+    tickMul: 2.2,         // 每跳 = 宝可梦攻击力 × **2.2**（用户 2026-10：「伤害提高至 x2.2」；旧值 1 → 1.8 → 2.2）
+    /* 💥 冲刺**终点**的额外爆炸（只有 ☆ 版有；普通版 `boomMul: 0` → 不炸，见 `updatePetVHeats`） */
+    boomMul: 0,           // 终点爆炸伤害 = 宝可梦攻击力 × 这个数
+    boomR: 150,           // 终点爆炸半径（跟伤害半径同档）
     pullR: 330,           // 吸引半径
     pullSpd: 210,         // 吸引速度（敌人被拉向 V 热焰）
     turn: 4.0,            // 冲刺方向每帧朝最近敌人转向的速率（rad/s）
@@ -6818,6 +6821,31 @@ const PET_SKILL_VHEAT = {
     vSpreadK: 1.09,       // V 两侧展开 = 模型高 × 这个数
     vUpK: 0.25,           // V 的中心挂在脚下的高度 = 模型高 × 这个数（≈ 头顶）
     vGradK: 0.8,          // 下臂 / 上臂 的比例（V 的视觉高 = arm × (1 + 它)）
+    fxK: 5
+  }
+};
+/* 🔻 **Ｖ热焰☆**（用户 2026-10 新增 · 由奇物「胜利之星」解锁）——
+   ⚠️ 按铁律**独立写一整份**（不是"引用普通版再改两个字段"）：与普通版的差别就三条，
+      都写在这里，改普通版不会牵动它、改它也不会牵动普通版。
+   三条差别：① 每跳伤害 ×2.5（普通版 ×2.2）
+             ② 冲刺移速 = 比克提尼的 **5 倍**（普通版 3 倍）
+             ③ **冲刺终点额外爆炸**：宝可梦攻击 ×8（普通版不炸） */
+const PET_SKILL_VHEAT_STAR = {
+  id: 'vheatstar', name: 'Ｖ热焰☆', icon: '🔻', kind: 'vheat', cd: PET_CD_SEC(1.5), range: 900, fxEl: 'FIRE',
+  desc: '头顶燃起 V 字火焰，朝最近的敌人冲刺 3 秒；期间**自动吸引**附近敌人，并**每 0.5 秒**对身边敌人造成 2.5× 宝可梦攻击；'
+    + '冲刺**终点额外爆炸**：半径 ' + 150 + ' 内造成 8× 宝可梦攻击 · 冲刺移速 = 比克提尼的 5 倍 · ' + petCdText(PET_CD_SEC(1.5)),
+  vheat: {
+    dur: 3,
+    spd: 250 * 5,         // 🏃 冲刺移速 = 比克提尼移速 250 × 5 = 1250 px/s（用户口径「移速加成改为比克提尼的 5 倍」）
+    r: 150,               // 伤害半径同普通版（150px）
+    tick: 0.5,
+    tickMul: 2.5,         // ① 每跳 = 宝可梦攻击力 × 2.5
+    boomMul: 8,           // ③ 终点爆炸 = 宝可梦攻击力 × 8
+    boomR: 150,
+    pullR: 330,
+    pullSpd: 210,
+    turn: 4.0,
+    vArmK: 1.27, vSpreadK: 1.09, vUpK: 0.25, vGradK: 0.8,   // V 字尺寸与普通版一致（都是模型高的 2 倍）
     fxK: 5
   }
 };
@@ -8245,7 +8273,7 @@ function updatePetMoons(dt) {
    ============================================================ */
 let petTrioFlames = [];   // 🔥 魔法火焰的火团：{x,y,vx,vy,spd,ang,r,boomR,dmg,el,owner,t,life,dead}
 let petVHeats = [];       // 🔥Ｖ热焰的冲刺体：{u,x,y,ang,t,dur,tick,sk,el,dead}
-let dbgTrioFlames = 0, dbgTrioBooms = 0, dbgVHeatTicks = 0, dbgVHeatPulls = 0;   // 诊断/测试读数
+let dbgTrioFlames = 0, dbgTrioBooms = 0, dbgVHeatTicks = 0, dbgVHeatPulls = 0, dbgVHeatBooms = 0;   // 诊断/测试读数（最后一个是 ☆ 版的终点爆炸次数）
 
 /* ── 🔥 魔法火焰：三颗火团（**从自身三个方位**射出，各自追最近的敌人，命中即爆）──────────────
    方位口径（用户原话「从自身的上，左下，右下，三个方位」）：
@@ -8367,6 +8395,28 @@ function updatePetVHeats(dt) {
     c.t += dt;
     if (c.t >= c.dur) {
       c.dead = true;
+      /* 💥 ☆ 版：**冲刺终点额外爆炸**（`boomMul > 0` 才有；普通版是 0 → 只散个火花） */
+      if (V.boomMul > 0) {
+        const bd = petHitDmg((c.u && c.u.petId) || 'victini', V.boomMul, c.sk);
+        const R = V.boomR || V.r;
+        let hit = 0;
+        for (const e of enemies) {
+          if (e.dead) continue;
+          const dx = e.x - c.x, dy = e.y - c.y, dd = Math.hypot(dx, dy) || 1;
+          if (dd > R + e.r) continue;
+          hitEnemy(e, dx / dd, dy / dd, 420, bd);
+          hit++;
+        }
+        dbgVHeatBooms++;
+        dbgPetMelee += Math.max(1, hit);
+        fxPush(c.sk.fxEl || 'FIRE', 'boom', c.x, c.y, 2.6, 0, 0, 0, 0.55);
+        fxPush(c.sk.fxEl || 'FIRE', 'range', c.x, c.y, 7, 0, 0, 0, 0.45);
+        rings.push({ x: c.x, y: c.y, r: 18, vr: 1100, life: 0.5, max: 0.5, color: '#ffd166', width: 12 });
+        rings.push({ x: c.x, y: c.y, r: 40, vr: 620, life: 0.6, max: 0.6, color: '#fff3c4', width: 6 });
+        burst(c.x, c.y, 40, '#ffb066', 620);
+        flashG = Math.max(flashG, 0.2); shake = Math.max(shake, 9);
+        sfx.big ? sfx.big() : sfx.hit();
+      }
       burst(c.x, c.y, 26, '#ff9d3a', 520);
       rings.push({ x: c.x, y: c.y, r: 14, vr: 760, life: 0.4, max: 0.4, color: '#ffb066', width: 8 });
       continue;
@@ -13582,7 +13632,9 @@ function roleBanArts(r) {
   /* 🗡️ 武器大师：同样禁 无双秘籍 / 哈姆；反过来「买一送一」是武器大师专属（其他职业禁选） */
   if (!r && isWM()) out.push('scroll', 'hamu');
   if (!r && !isWM()) out.push('buy1get1', 'nohand');   // 🗡️「买一送一」「骑士不徒手而亡」都是武器大师专属
-  if (!r && !isTrainer()) out.push('wish', 'gracidea', ZERA_ART, PRIMAL_ART);   // 🧢「千年之愿」「葛拉西蒂亚花」「原始回归」都是训练家专属（别的职业一律禁选）   // 🧢「千年之愿」「原始回归」都是训练家专属（别的职业一律禁选）
+  /* 🧢 幻兽专属奇物（千年之愿 / 葛拉西蒂亚花 / 风来城的闪光 / **胜利之星**）都是**训练家专属**：
+     别的职业一律禁选。⚠️ 加新的幻兽专属奇物时**必须加进这一行**（漏了就会在战士/法师的池子里刷出来）。 */
+  if (!r && !isTrainer()) out.push('wish', 'gracidea', ZERA_ART, VICT_ART, PRIMAL_ART);
   return out;
 }
 const ALL_ROLES = ['warrior', 'archer', 'mage'];
@@ -13774,11 +13826,13 @@ function shopArtPool() {
   /* 🌟 原始回归：**队里有神兽之后**才可能出现在商店（没在第 25 波拿也没关系 —— 用户要求「后面也可以拿到」）
      ⚠️⚠️ 幻兽专属奇物也必须在这里过滤！用户 2026-10 报的 bug：「商店里还能刷到**别的幻兽**的专属奇物」——
         因为这套过滤原来只写在 `artPickPool()`（波次奇物池）里，商店池漏了。
-        **两个池子必须都过同一套判据**（选了基拉祈 → 只出千年之愿；谢米 → 只出葛拉西蒂亚花；捷拉奥拉 → 只出风来城的闪光）。 */
+        **两个池子必须都过同一套判据**（选了基拉祈 → 只出千年之愿；谢米 → 只出葛拉西蒂亚花；捷拉奥拉 → 只出风来城的闪光；
+     比克提尼 → 只出胜利之星）。⚠️ 加新幻兽专属奇物时**两个池子都要加一行**（这里 + `artPickPool`）。 */
   return Object.keys(ART_DEFS).filter(id => !p.art[id] && !ban[id] && !roleBan.has(id) && id !== 'rainkeep'
     && !(id === 'scroll' && p.art.hamu) && (id !== PRIMAL_ART || !!primalOwner())
     && !(id === 'wish' && starNow !== 'jirachi')
     && !(id === 'gracidea' && starNow !== 'shaymin')
+    && !(id === VICT_ART && starNow !== 'victini')
     && !(id === ZERA_ART && starNow !== 'zeraora'));   // 哈姆 ↔ 无双秘籍 互斥；雨一直下不进商店
 }
 /* 自选奇物：把描述里的 markdown 粗体标记去掉，方便直接贴进按钮 */
@@ -14439,6 +14493,9 @@ const ART_DEFS = {
   gracidea:  { name:'葛拉西蒂亚花', icon:'🌸', img:'GRACIDEA_FLOWER',   // 🌸 图标：HTML 场景用素材图（artIcon 走 img），canvas 飘字仍用纯文本 icon
     desc:'训练家专属,花之乐园的珍奇之花...谢米的等级提升20级,并且谢米会转化为天空形态。', start:0, w15:0 },
   wish:      { name:'千年之愿', icon:'🌠', desc:'训练家专属,沉睡千年,只为见你七天...基拉祈的等级提升20级,并且当基拉祈学会「破灭之愿」时，可以增强技能的效果。', start:0, w15:0 },
+  /* 🔥 胜利之星（用户 2026-10 新增）：比克提尼的专属奇物 —— 与 千年之愿 / 葛拉西蒂亚花 / 风来城的闪光 同款结构
+     （等级 +20，并把 50 级的「Ｖ热焰」自动升级成 ☆ 版，见 `petSkillList` 的 victini 分支）。 */
+  victstar:  { name:'胜利之星', icon:'🔻', desc:'训练家专属,胜利的力量！分享给你...比克提尼的等级提高20级,并且当比克提尼学会「Ｖ热焰」时，可以增强技能的效果。', start:0, w15:0 },
   /* 🌟 原始回归（训练家专属 · **第 25 波必刷**）：图标按队里那只神兽换成朱红 / 靛蓝 / 青绿宝珠（见 artIcon） */
   primal:    { name:'原始回归', icon:'💠', desc:'训练家专属,散发着三色光辉的宝珠...可以让丰缘的传说宝可梦们进行原始回归！', start:0, w15:0, primal:1 }
 };
@@ -14946,6 +15003,7 @@ function artPickPool(wv) {
     if (id === 'wish' && starChoice() !== 'jirachi') continue;        // 🌠 千年之愿：幻之助战选的是基拉祈才刷
     if (id === 'gracidea' && starChoice() !== 'shaymin') continue;    // 🌸 葛拉西蒂亚花：选的是谢米才刷
     if (id === ZERA_ART && starChoice() !== 'zeraora') continue;      // ⚡ 风来城的闪光：选的是捷拉奥拉才刷
+    if (id === VICT_ART && starChoice() !== 'victini') continue;      // 🔥 胜利之星：选的是比克提尼才刷
     /* 🌟 原始回归：**拿到任意一只神兽之后**才进奇物库（在那之前刷出来毫无意义）；
        第 25 波必定刷（见 pickArts），**没在那儿拿的话后面照样能抽到 / 买到**（用户要求） */
     if (id === PRIMAL_ART && !primalOwner()) continue;
@@ -28653,6 +28711,7 @@ window.__musouDebug = () => ({ kills, score, coins, wave, state, alive: p.alive,
         本轮先后误挂到 `petShotList` 与 `__musouTrainerInfo`，测试一路读到 undefined，白查两轮。 */
   trioFlames: dbgTrioFlames, trioBooms: dbgTrioBooms, trioFlamesLive: petTrioFlames.length,
   vheatTicks: dbgVHeatTicks, vheatPulls: dbgVHeatPulls, vheatsLive: petVHeats.length,
+  vheatBooms: dbgVHeatBooms,   // 💥 Ｖ热焰☆ 的**终点爆炸**次数（普通版恒 0）
   confirmOpen: startConfirm ? 1 : 0, coldReady: coldChargeReady() ? 1 : 0, noDashT: +(p.noDashT || 0).toFixed(2),
   /* 🟢💡 新 Boss 的场地状态：黏糊糊场地（移速 −50%）/ 致盲程度 */
   goo: slimeFieldOn() ? 1 : 0, gooMul: gooSlowMul(),
@@ -30216,7 +30275,9 @@ function skDump(s) {
     trioflame: s.trioflame ? { n: s.trioflame.n, mul: s.trioflame.mul, spd: s.trioflame.spd, homing: s.trioflame.homing,
       life: s.trioflame.life, r: s.trioflame.r, boomR: s.trioflame.boomR, spread: s.trioflame.spread.slice() } : null,
     vheat: s.vheat ? { dur: s.vheat.dur, spd: s.vheat.spd, r: s.vheat.r, tick: s.vheat.tick, tickMul: s.vheat.tickMul,
-      pullR: s.vheat.pullR, pullSpd: s.vheat.pullSpd, turn: s.vheat.turn } : null,
+      pullR: s.vheat.pullR, pullSpd: s.vheat.pullSpd, turn: s.vheat.turn,
+      boomMul: s.vheat.boomMul || 0, boomR: s.vheat.boomR || 0,   // 💥 ☆ 版的终点爆炸（普通版是 0）
+      vArmK: s.vheat.vArmK || 0, vSpreadK: s.vheat.vSpreadK || 0 } : null,
     pool: (s.shot && s.shot.pool) ? { r: s.shot.pool.r, life: s.shot.pool.life, tick: s.shot.pool.tick, mul: s.shot.pool.mul, slowK: s.shot.pool.slowK } : null,
     jet: s.jet ? { len: s.jet.len, w: s.jet.w, tick: s.jet.tick, mul: s.jet.mul || 0, rest: s.jet.rest, secs: s.jet.secs, flat: s.jet.flat || 0, slowK: s.jet.slowK === undefined ? 0 : s.jet.slowK, slowT: s.jet.slowT || 0 } : null,
     aura: s.aura ? { r: s.aura.r, tick: s.aura.tick, dmg: s.aura.dmg || 0, mul: s.aura.mul || 0, noBurn: s.aura.noBurn || 0 } : null,   // 🌡️ 身周持续伤害（🌋 地震⭐ 标 noBurn=1：只掉血不点火）
@@ -31272,7 +31333,12 @@ function petSkillList(id) {
      ⚠️⚠️ 所以这条判断**只能放在这里（最前面）**：本轮先写在 zeraora 旁边，被上面的 `return` 整段跳过，白查两轮。
      ⚠️ 捷拉奥拉 / 谢米不需要这样处理的原因：它们**不在 V2 表里**，天然会走到下面的分支。 */
   if (id === 'victini') {
-    return (starLv('victini') >= JIRACHI_TOP_LV ? petSkillBase('victini', 1) : petSkillBase('victini', 0)).slice();
+    /* 50 级（幻之助战满层）解锁 Ｖ热焰；拿到专属奇物「胜利之星」→ 自动升级成 **Ｖ热焰☆** */
+    const list = (starLv('victini') >= JIRACHI_TOP_LV ? petSkillBase('victini', 1) : petSkillBase('victini', 0)).slice();
+    if (starLv('victini') >= JIRACHI_TOP_LV && artGot(VICT_ART)) {
+      for (let i = 0; i < list.length; i++) if (list[i] && list[i].id === 'vheat') list[i] = PET_SKILL_VHEAT_STAR;
+    }
+    return list;
   }
   /* 🧬 单一数据源：V2 里有的直接用（每只宝可梦独立副本 ✓） */
   try {
