@@ -9972,8 +9972,9 @@ function petCatchWaveEnd(wave) {
    · 买下 = **当场给对应的宝可梦用掉**（本作没有背包界面）：写 `p.petEvoPick[物种] = 形态 key`（随存档）→
      `petFormKey/petStageOf/petSummonHp/petSummonDmg` 立刻换成进化形态那套（生命/伤害 ×1.5，与别的进化同口径）。
      进化后的**技能暂时不变**（用户说明：后续再补）→ `PET_SKILLS_V2.eevee/charcadet` 三段仍是同一张表。
-   · 刷哪几件：**看第 15 波抓到了谁** —— 选了伊布 → 三种进化石；选了炭小侍 → 两件铠甲。
-     （判断用「队伍里有没有它」—— 这两只只可能来自第 15 波那次二选一，所以等价于「第 15 波选的是谁」）
+   · 刷哪几件：**看第 15 波抓到了谁** —— 选了伊布 → 三种进化石；选了炭小侍 → 两件铠甲；
+     🦗 选了飞天螳螂 → 金属膜 / 黑奇石。
+     （判断用「队伍里有没有它」—— 这几只只可能来自第 15 波那次多选一，所以等价于「第 15 波选的是谁」）
    ============================================================ */
 const PET_ITEM_COST = 5000;   // 每件 5000 金币（用户指定）
 const PET_ITEMS = [
@@ -9987,6 +9988,14 @@ const PET_ITEMS = [
   { id: 'metalcoat', name: '金属膜', img: 'METAL_COAT', forId: 'scyther', form: 'scizor', evo: '巨钳螳螂', dex: 212 },
   { id: 'blackaugurite', name: '黑奇石', img: 'BLACK_AUGURITE', forId: 'scyther', form: 'kleavor', evo: '劈斧螳螂', dex: 900 }
 ];
+/* 🔮 这件道具是**给谁用**的（商店那一栏的说明文案要写中文名）。
+   ⚠️⚠️ **唯一取名字点**：以前商店里写的是 `it.forId === 'eevee' ? '伊布' : '炭小侍'` 这种**写死的三元** ——
+      加到第三只（🦗 飞天螳螂）时它不会自动跟上，金属膜/黑奇石全被写成「给队伍里的炭小侍用」（用户 2026-10 报的截图）。
+      现在统一从 `PET_FORM_NAME[物种][0]` 取（形态名表的第一段 = 物种中文名），以后加道具不用再改文案。 */
+function petItemOwnerName(it) {
+  const arr = PET_FORM_NAME[it.forId];
+  return (arr && arr[0]) || it.forId;
+}
 /* 这家店该摆哪几件：训练家 · 队伍里有伊布/炭小侍 · **还没买过**（买过就整局不再刷）
    🎀 **伊布已经进化成仙子伊布（SYLVEON_LV 那条路）→ 水/雷/火之石一律不再售卖**（用户要求）：
    它已经不是「能选择进化方向的那只伊布」了，再卖石头没有意义（买了也不会生效）。 */
@@ -14136,7 +14145,7 @@ function shopPaint() {
         const img = (typeof PET_ITEM_IMG !== 'undefined' && PET_ITEM_IMG[it.img]) ? PET_ITEM_IMG[it.img] : '';
         const ic = img ? '<img class="up-ic-img" src="' + img + '" alt="">' : '🔮';
         mk(b, ic, it.name + ' · ' + PET_ITEM_COST + ' 金币',
-          '给队伍里的' + (it.forId === 'eevee' ? '伊布' : '炭小侍') + '用 → 进化成 ' + it.evo + '（No.' + it.dex + '）'
+          '给队伍里的' + petItemOwnerName(it) + '用 → 进化成 ' + it.evo + '（No.' + it.dex + '）'
           + (coins < PET_ITEM_COST ? '（金币不足）' : ''), coins < PET_ITEM_COST);
       }
     }
