@@ -20195,7 +20195,7 @@ function doStartGame(carry) {
    · 面板能做：选任意敌人 / 换形态 / 停止·开启敌人攻击 / 放无限血量假人并记秒伤总伤 /
      局内随便转职（转职 = 清空回初始状态后重开试验场）/ 开关自动攻击 / 升级 / 选奇物 / 选质变 / 一键满质变
    ============================================================ */
-const DEV_BUILD = true;   // ⚠️ 打包器（tools/build.js）会把这行换成 true 生成「开发者版」
+const DEV_BUILD = false;   // ⚠️ 打包器（tools/build.js）会把这行换成 true 生成「开发者版」
 const DEV_KEY = 'gear_musou_dev_v1';
 let devOn = 0;              // 1 = 开发者版本
 let devFoeAtk = 1;          // 试验场：敌人攻击动作（1 = 开 / 0 = 停）
