@@ -7744,10 +7744,38 @@ function chainRunClear() {
 function chainGrant() { if (!meta.chain) { meta.chain = 1; metaSave(); } }
 function shinyGot(id) { return !!(meta.shinyDex && meta.shinyDex[id]); }
 function shinyOn(id) { return !!(meta.shinyOn && meta.shinyOn[id]); }
+/* 📊 重复出闪记录（用户 2026-10 要求）：这只宝可梦**一共出过几次闪**。
+   ⚠️ 老存档（本功能之前）没有 `meta.shinyCnt`：**已收录的那只按 1 次算**（它毕竟出过一次闪），
+      没收录的算 0 —— 这样老玩家打开图鉴看到的是合理数字，而不是一片 0。 */
+function shinySeenCount(id) {
+  if (meta.shinyCnt && typeof meta.shinyCnt[id] === 'number') return Math.max(0, meta.shinyCnt[id] | 0);
+  return shinyGot(id) ? 1 : 0;
+}
+/* 出闪时 +1（返回加完之后的次数）。⚠️ 只在**真的看到闪光**时调，普通来访不加。
+   ⚠️⚠️ 这里读的是**表里的原始值**（不用 `shinySeenCount`）：后者带"没计数但图鉴里有 → 算 1"的老存档兜底，
+      而 `shinyRecord` 会**先写图鉴再调这里** —— 用兜底函数就会把兜底的 1 和这次的 1 加成 **2**
+      （本轮真踩过：一次出闪记成 2 次）。兜底只在**读给玩家看**的时候起作用。 */
+function shinyCountAdd(id) {
+  if (!meta.shinyCnt) meta.shinyCnt = {};
+  const cur = (typeof meta.shinyCnt[id] === 'number') ? (meta.shinyCnt[id] | 0) : 0;
+  const n = Math.min(SHINY_CNT_CAP, Math.max(0, cur) + 1);
+  meta.shinyCnt[id] = n;
+  return n;
+}
+/* 显示用：到顶（SHINY_CNT_CAP = 7）写成 "7+"，因为再往上记不下了（3 位二进制）。 */
+function shinyCountText(id) {
+  const n = shinySeenCount(id);
+  if (n <= 0) return '0';
+  return n >= SHINY_CNT_CAP ? (SHINY_CNT_CAP + '+') : String(n);
+}
 function shinyRecord(id) {
   if (!meta.shinyDex) meta.shinyDex = {};
   if (!meta.shinyOn) meta.shinyOn = {};
   const isNew = !meta.shinyDex[id];
+  /* 📊 重复出闪记录 +1（第一次也记 1）。
+     ⚠️ **必须在写图鉴之前调**：`shinySeenCount` 的兜底判据是"图鉴里有这只 → 算 1 次"，
+        先写图鉴会让兜底和这次的 +1 叠成 2（本轮真踩过）。 */
+  shinyCountAdd(id);
   meta.shinyDex[id] = 1;
   meta.shinyOn[id] = 1;          // 第一次遇到默认就启用（玩家可在图鉴里关掉）
   metaSave();
@@ -11902,6 +11930,15 @@ const SHINY_VISIT_T = 2.6;       // 来访的宝可梦在训练家身边停留�
 const SHINY_VISIT_T_SHINY = 5;   // ✨ 闪光版来访停留更久（用户要求：「若出现闪光宝可梦…停留时间增加至 5 秒」）
 const SHINY_TEXT_SIZE = 64;      // ✨ 闪光版来访的**巨大飘字**字号（用户要求：「巨大的飘字展示出闪啦！」）
 const SHINY_TEXT_LIFE = 1.8;     // 巨大飘字停留多久（秒）
+/* 📊 **重复出闪记录**（用户 2026-10 要求：「加入一个宝可梦重复出闪记录功能，在闪光图鉴中显示
+   已出过闪的宝可梦出现过多少次数」）—— 每只宝可梦出闪**总次数**，存在局外存档 `meta.shinyCnt`。
+   ⚠️ **可记录的历史深度 = 7 次**（到顶显示「7+」）：这个计数被塞进存档码里本来就有的
+      **预留段 `dexRes`（24 位）**，每只占 3 位 → 24 ÷ 3 = 8 只，前 8 只刷闪物种可记（含神兽）。
+      好处：**存档码布局一位都不用改**，老码（预留段全 0）也能照常导入。
+      要做到"每只都能记满"就得给每只更多位数，那会**动到既有布局 → 老码错位**（用户明确禁止），所以取 3 位。 */
+const SHINY_CNT_CAP = 7;         // 单只可记录的出闪次数上限（到顶显示 "7+"）
+const SHINY_CNT_BITS = 3;        // 每只占几位（= log2(CAP + 1)，0 = 还没出过闪）
+const SHINY_CNT_N = 8;           // 能记录的物种数 = floor(24 / 3)
 /* ✨ 刷闪！能刷到的物种（**等概率**，现在是 14 只）：十一只基础宝可梦 + 🌟 神兽三只
    （用户后来点名「固拉多，盖欧卡，烈空坐，也会进入刷闪的名单中」——
     它们的 `PET_FR[形态][1]` 闪光条带本来就随生成器一起出好了，所以直接列进来即可）。
@@ -15986,6 +16023,7 @@ const SHINY_SPECIES_NAME = { bulba: '妙蛙种子', charm: '小火龙', squirt: 
 window.__musouShinyInfo = () => ({
   species: SHINY_SPECIES.slice(), names: Object.assign({}, SHINY_SPECIES_NAME),
   got: SHINY_SPECIES.filter(shinyGot), on: Object.assign({}, meta && meta.shinyOn || {}),
+  count: (function(){ const o = {}; for (const id of SHINY_SPECIES) o[id] = shinySeenCount(id); return o; })(),   // 📊 出闪次数（重复出闪记录）
   cap: SHINY_HP_MUL
 });
 /* 🥚 彩蛋（用户要求）：闪光图鉴里按「小火龙 → 伊布 → 基拉祈 → 烈空坐」的顺序点**头像**
@@ -16020,15 +16058,26 @@ function renderShinyDex() {
   h += '<div class="cdx-sec">✨ 已收录 <b style="color:#ffe08a;">' + got + '</b> / ' + SHINY_SPECIES.length + ' 只闪光宝可梦' +
     '<small style="color:#a9c39a;font-weight:400;margin-left:8px;">训练家质变「✨ 刷闪！」每波清剿后会有宝可梦来访 · 遇到闪光即永久收录</small></div>';
   if (!got) h += '<div class="cdx-item"><span class="ic">✨</span><b>还没有遇到任何闪光</b><small>选「训练家」开局并拿到质变「✨ 刷闪！」，每波清剿后留意来访的那只宝可梦</small></div>';
+  /* 📊 重复出闪记录（用户 2026-10 要求）：这里显示**各只一共出过几次闪** */
+  const cntTotal = SHINY_SPECIES.reduce((a, id) => a + shinySeenCount(id), 0);
+  const cntMax = SHINY_SPECIES.reduce((a, id) => Math.max(a, shinySeenCount(id)), 0);
+  const cntTop = SHINY_SPECIES.filter(id => shinySeenCount(id) === cntMax && cntMax > 0)
+    .map(id => SHINY_SPECIES_NAME[id] + ' ×' + shinyCountText(id)).slice(0, 3).join(' · ');
+  h += '<div class="cdx-sec">📊 重复出闪记录 <b style="color:#ffe08a;">共 ' + cntTotal + ' 次</b>' +
+    (cntMax > 0 ? '<small style="color:#a9c39a;font-weight:400;margin-left:8px;">出得最多：' + cntTop + '</small>'
+      : '<small style="color:#a9c39a;font-weight:400;margin-left:8px;">同一只反复出闪会在这里累加</small>') + '</div>';
   for (const id of SHINY_SPECIES) {
     const has = shinyGot(id), on = shinyOn(id);
     const vN = chainVisitN(id);
     const vPct = Math.round(vN / CHAIN_GUARD * 100);
+    const seenN = shinySeenCount(id);                 // 📊 出闪次数（重复出闪记录）
     const picked = (p.chainRun && p.chainId === id);   // 🐞 只有**本局真的在用**连锁才显示「本局连锁目标」（失效后不再显示）
     const eggAble = CHAIN_EGG.indexOf(id) >= 0;
     h += '<div class="cdx-item"><span class="ic"><img class="pets-ic"' + (eggAble ? ' data-egg="' + id + '"' : '') + ' src="' + PET_HEAD[petFormKey(id)] + '" alt="" style="' + (eggAble ? 'cursor:pointer;' : '') + (has ? '' : 'filter:grayscale(1) brightness(.6);') + '"></span>' +
       '<b style="color:' + (has ? '#ffe08a' : '#8d8a77') + '">' + SHINY_SPECIES_NAME[id] + '</b>' +
       '<small>' + (has ? '✅ 已收录闪光' : '<span style="color:#8d8a77;">未遇到闪光</span>') +
+        (seenN > 0 ? ' <b style="color:#ffd166;">📊 出闪 ' + shinyCountText(id) + ' 次</b>' : ' <span style="color:#8d8a77;">📊 出闪 0 次</span>') +
+        (seenN >= SHINY_CNT_CAP ? '<span style="color:#8d8a77;">（到顶，只记到 ' + SHINY_CNT_CAP + '）</span>' : '') +
         '<br>🛡️ 保底 <b style="color:#8fd8ff;">' + vN + '</b>/' + CHAIN_GUARD +
         '<span style="display:inline-block;width:110px;height:6px;border-radius:4px;background:#1b2740;border:1px solid #3a5a8a;margin-left:6px;vertical-align:1px;overflow:hidden;">' +
         '<i style="display:block;height:100%;width:' + vPct + '%;background:linear-gradient(90deg,#7fd06a,#8fd8ff);"></i></span>' +
@@ -18707,7 +18756,7 @@ const CLASS_SETS = [
 /* 🌟 三套闪光套装**全部集齐**（战士 + 弓箭手 + 法师）→ 一次性 +20000 传承金币。
    `meta.setAll` 是本存档的一次性领取标记：**只有「🗑 清空存档」才会刷新**。 */
 const SET_ALL_REWARD = 20000;
-let meta = { v: 1, bank: 0, earned: 0, runs: 0, tree: {}, sets: {}, use: {}, shinyDex: {}, shinyOn: {} };
+let meta = { v: 1, bank: 0, earned: 0, runs: 0, tree: {}, sets: {}, use: {}, shinyDex: {}, shinyOn: {}, shinyCnt: {} };   // 📊 shinyCnt = 每只宝可梦的出闪次数（重复出闪记录）
 function metaLoad() {
   try {
     const s = (typeof localStorage !== 'undefined') ? localStorage.getItem(META_KEY) : null;
@@ -18716,6 +18765,13 @@ function metaLoad() {
   meta.tree = meta.tree || {}; meta.sets = meta.sets || {}; meta.use = meta.use || {};
   for (const n of META_TREE) if (typeof meta.tree[n.id] !== 'number' || meta.tree[n.id] < 0) meta.tree[n.id] = 0;
   for (const s of CLASS_SETS) { meta.sets[s.role] = meta.sets[s.role] ? 1 : 0; meta.use[s.role] = meta.use[s.role] ? 1 : 0; }
+  /* 📊 重复出闪记录：老存档**完全没有** `shinyCnt` → 已收录的那只按 **1 次**补上（见 `shinySeenCount` 的说明），
+     这样老玩家打开图鉴不会看到"已收录却是 0 次"这种自相矛盾的数字。 */
+  meta.shinyCnt = meta.shinyCnt || {};
+  for (const id of SHINY_SPECIES) {
+    const v = meta.shinyCnt[id];
+    meta.shinyCnt[id] = (typeof v === 'number') ? Math.max(0, Math.min(SHINY_CNT_CAP, v | 0)) : (shinyGot(id) ? 1 : 0);
+  }
   meta.bank = Math.max(0, meta.bank | 0);
   meta.egg = meta.egg ? 1 : 0;   // 图鉴隐藏彩蛋：每个存档只发一次
   meta.setAll = meta.setAll ? 1 : 0;   // 🌟 三职业套装集齐奖励：每个存档只发一次（删档才刷新）
@@ -18875,7 +18931,7 @@ const SAVE_SEG_BUILD = {
   treeRes: () => '0'.repeat(16),                                          // 预留（养成 / 技能书）
   dex: () => SHINY_SPECIES.map(id => shinyGot(id) ? '1' : '0').join('') + '0'.repeat(Math.max(0, 24 - SHINY_SPECIES.length)),
   dexOn: () => SHINY_SPECIES.map(id => shinyOn(id) ? '1' : '0').join('') + '0'.repeat(Math.max(0, 24 - SHINY_SPECIES.length)),
-  dexRes: () => '0'.repeat(24),                                           // 预留（图鉴）
+  dexRes: () => shinyCntBits(),                                           // 📊 重复出闪记录（前 8 只，每只 3 位）—— 不再全 0，但**布局长度不变**，所以老码照样能导入
   runs: () => savePad(meta.runs, 6),
   bank: () => savePad(meta.bank, 10),
   earned: () => savePad(meta.earned, 10),
@@ -18888,6 +18944,27 @@ const SAVE_SEG_BUILD = {
 function savePad(v, w) {
   const mx = Math.pow(10, w) - 1;
   return String(Math.max(0, Math.min(mx, Math.floor(Number(v) || 0)))).padStart(w, '0');
+}
+/* 📊 重复出闪记录 → 存档码的**预留段 `dexRes`（24 位）**：每只 3 位、最多 8 只（把次数按 3 位二进制拼起来）。
+   ⚠️⚠️ **布局一位都没改**（还是 24 位）→ 所以只需要在 `SAVE_SEG_BUILD` 里实现它，**不用新增布局代**，
+      老存档码照常导入（它们的这 24 位全是 0 → 回退成「已收录算 1 次」）。
+   ⚠️ 解出来是**十进制**（和整串一样是 0-9 字符），别写成二进制字符串 —— 整串会被换成 64 进制。 */
+function shinyCntBits() {
+  let v = 0;
+  for (let i = 0; i < SHINY_CNT_N; i++) {
+    const id = SHINY_SPECIES[i];
+    const n = Math.max(0, Math.min(SHINY_CNT_CAP, id ? shinySeenCount(id) : 0));
+    v = v * (SHINY_CNT_CAP + 1) + n;                    // 3 位 → 8 进制位（每位 0~7）
+  }
+  return String(v).padStart(24, '0');                   // 固定 24 位十进制（8 只 × 3 位）
+}
+/* 反向：把 24 位十进制解成每只的次数数组（索引 = SHINY_SPECIES 的下标） */
+function shinyCntParse(dig24) {
+  const out = [];
+  let v = Number(dig24);
+  if (!isFinite(v) || v < 0) v = 0;
+  for (let i = SHINY_CNT_N - 1; i >= 0; i--) { out[i] = v % (SHINY_CNT_CAP + 1); v = Math.floor(v / (SHINY_CNT_CAP + 1)); }
+  return out;
 }
 /* 摊平成一串十进制数字（每位一个字符，方便整体换 64 进制） */
 function saveDigits() {
@@ -18983,10 +19060,14 @@ function decodeSaveCode(code) {
     sets[c.role] = num('sets', i) ? 1 : 0;
     use[c.role] = sets[c.role] && num('setsUse', i) ? 1 : 0;
   });
+  /* 📊 重复出闪记录：从**预留段 `dexRes`（24 位）**里按 3 位一只解回来（前 8 只刷闪物种）。
+     ⚠️ 老存档码这一段全是 0 → 全部取到 0 → 上层 `applySaveCode` 会回退成「已收录算 1 次」，
+        所以老码导进来图鉴里的次数是合理的 1 次，而不是 0 次。 */
+  const cnt = shinyCntParse(dig.substr(OFF.dexRes ? OFF.dexRes.p : 0, 24));
   return {
     ok: 1, why: '', digits: dig, dataW: dataW,
     data: {
-      tree, dex, dexOn, sets, use,
+      tree, dex, dexOn, sets, use, cnt,
       runs: wide('runs'), bank: wide('bank'), earned: wide('earned'),
       egg: num('flag', 0), setAll: num('flag', 1),
       /* 🔗 刷闪连锁：槽位下标 → 宝可梦 id（越界/空位当没选）。
@@ -19001,10 +19082,17 @@ function applySaveCode(code) {
   const r = decodeSaveCode(code);
   if (!r.ok) return r;
   const d = r.data;
-  meta.tree = {}; meta.sets = {}; meta.use = {}; meta.shinyDex = {}; meta.shinyOn = {};
+  meta.tree = {}; meta.sets = {}; meta.use = {}; meta.shinyDex = {}; meta.shinyOn = {}; meta.shinyCnt = {};
   for (const n of META_TREE) meta.tree[n.id] = Math.max(0, Math.min(n.max, d.tree[n.id] || 0));
   meta.shinyDex = Object.assign({}, d.dex);
   meta.shinyOn = Object.assign({}, d.dexOn);
+  /* 📊 重复出闪记录：从存档码的**预留段 `dexRes`** 读回（每只 3 位，前 8 只）。
+     ⚠️ **老码这一段全是 0** → 直接取 0 会让「已收录却是 0 次」自相矛盾，
+        所以取 0 且图鉴里有这只时**兜底成 1 次**（它毕竟出过一次闪）。 */
+  SHINY_SPECIES.forEach((id, i) => {
+    const c0 = (d.cnt && d.cnt[i] > 0) ? (d.cnt[i] | 0) : 0;
+    meta.shinyCnt[id] = Math.min(SHINY_CNT_CAP, c0 > 0 ? c0 : (meta.shinyDex[id] ? 1 : 0));
+  });
   for (const c of CLASS_SETS) { meta.sets[c.role] = d.sets[c.role] ? 1 : 0; meta.use[c.role] = d.use[c.role] ? 1 : 0; }
   meta.runs = Math.max(0, d.runs | 0);
   meta.bank = Math.max(0, d.bank | 0);
@@ -29337,6 +29425,10 @@ window.__musouMeta = () => ({   // 当前传承存档快照
   setAll: meta.setAll ? 1 : 0, setOwnN: metaSetsOwned(), setAllReward: SET_ALL_REWARD
 });
 window.__musouMetaSet = (id, lv) => { if (id in meta.tree || META_TREE.some(n => n.id === id)) meta.tree[id] = Math.max(0, lv | 0); metaSave(); syncMetaBtn(); }; // 测试钩子：直接设定技能树等级
+/* 🧪 测试钩子：**重跑一次读档迁移**（`metaLoad`）。
+   用途：验证「老存档缺字段时的兼容迁移」——把 localStorage 里的字段抹掉，再调它，看补偿逻辑对不对
+   （如 📊 重复出闪记录：老存档没有 `shinyCnt` → 已收录的那只该被补成 1 次）。 */
+window.__musouMetaLoad = () => { metaLoad(); return true; };
 /* 🔗 刷闪连锁测试钩子（读 / 写次数与目标）—— 存档码要保住这两个字段，冒烟靠它们钉死 */
 window.__musouChainInfo = () => ({
   n: Math.max(0, meta.chain | 0),            // 可用连锁次数
@@ -29350,10 +29442,18 @@ window.__musouChainSet = (n, pick) => {      // 测试钩子：直接写连锁�
   metaSave();
   return window.__musouChainInfo();
 };
+/* 🔗 测试钩子：把**本局**标记成「正在用连锁」并锁定目标（`shinyMutWaveEnd` 认的就是 `p.chainRun/p.chainId`）。
+   正常流程里这两个字段是选训练家开局时设的，测试要单独验证"连锁只来访它"时用这个。 */
+window.__musouChainRun = (pick) => {
+  p.chainRun = (pick && SHINY_SPECIES.indexOf(pick) >= 0) ? 1 : 0;
+  p.chainId = p.chainRun ? pick : '';
+  return { chainRun: p.chainRun, chainId: p.chainId };
+};
 /* ✨ 闪光图鉴测试钩子 */
 window.__musouShinyDex = () => ({
   species: SHINY_SPECIES.slice(), names: Object.assign({}, SHINY_SPECIES_NAME),
   dex: Object.assign({}, meta.shinyDex || {}), on: Object.assign({}, meta.shinyOn || {}),
+  count: Object.assign({}, meta.shinyCnt || {}), cap: SHINY_CNT_CAP, tracked: SHINY_CNT_N,
   gotN: SHINY_SPECIES.filter(shinyGot).length, cap: SHINY_MUT_CAP,
   lv: shinyMutLv(), gold: shinyVisitGold(), chance: +shinyMutChance().toFixed(4),
   stayT: SHINY_VISIT_T, stayShinyT: SHINY_VISIT_T_SHINY, textSize: SHINY_TEXT_SIZE, textLife: SHINY_TEXT_LIFE,
@@ -29368,6 +29468,31 @@ window.__musouShinyDex = () => ({
 });
 window.__musouShinyToggle = (id) => shinyToggle(id);                 // 测试钩子：切某只的闪光外观
 window.__musouShinyRecord = (id) => shinyRecord(id);                 // 测试钩子：直接把某只记进图鉴（跳过随机）
+/* 📊 重复出闪记录（用户 2026-10）：读某只的出闪次数 / 直接设定次数（测到顶与存档码边界用）。
+   ⚠️ 设定值会**同时**把图鉴收录上（次数 > 0 就说明一定出过闪），否则会出现"记录了 5 次却没收录"的矛盾状态。 */
+window.__musouShinyCount = (id, v) => {
+  if (v === undefined) return shinySeenCount(id);
+  if (!meta.shinyCnt) meta.shinyCnt = {};
+  /* ⚠️ 传 **-1** = **把这个键删掉**，用来摆"真·老存档"的状态（老存档是**根本没有 `shinyCnt` 这个键**，
+     不是写着 0）—— 只有"键不存在"才会走 `shinySeenCount` 的兜底。写 0 是"确实一次没出过"。 */
+  if (v < 0) { delete meta.shinyCnt[id]; metaSave(); return shinySeenCount(id); }
+  const n = Math.max(0, Math.min(SHINY_CNT_CAP, v | 0));
+  meta.shinyCnt[id] = n;
+  if (n > 0) { if (!meta.shinyDex) meta.shinyDex = {}; meta.shinyDex[id] = 1; }
+  metaSave();
+  return n;
+};
+/* 测试钩子：把**重复出闪记录整体清干净**。
+   ⚠️⚠️ 必须**连图鉴收录一起清**：只清计数的话，`shinySeenCount` 的老存档兜底
+     （没计数但图鉴里有 → 算 1 次）会立刻把它读成 1，于是"第一次出闪"看起来是 +2 而不是 +1
+     （本轮就为这个查了半天，以为是重复计数）。想单独验兜底那条，用 `__musouShinyCount(id, 0)` 摆状态。 */
+window.__musouShinyCountReset = () => {
+  meta.shinyCnt = {};
+  meta.shinyDex = {};
+  meta.shinyOn = {};
+  metaSave();
+  return window.__musouShinyDex().count;
+};
 window.__musouShinyWave = (forceShiny) => { const r = shinyMutWaveEnd(wave, forceShiny); return r; };   // 测试钩子：手动触发一次「每波结束」的来访结算（传 true/false 可钉死这一次是不是闪光）
 window.__musouShinyOpen = () => { openShinyDex(); return window.__musouShinyDex(); };   // 测试钩子：打开图鉴面板
 window.__musouShinyClose = () => { $('sc-shiny').classList.remove('show'); };
