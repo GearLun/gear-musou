@@ -480,7 +480,7 @@
       <div class="load-tip">游戏正在加载中，请稍后,若长时间无法加载，请刷新网页。</div>
       <div class="load-bar"><i id="load-fill"></i></div>
     </div>
-    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.0.6</small></div>
+    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.0.7</small></div>
     <!-- 🏷️ 版本角标（内容由 game.js 的 verBadgePaint() 填）：玩家一眼看出自己跑的是哪一版，
          省得拿着旧的下载文件来问「怎么没改」 -->
     <div id="ver-badge" class="ver-badge"></div>
@@ -948,8 +948,8 @@ const $ = id => document.getElementById(id);
 /* 🏷️ 版本角标（主页左下角 `#ver-badge`）：`VER_TXT` = 玩家看到的版本号 · `BUILD_TAG` = 这份产物的构建标记。
    ⚠️ 改版本号时**只改这两行** + `index.html` 的 `.title small`。
    为什么要它：用户拿旧的下载文件来问「怎么和没改一样」—— 有角标一眼就能看出手上是哪一版。 */
-const VER_TXT = 'v1.0.6';
-const BUILD_TAG = 'build 10-07 21:40';
+const VER_TXT = 'v1.0.7';
+const BUILD_TAG = 'build 10-09 04:24';
 function verBadgePaint() {
   const el = $('ver-badge');
   if (!el) return;
@@ -5376,7 +5376,12 @@ const PET_SPECIES = {
 const PET_FX_TINT = {
   GRASS: '#9fe07a', FIRE: '#ff9a3c', WATER: '#6fd0ff', NORMAL: '#ffe9a8',
   DRAGON: '#b58cff', ELECTRIC: '#ffe94a', GHOST: '#a06cff', PSYCHIC: '#ff8fe0',
-  FAIRY: '#ffb0e0'   // 🎀 仙子伊布（妖精）：樱花粉 —— 与超能那个紫粉区分开
+  FAIRY: '#ffb0e0',  // 🎀 仙子伊布（妖精）：樱花粉 —— 与超能那个紫粉区分开
+  /* 🪨 岩石 / ⚙️ 钢（用户 2026-10 加「岩斧 / 岩崩」时补的）：
+     ⚠️ 这两条以前**不在表里** → `PET_FX_TINT[el]` 取到 undefined → 命中星芒 / 冲击环
+        会被当成**非法绘制参数**（无头桩里直接报红）。岩石/钢系的技能必须先有这两条。 */
+  GROUND: '#c98a52',   // 🪨 岩石：土棕橙
+  STEEL: '#cfe6f5'     // ⚙️ 钢：冷银白
 };
 function PS(e) { return PET_SPECIES[(e && e.pet) || 'bulba'] || PET_SPECIES.bulba; }   // 物种参数
 function PFX(e) { return PET_FX[PS(e).element] || PET_FX.GRASS; }                     // 该属性的特效条带表
@@ -6838,6 +6843,15 @@ const PET_SKILL_CROSSCUT = {
   desc: '交错剪出十字斩（两道藤鞭特效 · 各向两侧偏转 30°）· 伤害 宝可梦攻击力 ×2 · ' + petCdText(0.6),
   melee: { r: 250, arc: Math.PI * 0.95, mul: 2, fxK: 6.5, rot: -0.52, cross: 1 }
 };
+/* ✂️ **十字剪☆（巨钳螳螂 · 用户 2026-10 点名）**：
+   「相比于十字剪，伤害改为宝可梦攻击x2.5，技能范围扩大50％」
+   → 独立一份（不引用十字剪）：`mul: 2.5` · 范围 `250 × 1.5 = 375`（= 强力鞭打同款那一档）·
+     出手间隔沿用 0.6 秒（用户没改）。十字特效、偏转角、判定方式全部同款。 */
+const PET_SKILL_CROSSCUT_STAR = {
+  id: 'crosscut2', name: '十字剪☆', icon: '⚔️', kind: 'melee', cd: PET_CD_SEC(0.6), range: 375, fxEl: 'GRASS',
+  desc: '十字剪强化：范围 +50%（375）· 伤害 宝可梦攻击力 ×2.5 · ' + petCdText(0.6),
+  melee: { r: 375, arc: Math.PI * 0.95, mul: 2.5, fxK: 6.5, rot: -0.52, cross: 1 }
+};
 /* 🐶 伊布（图鉴 133）的两招（第 15 波捕捉）：高速星星 = 完全照搬「飞叶快刀」· 电光一闪 */
 /* 🥊 **铁哑铃线（#374 / #375 / #376 · 钢）** —— 用户逐条点名（2026-10）：
    大器晚成 · **第 11 波与迷你龙 / 多龙梅西亚三选一** · 波次进化（20 / 25 波各一段）。
@@ -6876,6 +6890,40 @@ const PET_SKILL_BULLETPUNCH_STAR = {
   id: 'bulletpunch2', name: '子弹拳☆', icon: '🥋', kind: 'blitz', cd: 1.1 / 2 / 1.5, range: 900, fxEl: 'STEEL',
   desc: '子弹拳强化：出手更快 · 2 秒内最多打 6 个 · 每拳 宝可梦攻击力 ×3 · ' + petCdText(1.1 / 2 / 1.5),
   blitz: { dur: 2, max: 6, mul: 3, gap: 0.1, r: 46, fxK: 4 / 3, trail: 'steel' }
+};
+/* ✊ **子弹拳☆（巨钳螳螂专属 · 用户 2026-10 点名：「与巨金怪的技能效果相同」）**：
+   巨金怪的子弹拳☆ 是**独立的一份**（`PET_SKILL_BULLETPUNCH_STAR`，上一条），
+   这里**再独立做一份**给巨钳螳螂用（用户铁律：「所有技能都需要单独制作，不要用引用的成分」）——
+   ⚠️ 两份**数值完全同源但对象分开**：以后改巨金怪那份**不会**顺手改到巨钳螳螂，
+      要同步就得两处都改（这是用户要的：独立不引用）。 */
+const PET_SKILL_SCIZOR_BULLETPUNCH_STAR = {
+  id: 'scizorbullet', name: '子弹拳☆', icon: '🥋', kind: 'blitz', cd: 1.1 / 2 / 1.5, range: 900, fxEl: 'STEEL',
+  desc: '子弹拳强化：出手更快 · 2 秒内最多打 6 个 · 每拳 宝可梦攻击力 ×3 · ' + petCdText(1.1 / 2 / 1.5),
+  blitz: { dur: 2, max: 6, mul: 3, gap: 0.1, r: 46, fxK: 4 / 3, trail: 'steel' }
+};
+/* 🪨 **岩斧（劈斧螳螂 · 用户 2026-10 点名）**：
+   「与悔念剑相同的攻击特效，但是没有回血效果，伤害提升为宝可梦x7的攻击力的伤害。为岩石系技能，
+    需要有岩石系的技能颜色。」
+   · 特效：和悔念剑**同一套斩击**（`kind: 'slash'`：蓄力 0.5 秒 → 甩出一整片巨大斩光），
+     **但染色不同** —— 悔念剑是橙红（火焰），岩斧走 `PET_SLASH_TINTS.GROUND` 的**土棕橙**（岩石色）。
+   · **没有回血**：不写 `healPct`（`petSlashSwing` 里 `S.healPct > 0` 才回血，缺省就是 0）。
+   · 伤害：`mul: 7`（用户口径「宝可梦 ×7」；`PET_SKILL_TABLE` 里也写了同值）。
+   · 范围沿用悔念剑那一档（122 × 4.5 × 0.8 = 439px · 半圆 π）。 */
+const PET_SKILL_ROCKAXE = {
+  id: 'rockaxe', name: '岩斧', icon: '🪓', kind: 'slash', cd: 1.8, range: 440, fxEl: 'GROUND',
+  desc: '蓄力 0.5 秒甩出一整片岩石斩光（同悔念剑的攻击动画 · 岩石配色 · 不回血）· 伤害 宝可梦攻击力 ×7 · ' + petCdText(1.8),
+  slash: { charge: 0.5, reach: 122 * 4.5 * 0.8, arc: Math.PI, mul: 7, fxK: 7 }
+};
+/* 🪨 **岩崩（劈斧螳螂 · 用户 2026-10 点名 · 独立 kind `rockfall`）**：
+   「攻击范围约为400px，在范围内落下岩石，可以暂停敌人的行动0.5秒，并且造成5x宝可梦攻击力的伤害，技能间隔1秒。」
+   · `r: 400` 半径内**随机落下 `n` 块石头**（每块 `fall` 秒落地）→ 落地时对它脚下 `boomR` 内的敌人
+     造成 `mul × 宝可梦攻击力` 的伤害 + **定身 `stun` 秒**（复用雷系的 `e.stunT`，Boss 免疫由 `stunEnemy` 统一处理）。
+   · 出手间隔 **1 秒**（`cd: 1` → 真实 1 秒，`PET_ATK_RATE` 会 ÷2，所以写 `PET_CD_SEC(1)`）。
+   · 视觉：落点先铺一圈**预警环**（0.45 秒）+ 落石本体（GROUND 的 `cell` 条带染色）。 */
+const PET_SKILL_ROCKFALL = {
+  id: 'rockfall', name: '岩崩', icon: '🪨', kind: 'rockfall', cd: PET_CD_SEC(1), range: 400, fxEl: 'GROUND',
+  desc: '在身前 400px 范围内砸落岩石：每块 宝可梦攻击力 ×5 并定身 0.5 秒 · ' + petCdText(1),
+  rockfall: { r: 400, n: 6, fall: 0.5, warn: 0.45, boomR: 105, mul: 5, stun: 0.5, fxK: 6, spread: 1 }
 };
 const PET_SKILL_ZENHEADBUTT = {
   id: 'zenheadbutt', name: '意念头锤', icon: '🧠', kind: 'dash', cd: 3.0, range: 520, fxEl: 'PSYCHIC', fxLife: 0.5,
@@ -7197,7 +7245,7 @@ const PET_SKILL_DRAGONASCENT_STAR = {
 /* 🔥 炭小侍（图鉴 935）的两招（第 10 波捕捉）：
    · **火苗**：完全照搬小火龙的火苗（伤害 / 冷却 / 爆炸范围 / 「没敌人也照打」都一样，只是换个人放）
    · **蓄能焰袭**：朝指针方向冲刺，**沿途撞到的敌人各吃一次**（`dash.path`），冲刺距离 ≈ 水枪射程（320） */
-const PET_SKILL_DEF = { bulba: 'leaf', charm: 'spark', squirt: 'jet', toge: 'help', eevee: 'swift', charcadet: 'ember', scyther: 'quickattack', dreepy: 'quickattack', dratini: 'tornado', beldum: 'takedown', gible: 'stomp', jirachi: 'swiftstar', shaymin: 'leaf', zeraora: 'plasmafist',
+const PET_SKILL_DEF = { bulba: 'leaf', charm: 'spark', squirt: 'jet', toge: 'help', eevee: 'swift', charcadet: 'ember', scyther: 'crosscut', dreepy: 'quickattack', dratini: 'tornado', beldum: 'takedown', gible: 'stomp', jirachi: 'swiftstar', shaymin: 'leaf', zeraora: 'plasmafist',
   kyogre: 'originpulse', groudon: 'precipice', rayquaza: 'dragonascent' };   // 每只的**开局默认**技能 id（远程那套）
 /* ============================================================
    🔮 **道具进化那 5 只的招式表**（用户逐条点名）—— **按形态 key 查**，不是按「物种 + 段位」：
@@ -8389,6 +8437,126 @@ function drawPetMeteors() {
     ctx.restore();
   }
 }
+/* ═══════════════════════════════════════════════════════════════════════════
+   🪨 **岩崩**（劈斧螳螂 · 用户 2026-10 点名 · 独立 kind `rockfall`）
+   用户原话：「攻击范围约为400px，在范围内落下岩石，可以暂停敌人的行动0.5秒，
+   并且造成5x宝可梦攻击力的伤害，技能间隔1秒。」
+   —— 和陨石（`petMeteors`）**是两套实体**：陨石是 5 颗锁最近的敌人、带火焰尾；
+      岩崩是在半径内**随机**撒 `n` 块石头、纯岩石外观、每块只砸自己脚下那一小圈（`boomR`）。
+   ⚠️ 定身走雷系现成的 `e.stun`（>0 时敌人不动不出手）；**Boss / 铁骑豁免**，判据与陨石那条完全一致。
+   ═══════════════════════════════════════════════════════════════════════════ */
+let petRocks = [];
+let dbgPetRocks = 0;
+/* 放一次：半径 `R.r` 内随机撒 `n` 块（避开玩家脚下那一小圈，不然全砸自己身上看不见） */
+function petRockfallCast(u, sk) {
+  const R = sk.rockfall, el = sk.fxEl || petFormElement(u);
+  const tint = PET_FX_TINT[el] || '#c98a52';
+  for (let i = 0; i < R.n; i++) {
+    const a = rnd(0, TAU);
+    const d = rnd(R.r * 0.18, R.r);
+    const rx = Math.max(30, Math.min(W - 30, u.x + Math.cos(a) * d));
+    const ry = Math.max(30, Math.min(H - 30, u.y + Math.sin(a) * d));
+    petRocks.push({
+      x: rx, y: ry, t: R.fall + i * 0.06, life: R.fall + i * 0.06,   // 略微分批落下，看着更像"崩"
+      warn: R.warn, boomR: R.boomR, el, tint,
+      dmg: petHitDmg(u.petId, R.mul, sk), stun: R.stun, owner: u.petId, fxK: R.fxK || 6,
+      seed: rnd(0, 1000), dead: false
+    });
+  }
+  dbgPetRocks += R.n;
+  fxPush(el, 'cell', u.x, u.y, 3.2, 0, 0, 0, 0.5, tint);
+  shake = Math.max(shake, 3);
+}
+function updatePetRocks(dt) {
+  if (!petRocks.length) return;
+  for (const q of petRocks) {
+    q.t -= dt;
+    if (Math.random() < 0.7) {   // 下坠时的土屑
+      addPart(q.x + rnd(-12, 12), q.y - (q.t / q.life) * PET_METEOR_H * 0.7, rnd(-24, 24), rnd(-60, -15), 0.3, rnd(2, 5), '#b98d4a', 0);
+    }
+    if (q.t > 0) continue;
+    q.dead = true;
+    let n = 0;
+    for (const e of enemies) {
+      if (e.dead) continue;
+      const dx = e.x - q.x, dy = e.y - q.y, dd = Math.hypot(dx, dy) || 1;
+      if (dd > q.boomR + e.r) continue;
+      hitEnemy(e, dx / dd, dy / dd, 420, q.dmg);
+      /* ⏸ 定身 0.5 秒（用户口径）：Boss / 铁骑豁免 —— 与陨石那条判据一致 */
+      if (!e.boss && e.type !== 'cavalry' && q.stun > 0) { e.stun = Math.max(e.stun || 0, q.stun); dbgStuns++; }
+      fxPush(q.el, 'hit', e.x, e.y, 2.2);
+      n++;
+    }
+    const F = petFxPick(q.el, 'cell');
+    fxPush(F.el, F.name, q.x, q.y, q.fxK * 0.7, 0, 0, 0, 0.55, q.tint);
+    rings.push({ x: q.x, y: q.y, r: 12, vr: 760, life: 0.4, max: 0.4, color: q.tint, width: 7 });
+    burst(q.x, q.y, 22, q.tint, 440);
+    dbgPetMelee += Math.max(1, n);
+    shake = Math.max(shake, 5);
+    sfx.hit();
+  }
+  petRocks = petRocks.filter(q => !q.dead);
+}
+/* 画：预警圈（越近越亮）+ 一块**多边形石头**从上方砸下来（形状由 `seed` 固定，不会每帧乱变） */
+function drawPetRocks() {
+  if (!petRocks.length) return;
+  for (const q of petRocks) {
+    const k = Math.max(0, Math.min(1, q.t / q.life));      // 1 → 0
+    const my = q.y - k * PET_METEOR_H * 0.7;
+    /* 落点预警圈 */
+    ctx.save();
+    ctx.globalAlpha = 0.30 + 0.45 * (1 - k);
+    ctx.strokeStyle = q.tint;
+    ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.ellipse(q.x, q.y, q.boomR * 0.8, q.boomR * 0.32, 0, 0, TAU); ctx.stroke();
+    ctx.globalAlpha = 0.16;
+    ctx.fillStyle = q.tint;
+    ctx.beginPath(); ctx.ellipse(q.x, q.y, q.boomR * 0.8, q.boomR * 0.32, 0, 0, TAU); ctx.fill();
+    ctx.restore();
+    /* 石头本体：7 边形 + 固定随机量（用 seed 做伪随机，形状每块不同但每帧一样） */
+    const R = 17 + 7 * (1 - k);
+    ctx.save();
+    ctx.translate(q.x, my);
+    ctx.rotate(q.seed);
+    ctx.fillStyle = '#8a6a44';
+    ctx.beginPath();
+    for (let i = 0; i < 7; i++) {
+      const a = i / 7 * TAU;
+      const rr = R * (0.78 + 0.34 * Math.abs(Math.sin(q.seed + i * 2.1)));
+      const px = Math.cos(a) * rr, py = Math.sin(a) * rr * 0.86;
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#c9a878';       // 受光面
+    ctx.beginPath();
+    for (let i = 0; i < 7; i++) {
+      const a = i / 7 * TAU;
+      const rr = R * 0.55 * (0.78 + 0.34 * Math.abs(Math.sin(q.seed + i * 2.1)));
+      const px = Math.cos(a) * rr - R * 0.18, py = Math.sin(a) * rr * 0.86 - R * 0.22;
+      if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+  }
+}
+/* 🪨 岩崩的出手状态机（比陨石简单：**没有蓄力段**，抬手就撒 —— 用户给的是「间隔 1 秒」的快节奏技） */
+function updatePetRockfall(u, dt, sk, foe, moving) {
+  u.atkT -= dt;
+  if (u.petA === 'atk') {
+    petTickFrame(u, dt, false);
+    if (u.petF >= PET_META[petForm(u)].atk.n - 1) petAnim(u, moving ? 'walk' : 'idle');
+    return;
+  }
+  if (foe && u.atkT <= 0) {
+    u.atkT = petSkillCd(sk) / petRateMul();
+    u.petAng = petAimAng(u); u.petDir = petDir(u.petAng);
+    petAnim(u, 'atk', true);
+    petRockfallCast(u, sk);
+  } else {
+    if (!foe) u.atkT = Math.min(u.atkT, 0.25);
+    petAnim(u, moving ? 'walk' : 'idle'); petTickFrame(u, dt, true);
+  }
+}
 /* 🌙 **月亮之力（仙子伊布）**：一次放出 3 个圆形月亮，**自动追踪**最近的敌人，撞到就炸开大范围 ——
    爆炸半径 = 破灭之愿★ 的大小（`150 × 1.5 × 1.5 = 337.5`）· 爆炸伤害 = 宝可梦伤害 ×10 ·
    出手间隔 1 秒（写在技能表 cd 上）。月亮飞满 4 秒自然消散（追不上就没了，不会永远挂着）。 */
@@ -9349,6 +9517,8 @@ function updatePetAlly(u, dt) {
   if (SK.kind === 'tornado') { updatePetTornadoSkill(u, dt, SK, foe, moving); return; }
   /* —— ☄️ 流星群（快龙）：蓄力 0.5 秒 → 朝至多 5 个敌人的位置各砸一颗陨石 —— */
   if (SK.kind === 'meteor') { updatePetMeteor(u, dt, SK, foe, moving); return; }
+  /* 🪨 岩崩（劈斧螳螂）：抬手就在半径内撒石头（独立 kind，见 petRockfallCast / updatePetRocks） */
+  if (SK.kind === 'rockfall') { updatePetRockfall(u, dt, SK, foe, moving); return; }
   /* 弹体类技能（飞叶快刀 / 火苗 / 火焰轮…）：冷却好了就出手（**边绕圈边打，不压上去**） */
   u.atkT -= dt;
   if (u.petA === 'atk') {
@@ -9713,6 +9883,12 @@ const PET_SLASH_FX_OD = 0.55;      // 落点：扇形半径的 55%（视觉正�
    （`fxPush` 第 10 个参数 `tint` → `fxTinted()` 离屏换色，见那里的注释）。
    ⚠️ 别再改回 `fxPush(el, 'melee', …)`（`el` 是 FIRE：那是另一套动画，不是疯狂植物那套）。 */
 const PET_SLASH_TINT = '#ff7a24';   // 橙红（火焰色）
+/* 🗡️ **斩击的配色表**（键 = 属性）—— 同一个 `petSlashSwing` 要给不同属性的斩击换色：
+   · FIRE  = 悔念剑那套**橙红**（历史默认值，别改）
+   · GROUND = 🪨 **岩斧**（用户 2026-10：「为岩石系技能，需要有岩石系的技能颜色」）→ 土棕橙
+   `sk.slash.tint` 优先（技能自己指定），没写才按 `fxEl` 查这张表，再没有就用 FIRE 那款。
+   ⚠️ **只影响染色**：斩击的条带仍然是 GRASS 的 `melee`（疯狂植物那套），判定仍是 reach + arc。 */
+const PET_SLASH_TINTS = { FIRE: PET_SLASH_TINT, GROUND: '#c98a52' };
 function petSlashSwing(u, sk) {
   const S = sk.slash, el = sk.fxEl || petFormElement(u);
   const dmg = petHitDmg(u.petId, S.mul, sk);   // 🔧 传 sk → 走用户数值表（悔念剑）
@@ -9731,7 +9907,8 @@ function petSlashSwing(u, sk) {
      落在扇形半径的 55% 处、朝指针方向；**不参与伤害判定**（伤害还是上面 `S.reach + S.arc` 那一遍）。 */
   const kk = (S.fxK || 6) * PET_SLASH_FX_BIG;
   const od = S.reach * PET_SLASH_FX_OD;
-  const o = fxPush('GRASS', 'melee', u.x + Math.cos(a) * od, u.y + Math.sin(a) * od, kk, a, null, 0, 0, PET_SLASH_TINT);
+  const o = fxPush('GRASS', 'melee', u.x + Math.cos(a) * od, u.y + Math.sin(a) * od, kk, a, null, 0, 0,
+    S.tint || PET_SLASH_TINTS[el] || PET_SLASH_TINT);   // 🎨 技能自己的 tint > 按属性查表 > 悔念剑那款橙红
   const fxN = o ? PET_SLASH_FX_N : 0;
   dbgPetSlashFx += fxN; dbgPetSlashFxLast = fxN;
   rings.push({ x: u.x, y: u.y, r: 18, vr: 720, life: 0.3, max: 0.3, color: PET_FX_TINT[el], width: 6 });
@@ -10464,7 +10641,7 @@ function updatePetPools(dt) {
   }
   petPools = petPools.filter(q => !q.dead);
 }
-function tickPetPools(dt) { updatePetPools(dt); updatePetTornadoes(dt); updatePetMeteors(dt); updatePetMoons(dt); updatePetWaves(dt); updatePetBolts(dt); updatePetTrioFlames(dt); updatePetVHeats(dt); }   // ⚡ 刀波 / 瞬移闪电   // 🌿 刀波也在这里推进   // 🔥 比克提尼：魔法火焰的火团 / Ｖ热焰的冲刺体
+function tickPetPools(dt) { updatePetPools(dt); updatePetTornadoes(dt); updatePetMeteors(dt); updatePetRocks(dt); updatePetMoons(dt); updatePetWaves(dt); updatePetBolts(dt); updatePetTrioFlames(dt); updatePetVHeats(dt); }   // ⚡ 刀波 / 瞬移闪电   // 🌿 刀波也在这里推进   // 🔥 比克提尼：魔法火焰的火团 / Ｖ热焰的冲刺体
 function drawPetPools() {
   for (const q of petPools) {
     const fade = Math.min(1, (q.life - q.t) / 1.2);
@@ -12140,7 +12317,7 @@ const SHINY_CNT_N = 8;           // 能记录的物种数 = floor(24 / 3)
    （用户后来点名「固拉多，盖欧卡，烈空坐，也会进入刷闪的名单中」——
     它们的 `PET_FR[形态][1]` 闪光条带本来就随生成器一起出好了，所以直接列进来即可）。
    ⚠️ 加物种必须同步 `SHINY_SPECIES_NAME`（面板/横幅按 id 取中文名），否则横幅会显示英文 id。 */
-const SHINY_SPECIES = ['bulba', 'charm', 'squirt', 'eevee', 'charcadet', 'dreepy', 'dratini', 'beldum', 'gible', 'shaymin', 'zeraora', 'jirachi', 'victini', 'toge', 'kyogre', 'groudon', 'rayquaza'];   // 🥊 铁哑铃 / 🦈 圆陆鲨（用户 2026-10 点名加进刷闪名单）· 🔥 比克提尼（幻之助战第四只）
+const SHINY_SPECIES = ['bulba', 'charm', 'squirt', 'eevee', 'charcadet', 'scyther', 'dreepy', 'dratini', 'beldum', 'gible', 'shaymin', 'zeraora', 'jirachi', 'victini', 'toge', 'kyogre', 'groudon', 'rayquaza'];   // 🥊 铁哑铃 / 🦈 圆陆鲨（用户 2026-10 点名加进刷闪名单）· 🔥 比克提尼（幻之助战第四只）· 🦗 飞天螳螂（用户 2026-10 点名补上 —— 它第 15 波捕捉入队，当然也该能出闪）
 const SHINY_HP_MUL = 5;   // 🟢 闪光词条·绿身体：血量倍率（本轮由 2 倍提高到 5 倍）
 const CARD_ONLY_MUTS = ['deck', 'wild', 'possess', 'multishot'];   // 🃏 牌皇专属四件套（传统弓/士兵/其它职业都拿不到）
 /* 🃏 牌皇专属质变的数值（放在 MUTS 之前：MUTS 数组字面量里要引用这些 cap）
@@ -16214,7 +16391,7 @@ $('meta-body').addEventListener('click', (ev) => {
    遇到过的显示头像 + 「✅ 闪光外观 / ⚪ 普通外观」切换；没遇到过的显示 🔒 与获取提示。
    收录与启用都写进局外存档（`meta.shinyDex` / `meta.shinyOn`）→ **换局、读档都在**，只有删档才清。
    启用的效果：训练家出战时那一只（**含进化后的形态**，按物种 id 记）走 `PET_FR[形态][1]` 闪光贴图。 */
-const SHINY_SPECIES_NAME = { bulba: '妙蛙种子', charm: '小火龙', squirt: '杰尼龟', eevee: '伊布', charcadet: '炭小侍', dreepy: '多龙梅西亚', dratini: '迷你龙', beldum: '铁哑铃', gible: '圆陆鲨', shaymin: '谢米', zeraora: '捷拉奥拉', jirachi: '基拉祈', victini: '比克提尼', toge: '波克比', kyogre: '盖欧卡', groudon: '固拉多', rayquaza: '烈空坐' };
+const SHINY_SPECIES_NAME = { bulba: '妙蛙种子', charm: '小火龙', squirt: '杰尼龟', eevee: '伊布', charcadet: '炭小侍', scyther: '飞天螳螂', dreepy: '多龙梅西亚', dratini: '迷你龙', beldum: '铁哑铃', gible: '圆陆鲨', shaymin: '谢米', zeraora: '捷拉奥拉', jirachi: '基拉祈', victini: '比克提尼', toge: '波克比', kyogre: '盖欧卡', groudon: '固拉多', rayquaza: '烈空坐' };
 
 /* 🧪 测试钩子：刷闪名单与已收录的闪光（图鉴用同一份表） */
 window.__musouShinyInfo = () => ({
@@ -19672,6 +19849,7 @@ function resetRun() {
   petPools = [];        // 💦 加农水炮的大水坑
   petTornadoes = [];    // 🌀 迷你龙的龙卷风
   petMeteors = [];      // ☄️ 流星群的陨石
+  petRocks = [];        // 🪨 岩崩的落石
   petMoons = [];        // 🌙 月亮之力（仙子伊布）—— ⚠️ 以前漏了，换局后旧月亮还在飞（自查发现）
   petWaves = [];        // 🌿 种子闪光的刀波（同上一行）
   petBolts = [];        // ⚡ 等离子闪电拳的瞬移闪电
@@ -20018,7 +20196,7 @@ function doStartGame(carry) {
    · 面板能做：选任意敌人 / 换形态 / 停止·开启敌人攻击 / 放无限血量假人并记秒伤总伤 /
      局内随便转职（转职 = 清空回初始状态后重开试验场）/ 开关自动攻击 / 升级 / 选奇物 / 选质变 / 一键满质变
    ============================================================ */
-const DEV_BUILD = false;   // ⚠️ 打包器（tools/build.js）会把这行换成 true 生成「开发者版」
+const DEV_BUILD = true;   // ⚠️ 打包器（tools/build.js）会把这行换成 true 生成「开发者版」
 const DEV_KEY = 'gear_musou_dev_v1';
 let devOn = 0;              // 1 = 开发者版本
 let devFoeAtk = 1;          // 试验场：敌人攻击动作（1 = 开 / 0 = 停）
@@ -27564,6 +27742,7 @@ function drawGame() {
   drawPetPools();    // 💦 加农水炮留下的大水坑（画在地面层）
   drawPetTornadoes();   // 🌀 迷你龙的龙卷风（跟着一起画在地面层）
   drawPetMeteors();     // ☄️ 流星群的陨石（带落点预警圈）
+    drawPetRocks();       // 🪨 岩崩的落石（带落点预警圈）
   drawPetMoons();
   drawPetWaves();       // 🌿 种子闪光的刀波
   drawPetBolts();       // ⚡ 等离子闪电拳的瞬移闪电
@@ -30805,7 +30984,11 @@ function skDump(s) {
       /* 🌊 根源波动的「光柱终点留水坑」：把 pool 也读出来（测试要核它 = 加农水炮同款） */
       pool: s.beam.pool ? { r: s.beam.pool.r, life: s.beam.pool.life, tick: s.beam.pool.tick, mul: s.beam.pool.mul, slowK: s.beam.pool.slowK } : null } : null,   // ☀️ 光炮（同光法师术有专攻 · pal = 配色：绿 / 火焰橙红 / 水蓝）
     thunder: s.thunder ? { charge: s.thunder.charge, n: s.thunder.n, mul: s.thunder.mul, moveSpd: s.thunder.moveSpd || 0 } : null,   // ⚡ 打雷（雷伊布）
-    slash: s.slash ? { charge: s.slash.charge, reach: Math.round(s.slash.reach), arc: +s.slash.arc.toFixed(3), mul: s.slash.mul, healPct: s.slash.healPct, fxK: s.slash.fxK } : null,   // 🗡️ 悔念剑（苍炎刃鬼）
+    /* 🗡️ 斩击（悔念剑 / 🪨 岩斧）：`healPct` 为 0/undefined = **不回血**（岩斧就是这条）；
+       `tint` = 这一招自己的斩光配色（岩斧 = 岩石土棕，见 PET_SLASH_TINTS）。 */
+    slash: s.slash ? { charge: s.slash.charge, reach: Math.round(s.slash.reach), arc: +s.slash.arc.toFixed(3), mul: s.slash.mul, healPct: s.slash.healPct || 0, fxK: s.slash.fxK, tint: s.slash.tint || '' } : null,
+    /* 🪨 岩崩：半径 / 落石数 / 落地半径 / 伤害倍率 / 定身秒数（测试靠它钉用户给的四个数） */
+    rockfall: s.rockfall ? { r: s.rockfall.r, n: s.rockfall.n, fall: s.rockfall.fall, warn: s.rockfall.warn, boomR: s.rockfall.boomR, mul: s.rockfall.mul, stun: s.rockfall.stun, fxK: s.rockfall.fxK || 0 } : null,
     follow: s.follow ? 1 : 0,   // 💧 水流环：选它时这只跟着训练家走
     support: s.support ? 1 : 0,   // 🐣 辅助技（不需要敌人 · 冷却好了就放）
     help: s.help ? { mul: s.help.mul } : null,   // 🤝 帮助的增伤倍率（帮助 1.5 / 帮助☆ 1.8）
@@ -31862,7 +32045,7 @@ var PET_SKILLS_V2 = {
         巨钳螳螂 / 劈斧螳螂暂时沿用同一套（用户说「后续我会补充新的技能」）。
      ⚠️ 三段（scyther / scizor / kleavor 各一条）分开写：`petSkillList` 先按**形态 key** 查，
         查不到才回落到物种那条 —— 以后巨钳螳螂 / 劈斧螳螂各给一套新招时，改对应那一条即可。 */
-  scyther: { species: '飞天螳螂', form: '', skills: [[PET_SKILL_QUICKATTACK, PET_SKILL_CROSSCUT], [PET_SKILL_QUICKATTACK, PET_SKILL_CROSSCUT], [PET_SKILL_QUICKATTACK, PET_SKILL_CROSSCUT]] },
+  scyther: { species: '飞天螳螂', form: '', skills: [[PET_SKILL_CROSSCUT, PET_SKILL_QUICKATTACK], [PET_SKILL_CROSSCUT, PET_SKILL_QUICKATTACK], [PET_SKILL_CROSSCUT, PET_SKILL_QUICKATTACK]] },
   /* 多龙梅西亚线（第 11 波捕捉 · 20 / 25 波进化） */
   dreepy: { species: '多龙梅西亚线', form: '', skills: [[PET_SKILL_QUICKATTACK], [PET_SKILL_UTURN, PET_SKILL_SHADOWBALL], [PET_SKILL_DRAGONARROW, PET_SKILL_SHADOWBALL_STAR]] },
   /* 迷你龙线（第 11 波捕捉 · 20 / 25 波进化） */
@@ -31908,9 +32091,9 @@ var PET_SKILLS_V2 = {
   /* 苍炎刃鬼（charcadet 的进化型） */
   ceruledge: { species: '苍炎刃鬼', form: 'charcadet', skills: [PET_FORMSKILL_CERULEDGE] },
   /* 🦗 巨钳螳螂（scyther 的进化型 · 商店买金属膜）—— 招式同飞天螳螂那两招（电光一闪 + ✂️ 十字剪） */
-  scizor: { species: '巨钳螳螂', form: 'scyther', skills: [[PET_SKILL_QUICKATTACK, PET_SKILL_CROSSCUT]] },
+  scizor: { species: '巨钳螳螂', form: 'scyther', skills: [[PET_SKILL_CROSSCUT_STAR, PET_SKILL_SCIZOR_BULLETPUNCH_STAR]] },
   /* 🦗 劈斧螳螂（scyther 的进化型 · 商店买黑奇石）—— 同上 */
-  kleavor: { species: '劈斧螳螂', form: 'scyther', skills: [[PET_SKILL_QUICKATTACK, PET_SKILL_CROSSCUT]] },
+  kleavor: { species: '劈斧螳螂', form: 'scyther', skills: [[PET_SKILL_ROCKAXE, PET_SKILL_ROCKFALL]] },
   /* 始源盖欧卡（kyogre 的进化型） */
   kyogre1: { species: '始源盖欧卡', form: 'kyogre', skills: [[PET_SKILL_ORIGINPULSE_STAR, PET_SKILL_THUNDER_STAR]] },
   /* 始源固拉多（groudon 的进化型） */
@@ -32085,21 +32268,22 @@ const PET_SKILL_TABLE = {
     "悔念剑": 6,
     "影子偷袭": 2,
   },
-  /* 🦗 飞天螳螂线（用户 2026-10 新增）—— 三只**暂时都只有「电光一闪」一招数值**；
-     十字剪的「×2 宝可梦攻击力」按用户口径写成 2（等于代码里的 `melee.mul`，两边一致就不会打架）。
-     ⚠️ 巨钳螳螂 / 劈斧螳螂那两行是**按本表的进化惯例推的**（进化形态倍率更高）——
-        用户还没给这两只的数，等他填 `docs\宝可梦技能数值表*.csv` 时以他写的为准。 */
+  /* 🦗 飞天螳螂线（用户 2026-10 新增 · 本轮按他逐条给的口径改写）——
+     ⚠️ **按「形态中文名 + 技能名」索引**，所以同名技能在不同形态下要**各写一行**
+        （巨钳螳螂的「十字剪☆」和飞天螳螂的「十字剪」是两招，别合并）。
+     ⚠️ 这里的数**优先于代码里的 `mul`**（`petUserMul` 命中就直接用），两边一致就不会打架；
+        要调数值**改这里**（用户手填 CSV 时以他写的为准）。 */
   "飞天螳螂": {
-    "电光一闪": 2,
-    "十字剪": 2,
+    "十字剪": 2,      // 首技能
+    "电光一闪": 2,    // 副技能
   },
   "巨钳螳螂": {
-    "电光一闪": 2.5,
-    "十字剪": 2.5,
+    "十字剪☆": 2.5,   // 用户口径：×2.5（范围 +50% → 375，写在技能对象里）
+    "子弹拳☆": 3,     // 与巨金怪那招效果相同（独立一份，数值同源）
   },
   "劈斧螳螂": {
-    "电光一闪": 3,
-    "十字剪": 3,
+    "岩斧": 7,        // 用户口径：×7 · 不回血 · 岩石配色
+    "岩崩": 5,        // 用户口径：×5 · 定身 0.5 秒 · 间隔 1 秒
   },
   "多龙梅西亚": {
     "电光一闪": 2,
