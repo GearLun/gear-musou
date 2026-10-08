@@ -10976,6 +10976,10 @@ function gainXP(n) {
     p.lvl++;
     p.pending++;
     p.xpNeed = Math.round(5 + Math.pow(p.lvl, 1.5) * 2.6);
+    /* 🛡️ **升级给 2 秒无敌**（用户 2026-10）：升级面板弹出的那一刻玩家最容易挨打，
+       给两秒无敌当缓冲。⚠️ 用 `Math.max` 取较大值 —— 升级时玩家可能正处在冲刺/跳砸/无双等
+          **本来就有的无敌帧**里（那几处最长 1.5 秒），直接赋值会把更长的无敌**缩短**。 */
+    p.iframes = Math.max(p.iframes || 0, LEVEL_UP_IFRAMES);
     petEvoCheck();       // 🧬 角色等级 15 / 25 → 宝可梦进化（换模型 + 头像 + 名字）
     petSylveonCheck();   // 🎀 伊布在角色等级 SYLVEON_LV（现为 60）时进化成仙子伊布（用户要求）
   }
@@ -11809,6 +11813,9 @@ const VEL_DRAG = 4.5;        // 速度指数衰减（1/s）
 const BASE_MOVE_SPD = 330;   // 基础移速（px/s）
 const DASH_V0 = 1250;        // 战士/弓手闪避初速（px/s）；瞬身每层 ×1.5
 const DASH_IFRAME_T = 0.18;  // 闪避无敌帧时长（秒）——位移靠衰减自然收尾
+/* 🛡️ 升级无敌帧（用户 2026-10）：角色**每升一级**给 2 秒无敌（见 `gainXP` 的升级循环）。
+   口径与闪避/舍利子回魂等其它无敌一样走 `p.iframes`（`hurtPlayer` 里统一拦）。 */
+const LEVEL_UP_IFRAMES = 2;
 const MAGE_BLINK_DIST = 640; // 法师手机端瞬移距离（px）
 /* ---- 手机端闪避摇杆 ---- */
 const DASH_JOY_R = 44;       // 摇杆可拖半径（px，与 CSS #dash-base 116px 的一半相当）
@@ -28984,6 +28991,9 @@ window.__musouDarkSet = (v) => {   // 测试钩子：直接设定黑暗战场（
   return sceneDark ? 1 : 0;
 };
 window.__musouHurt = (n) => { if (state === 'play' && p.alive && p.iframes <= 0 && p.dashT <= 0) hurtPlayer(n === undefined ? 99999 : n, 1, 0); }; // 测试钩子：受击（默认致命，受无敌帧约束）
+/* 🧪 测试钩子：直接设定无敌帧剩余秒数（不传 = 读当前值）。
+   用途：验「升级给的 2 秒无敌**不会把更长的无敌缩短**」（`gainXP` 里用的是 Math.max）。 */
+window.__musouSetIframes = (v) => { if (state !== 'play') return null; if (v !== undefined) p.iframes = Math.max(0, Number(v) || 0); return +p.iframes.toFixed(3); };
 window.__musouForceHurt = (n) => { if (state === 'play' && p.alive) { p.iframes = 0; p.dashT = 0; hurtPlayer(n === undefined ? 99999 : n, 1, 0); } }; // 测试钩子：无视无敌帧直接受击
 window.__musouGrant = (id) => { const m = MUTS.find(x => x.id === id); if (m && state === 'play' && p.alive) m.apply(); }; // 测试钩子：直接授予某质变被动
 window.__musouMutSet = (id, v) => { if (state === 'play' && id in p.mut) { const m = MUTS.find(x => x.id === id); p.mut[id] = Math.max(0, Math.min(m ? m.cap : 99, v | 0)); } }; // 测试钩子：直接设定质变层数（探针隔离用）
