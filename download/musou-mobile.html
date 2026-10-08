@@ -5905,6 +5905,13 @@ const PET_ATK_RATE = 2;
    本文件后半段所有 `cd:` 照旧（它们是历史值，别动）；**新写的 / 调频率的**一律用它。 */
 const PET_CD_SEC = (sec) => sec * PET_ATK_RATE;
 function petRateMul() { return PET_ATK_RATE * petMusouSpdMul(); }
+/* ✂️ **十字剪两道条带的各自偏转角**（用户口径变过两次，以最新为准）：
+   ① 「其中一个中心旋转60°」→ 第一道不动、第二道 +60°
+   ② **「两个条带各中心旋转30°，但是旋转方向相反」（最新）** → 第一道 −30°、第二道 +30°
+      —— 两道**对称张开**成十字，整体仍以出手方向为中轴。
+   近战技写了 `melee.cross` 时，`petMeleeSwing` 会按这个角度放**两道**同款条带。
+   ⚠️ 只影响画出来的特效，**不影响判定**（判定仍是「射程内 + 扇形夹角」那一次，一只敌人只吃一次伤害）。 */
+const MELEE_CROSS_ANG = Math.PI / 6;   // 30°（每道各自偏转；两道合计张开 60°）
 /* 🏹 **闪焰冲锋的出手间隔倍率**（用户：「闪焰冲锋的攻击间隔降低至现在的 70%」）：
    喷火龙的闪焰冲锋是**手动技**（骑乘时按闪避键才放），它自己**没有 cd** → 实际出手间隔就是
    **闪避键的冷却**（`p.dashCd`，弓手基准 0.9 秒）。所以这一份的 70% 只能落在「放完闪焰冲锋之后
@@ -6814,6 +6821,22 @@ const PET_SKILL_QUICKATTACK = {
   desc: '在敌人之间来回突袭（像 6~10 波的成年哈吉咪）：锁定最近的敌人冲过去撞一下 → 喘口气再冲下一个 · ' + petCdText(1.1),
   strike: { spd: 950, mul: 2.0, r: 28 }
 };
+/* ✂️ **十字剪（飞天螳螂 · 用户 2026-10 点名做的特效）**：
+   用户原话（特效口径变过两次，**以最新为准**）：
+     ① 「使用两个妙蛙种子藤鞭的技能特效，其中一个中心旋转60°，使其成为类似十字的技能特效。」
+     ② **「技能特效改为：两个条带各中心旋转30°，但是旋转方向相反。」（最新）**
+   · 特效：`fxEl: 'GRASS'` = **妙蛙种子藤鞭那套**（GRASS 的 `melee` 条带，和「龙爪」同一张图、只是不染色）；
+     两道 = 同一张条带**同一个中心**、**各向两侧偏 30°**（`melee.cross: true` +
+     `MELEE_CROSS_ANG`，实现在 `petMeleeSwing` 里紧挨着原来那次 `fxPush`）。
+   · 伤害：`mul: 2` = 宝可梦攻击力 ×2（`PET_SKILL_TABLE` 里同值，两边一致就不会打架）。
+   · 出手间隔：**0.6 秒**（本游戏最快的一招，比电光一闪的 1.1 还快）。
+   · 范围沿用「藤鞭」的 250px / 342° 扇形（用户没另给数值 —— 他说的是「用藤鞭的技能特效」，不是范围）。
+   ⚠️ 独立定义、**不引用**别的技能对象（用户铁律：「新技能不要用引用关系，直接独立做一个技能」）。 */
+const PET_SKILL_CROSSCUT = {
+  id: 'crosscut', name: '十字剪', icon: '✂️', kind: 'melee', cd: PET_CD_SEC(0.6), range: 250, fxEl: 'GRASS',
+  desc: '交错剪出十字斩（两道藤鞭特效 · 各向两侧偏转 30°）· 伤害 宝可梦攻击力 ×2 · ' + petCdText(0.6),
+  melee: { r: 250, arc: Math.PI * 0.95, mul: 2, fxK: 6.5, rot: -0.52, cross: 1 }
+};
 /* 🐶 伊布（图鉴 133）的两招（第 15 波捕捉）：高速星星 = 完全照搬「飞叶快刀」· 电光一闪 */
 /* 🥊 **铁哑铃线（#374 / #375 / #376 · 钢）** —— 用户逐条点名（2026-10）：
    大器晚成 · **第 11 波与迷你龙 / 多龙梅西亚三选一** · 波次进化（20 / 25 波各一段）。
@@ -6833,15 +6856,25 @@ const PET_SKILL_TAKEDOWN_STAR = {
   desc: '猛撞强化：冲刺速度 +50% · 伤害提到 5× 宝可梦攻击 · 出手间隔 −1/3 · ' + petCdText(2.6 * 2 / 3),
   dash: { dist: 470 * 1.5, spd: 2250 * 1.5, r: 96, mul: 4, path: 1, charge: 0.5, fxK: 5 }
 };
+/* ✊ **子弹拳**（铁哑铃线 · 用户 2026-10 改口径）：
+   「子弹拳以及子弹拳☆的攻击模式改为和等离子闪电拳的攻击模式相同，但是子弹拳的目标为4个敌人，
+    子弹拳☆为6个敌人，且不带有闪电的拖尾特效，你可以自己做一个你觉得适合的拖尾特效。」
+   → `kind` 由 `strike`（扑过去撞一下）改成 **`blitz`**（和等离子闪电拳同一套：瞬移连打 + 路径拖尾 + 打完清痕）：
+     `dur: 2` 秒内按顺序最多打 `max` 个敌人 · 每拳间隔 `gap: 0.1` 秒 · 贴身距离 `r: 46`。
+   · **目标数**：普通的 **4 个** · ☆ 版 **6 个**（用户指定；等离子闪电拳是 12 / 18）。
+   · **伤害不变**：仍是 `mul: 2`（普通）/ `mul: 3`（☆）—— 用户只说了改攻击模式与目标数，没改伤害。
+     ⚠️ 但 `PET_SKILL_TABLE`（用户手写数值表）里这两只**没有条目**，所以 `petUserMul` 返回 null →
+        实际伤害就是这里的 `mul`；要在表里改数就以表为准（表 > mul）。
+   · **拖尾不是闪电**（用户点名）→ `blitz.trail: 'steel'`，画法见 `drawPetBolts`。 */
 const PET_SKILL_BULLETPUNCH = {
-  id: 'bulletpunch', name: '子弹拳', icon: '✊', kind: 'strike', cd: 1.1 / 2, range: 900, fxEl: 'STEEL',
-  desc: '同「影子偷袭」的打法：锁定最近的敌人冲过去一拳（每拳 3× 宝可梦攻击）· ' + petCdText(1.1 / 2),
-  strike: { spd: 950, mul: 2, r: 28 }
+  id: 'bulletpunch', name: '子弹拳', icon: '✊', kind: 'blitz', cd: 1.1 / 2, range: 900, fxEl: 'STEEL',
+  desc: '瞬移连打：锁定最近的敌人一拳接一拳，2 秒内最多打 4 个（不足就继续打还活着的）· 每拳 宝可梦攻击力 ×2 · ' + petCdText(1.1 / 2),
+  blitz: { dur: 2, max: 4, mul: 2, gap: 0.1, r: 46, fxK: 4 / 3, trail: 'steel' }
 };
 const PET_SKILL_BULLETPUNCH_STAR = {
-  id: 'bulletpunch2', name: '子弹拳☆', icon: '🥋', kind: 'strike', cd: 1.1 / 2 / 1.5, range: 900, fxEl: 'STEEL',
-  desc: '子弹拳强化：攻击速度再 +50% · 每拳 5× 宝可梦攻击 · ' + petCdText(1.1 / 2 / 1.5),
-  strike: { spd: 950 * 1.5, mul: 3, r: 28 }
+  id: 'bulletpunch2', name: '子弹拳☆', icon: '🥋', kind: 'blitz', cd: 1.1 / 2 / 1.5, range: 900, fxEl: 'STEEL',
+  desc: '子弹拳强化：出手更快 · 2 秒内最多打 6 个 · 每拳 宝可梦攻击力 ×3 · ' + petCdText(1.1 / 2 / 1.5),
+  blitz: { dur: 2, max: 6, mul: 3, gap: 0.1, r: 46, fxK: 4 / 3, trail: 'steel' }
 };
 const PET_SKILL_ZENHEADBUTT = {
   id: 'zenheadbutt', name: '意念头锤', icon: '🧠', kind: 'dash', cd: 3.0, range: 520, fxEl: 'PSYCHIC', fxLife: 0.5,
@@ -7278,7 +7311,10 @@ const PET_SKILL_DEF_FORM = {
    跳砸 / 猛冲的中间态同理（换了招还停在半空/冲刺动画里）。 */
 /* 🌿 种子闪光的**刀波**（用户点名：不是叶片弹体，是「类似刀波的攻击」）：
    一道道飞出去 · 命中一次就消失 · 画成新月形（绿色刀刃 + 内层浅色高光）。 */
-/* ⚡ 等离子闪电拳的**瞬移闪电**：{id, x1,y1,x2,y2, t, life} —— 技能结束时按 id 整批清掉（用户要求） */
+/* ⚡ 瞬移连打的**路径拖尾**：{id, x1,y1,x2,y2, t, life, trail} —— 技能结束时按 id 整批清掉（用户要求）。
+   `trail` 决定画法（用户 2026-10：「子弹拳…不带有闪电的拖尾特效，你可以自己做一个你觉得适合的拖尾特效」）：
+     · `''` / 缺省 = **闪电**（等离子闪电拳：折线抖动 + 白色芯 + 末端爆点）
+     · `'steel'`   = **钢拳残影**（子弹拳：笔直的高速光条 + 亮芯 + 逐渐拉长变淡，见 drawPetBolts） */
 let petBolts = [];
 let dbgPetBlitz = 0;
 let dbgShinyGuard = 0;   // 🛡️ 触发「100 次保底」的次数
@@ -7306,8 +7342,8 @@ function blitzNearest(u, arr) {
   u.blitzSeen.add(best);
   return best;
 }
-function petBoltPush(id, x1, y1, x2, y2) {
-  petBolts.push({ id, x1, y1, x2, y2, t: 0, life: 1.2 });
+function petBoltPush(id, x1, y1, x2, y2, trail) {
+  petBolts.push({ id, x1, y1, x2, y2, t: 0, life: 1.2, trail: trail || '' });
   if (petBolts.length > 160) petBolts.splice(0, petBolts.length - 160);   // 保险：不至于无限堆积
 }
 function petBoltsClear(id) { for (let i = petBolts.length - 1; i >= 0; i--) if (!id || petBolts[i].id === id) petBolts.splice(i, 1); }
@@ -7318,6 +7354,35 @@ function drawPetBolts() {
     if (k <= 0) continue;
     const a = Math.atan2(b.y2 - b.y1, b.x2 - b.x1);
     const len = Math.hypot(b.x2 - b.x1, b.y2 - b.y1);
+    /* ✊ **钢拳残影**（子弹拳专用拖尾 · 用户要求"不要闪电"）：笔直的高速光条 ——
+       ① 外层：一条**两端渐细**的银色光带（用两段三角楔拼出来，不需要渐变对象）
+       ② 亮芯：一条纯白细线压在正中（速度感）
+       ③ 收尾：越淡越短（`k` 同时控制透明度与长度），像残影拖过去。 */
+    if (b.trail === 'steel') {
+      const al = Math.max(0, Math.min(1, k));
+      const ux = Math.cos(a), uy = Math.sin(a), nx2 = -uy, ny2 = ux;
+      const L = len * (0.55 + 0.45 * k);              // 越淡越短
+      const w = 5.5 + 9 * k;                          // 越淡越细
+      const x2 = b.x1 + ux * L, y2 = b.y1 + uy * L;
+      ctx.save();
+      ctx.globalAlpha = 0.75 * al;
+      ctx.fillStyle = '#cfe6f5';
+      ctx.beginPath();
+      ctx.moveTo(b.x1, b.y1);
+      ctx.lineTo(x2 + ux * 16 + nx2 * w * 0.35, y2 + uy * 16 + ny2 * w * 0.35);
+      ctx.lineTo(x2 + ux * 16 - nx2 * w * 0.35, y2 + uy * 16 - ny2 * w * 0.35);
+      ctx.closePath();
+      ctx.fill();
+      ctx.globalAlpha = al;
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.8;
+      ctx.beginPath();
+      ctx.moveTo(b.x1, b.y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+      ctx.restore();
+      continue;
+    }
     const segN = Math.max(3, Math.round(len / 34));
     ctx.save();
     ctx.globalAlpha = Math.max(0, Math.min(1, k));
@@ -9148,7 +9213,7 @@ function updatePetAlly(u, dt) {
         u.x = tg.x - Math.cos(ang) * (B.r * 0.55);   // 瞬移到它身边
         u.y = tg.y - Math.sin(ang) * (B.r * 0.55);
         u.petAng = ang; u.petDir = petDir(ang);
-        petBoltPush(u.petId, ox, oy, u.x, u.y);      // 路径闪电
+        petBoltPush(u.petId, ox, oy, u.x, u.y, B.trail);      // 路径拖尾（闪电 / 钢拳残影，看技能的 blitz.trail）
         dbgPetBlitz++;
         hitEnemy(tg, Math.cos(ang), Math.sin(ang), 200, petHitDmg(u.petId, B.mul, SK));
         fxPush(SK.fxEl || petFormElement(u), 'melee', u.x + Math.cos(ang) * 18, u.y - 6 + Math.sin(ang) * 18, B.fxK || 4, ang);
@@ -9317,8 +9382,20 @@ function petMeleeSwing(u, sk) {
     hitEnemy(e, dx / dd, dy / dd, 200, dmg);
     n++;
   }
-  /* 🎨 `M.fxTint`：同一套条带换个颜色（龙爪 = 强力鞭打那套染成蓝灰）—— 第 10 个参数就是染色 */
-  fxPush(el, 'melee', u.x + Math.cos(a) * M.r * 0.45, u.y - 6 + Math.sin(a) * M.r * 0.45, M.fxK || 5, a + (M.rot || 0), null, 0, 0, M.fxTint || '');
+  /* 🎨 `M.fxTint`：同一套条带换个颜色（龙爪 = 强力鞭打那套染成蓝灰）—— 第 10 个参数就是染色。
+     ✂️ **十字剪的第一道**：写了 `M.cross` 时，这一道要**朝一侧偏** `MELEE_CROSS_ANG`（见下面的第二道）。 */
+  const crossOff = M.cross ? MELEE_CROSS_ANG : 0;
+  fxPush(el, 'melee', u.x + Math.cos(a) * M.r * 0.45, u.y - 6 + Math.sin(a) * M.r * 0.45, M.fxK || 5, a + (M.rot || 0) - crossOff, null, 0, 0, M.fxTint || '');
+  /* ✂️ **十字剪的第二道**（用户最新口径：「两个条带各中心旋转30°，但是旋转方向相反」）——
+     两道**同一个中心**、角度一正一负各偏 30° → 对称张开成十字，中轴仍是出手方向。
+     ⚠️ 位置必须和上面那道**完全一致**（同一套 `u.x + cos(a)*r*0.45` 算法）：
+        否则两道不共心，看起来是"两条错开的线"而不是"一个十字"。
+     ⚠️ 只在技能写了 `M.cross` 时才有第二道 —— 别的近战招（藤鞭 / 龙爪 / 撞击…）**一道都不多**，
+        而且它们连上面那一道的 `crossOff` 也是 0（角度与旧版完全一致）。 */
+  if (M.cross) {
+    fxPush(el, 'melee', u.x + Math.cos(a) * M.r * 0.45, u.y - 6 + Math.sin(a) * M.r * 0.45, M.fxK || 5,
+      a + (M.rot || 0) + crossOff, null, 0, 0, M.fxTint || '');
+  }
   burst(u.x + Math.cos(a) * 26, u.y + Math.sin(a) * 26 - 6, 7, PET_FX_TINT[el], 240);
   dbgPetMelee += Math.max(1, n);
   tone(520, 90, 'square', 0.05, 0.04);
@@ -30589,10 +30666,15 @@ window.__musouTrainerInfo = () => {
     petShots: dbgPetShots, booms: dbgPetBooms, waterHits: dbgPetWaterHits, levels: dbgPetLevels, faints: dbgPetFaints,
     meleeHits: dbgPetMelee,
     petSectorTicks: dbgPetSectorTicks,
-    petBlitz: dbgPetBlitz,   // ⚡ 等离子闪电拳的出拳次数（掉帧回归测试用） petSectorHits: dbgPetSectorHits, petSectorCharms: dbgPetSectorCharms,
+    /* ⚡ 瞬移连打的出拳次数（等离子闪电拳 / ✊ 子弹拳 共用这个计数 · 掉帧回归测试用）。
+       ⚠️⚠️ 这行原来写的是 `petBlitz: …, // … petSectorHits: … petSectorCharms: …` ——
+          **后两个字段被写进注释里了**，等于它们不存在（`dbg().petSectorHits` 永远是 undefined）。
+          现在把两个字段真正放出来；同一个 `petBlitz` 也不再在下面重复赋值一次。 */
+    petBlitz: dbgPetBlitz,
+    petSectorHits: dbgPetSectorHits, petSectorCharms: dbgPetSectorCharms,
     petMoons: dbgPetMoons,
   petWaves: dbgPetWaves,
-  petBlitz: dbgPetBlitz, petBoltsLive: petBolts.length, chain: chainReady(), chainPick: chainPickId(), chainRun: p.chainRun ? 1 : 0, zeraLv: zeraoraLv(), zeraArt: artGot(ZERA_ART) ? 1 : 0, petMoonBooms: dbgPetMoonBooms, petMoonsLive: petMoons.length, slams: dbgPetSlam,   // 🐾 近战命中次数（抓击/藤鞭/砸地）· 🚀 跳砸/猛冲落地次数
+  petBoltsLive: petBolts.length, chain: chainReady(), chainPick: chainPickId(), chainRun: p.chainRun ? 1 : 0, zeraLv: zeraoraLv(), zeraArt: artGot(ZERA_ART) ? 1 : 0, petMoonBooms: dbgPetMoonBooms, petMoonsLive: petMoons.length, slams: dbgPetSlam,   // 🐾 近战命中次数（抓击/藤鞭/砸地）· 🚀 跳砸/猛冲落地次数
     jetTicks: dbgJetTicks, auraTicks: dbgPetAura,
       petMoons: dbgPetMoons, petMoonBooms: dbgPetMoonBooms, petMoonsLive: petMoons.length, dashes: dbgPetDash,   // 💧 光束结算节拍 · 🌡️ 环绕结算次数 · ☄️ 猛冲次数
     beams: dbgPetBeams,   // ☀️ 日光束发射次数（一发光炮）
@@ -30687,10 +30769,15 @@ function skDump(s) {
     ghost: (s.shot && s.shot.ghost) ? 1 : 0,           // 🌑 幽灵系光球（暗影球：画成紫黑色）
     star: (s.shot && s.shot.star) ? 1 : 0,             // ⭐ 画成代码画的四角星（伊布·高速星星）
     def: s.id === PET_SKILL_DEF[Object.keys(PET_SKILLS_V2).filter(k => !PET_SKILLS_V2[k].form).find(k => petSkillList(k).indexOf(s) >= 0)] ? 1 : 0,
-    melee: s.melee ? { r: s.melee.r, arc: +s.melee.arc.toFixed(3), mul: s.melee.mul, hits: s.melee.hits || 1, gap: s.melee.gap || 0, fxTint: s.melee.fxTint || '' } : null,
+    /* ✂️ `cross` = 十字剪那道**第二道特效**的标记（`petMeleeSwing` 读它决定要不要多画一道）——
+       必须带出来，否则测试/开发面板看技能数据时以为它没生效（本轮踩过：面板读到的 melee 里没有 cross）。 */
+    melee: s.melee ? { r: s.melee.r, arc: +s.melee.arc.toFixed(3), mul: s.melee.mul, hits: s.melee.hits || 1, gap: s.melee.gap || 0, fxTint: s.melee.fxTint || '', cross: s.melee.cross || 0, rot: s.melee.rot || 0, fxK: s.melee.fxK || 0 } : null,
     shot: s.shot ? { n: s.shot.n, mul: s.shot.mul, boomR: s.shot.boomR || 0, boomMul: s.shot.boomMul || 0, pierce: s.shot.pierce || 0, homing: s.shot.homing || 0, spread: s.shot.spread || 0, spd: s.shot.spd, orbR: s.shot.orbR || 0, hitR: s.shot.hitR || 0, life: s.shot.life || 0, mini: s.shot.mini || 0, miniK: s.shot.miniK || 0, off: s.shot.off || 0, homingTurn: s.shot.homingTurn || 0 } : null,
     slam: s.slam ? { r: s.slam.r, mul: s.slam.mul } : null,
     spin: s.spin ? { dist: Math.round(s.spin.dist), spd: s.spin.spd, r: s.spin.r, mul: s.spin.mul } : null,
+    /* ⚡ 瞬移连打（等离子闪电拳 / ✊ 子弹拳）：`max` = 一轮最多打几个 · `trail` = 路径拖尾画法
+       （'' = 闪电 · 'steel' = 钢拳残影）。不带出来的话测试/开发面板读不到这两个关键口径。 */
+    blitz: s.blitz ? { dur: s.blitz.dur, max: s.blitz.max, mul: s.blitz.mul, gap: s.blitz.gap, r: s.blitz.r, fxK: s.blitz.fxK || 0, trail: s.blitz.trail || '' } : null,
     rest: s.rest ? { tick: s.rest.tick, heal: s.rest.heal, shield: s.rest.shield } : null,
     shell: s.shell ? { cd: s.shell.cd, dur: s.shell.dur, hpCost: s.shell.hpCost, dmgMul: s.shell.dmgMul, spdMul: s.shell.spdMul } : null,
     spdMul: s.spdMul || 0,
@@ -30998,6 +31085,9 @@ window.__musouPetAttack = () => {                        // 测试钩子：立�
     else if (sk0.kind === 'beam') {                      // ☀️ 日光束：立刻打一发光炮（方向 = 指针）
       u.petAng = petAimAng(u); u.petDir = petDir(u.petAng); petAnim(u, 'atk', true); petFireBeam(u, sk0);
     }
+    /* ⚡ 瞬移连打（等离子闪电拳 / ✊ 子弹拳）：起手走正常帧流程（**不能落到下面的 `firePetAttack`**
+       —— 那条路没有 blitz 分支，等于白跑一次，测试会以为"技能没出手"，本轮踩过）。 */
+    else if (sk0.kind === 'blitz') { u.atkT = 0; }
     else if (sk0.kind === 'slam' || sk0.kind === 'dash') { u.atkT = 0; }   // 跳砸 / 猛冲：起手走正常帧流程
     else { u.atkT = 0; firePetAttack(u, foe, sk0); }
     n++;
@@ -31077,6 +31167,10 @@ window.__musouFxInfo = () => ({
   loaded: Object.keys(PET_FX_SRC).filter(el => Object.keys(fxOK[el] || {}).length > 0).length,
   live: fxSprites.map(o => ({ el: o.el, name: o.name, f: o.f, k: +o.k.toFixed(2), x: Math.round(o.x), y: Math.round(o.y), rot: +o.rot.toFixed(2), spin: o.spin })),
   liveN: fxSprites.length, spawns: dbgFxN,
+  /* ⚡ 瞬移连打的**路径拖尾**（等离子闪电拳 / ✊ 子弹拳）：`trail` 是画法
+     （'' = 闪电 · 'steel' = 钢拳残影）—— 测试靠它钉「子弹拳不带闪电拖尾」。 */
+  bolts: petBolts.map(b => ({ id: b.id, trail: b.trail || '', t: +b.t.toFixed(2), life: b.life,
+    x1: Math.round(b.x1), y1: Math.round(b.y1), x2: Math.round(b.x2), y2: Math.round(b.y2) })),
   petShots: shots.filter(s => s.petShot).length
 });
 window.__musouFxPush = (name, k, el) => {   // 测试钩子：在玩家脚下推一个特效（读帧推进/自动销毁）
@@ -31763,12 +31857,11 @@ var PET_SKILLS_V2 = {
       dash: { dist: 320, spd: 2400, r: 70, mul: 1.5, fxK: 4, path: 1 } }
   ]] },
   /* 🦗 飞天螳螂（第 15 波捕捉 · 道具进化：金属膜 → 巨钳螳螂 / 黑奇石 → 劈斧螳螂）
-     ⚠️ 三只**暂时都是伊布同款的「电光一闪」**（用户 2026-10：「技能暂时都为伊布同款的电光一闪，
-        后续我会补充新的技能」）→ 这里**引用同一个 `PET_SKILL_QUICKATTACK` 对象**，等用户给出新技能时
-        按他的口径各自独立做（参考比克提尼那段的注释：「新技能不要用引用关系，直接独立做一个技能」）。
+     ⚠️ 三只的技能表（用户 2026-10）：飞天螳螂**两招**（电光一闪 + 十字剪）；
+        巨钳螳螂 / 劈斧螳螂暂时沿用同一套（用户说「后续我会补充新的技能」）。
      ⚠️ 三段（scyther / scizor / kleavor 各一条）分开写：`petSkillList` 先按**形态 key** 查，
         查不到才回落到物种那条 —— 以后巨钳螳螂 / 劈斧螳螂各给一套新招时，改对应那一条即可。 */
-  scyther: { species: '飞天螳螂', form: '', skills: [[PET_SKILL_QUICKATTACK], [PET_SKILL_QUICKATTACK], [PET_SKILL_QUICKATTACK]] },
+  scyther: { species: '飞天螳螂', form: '', skills: [[PET_SKILL_QUICKATTACK, PET_SKILL_CROSSCUT], [PET_SKILL_QUICKATTACK, PET_SKILL_CROSSCUT], [PET_SKILL_QUICKATTACK, PET_SKILL_CROSSCUT]] },
   /* 多龙梅西亚线（第 11 波捕捉 · 20 / 25 波进化） */
   dreepy: { species: '多龙梅西亚线', form: '', skills: [[PET_SKILL_QUICKATTACK], [PET_SKILL_UTURN, PET_SKILL_SHADOWBALL], [PET_SKILL_DRAGONARROW, PET_SKILL_SHADOWBALL_STAR]] },
   /* 迷你龙线（第 11 波捕捉 · 20 / 25 波进化） */
@@ -31813,10 +31906,10 @@ var PET_SKILLS_V2 = {
   armarouge: { species: '红莲铠骑', form: 'charcadet', skills: [PET_FORMSKILL_ARMAROUGE] },
   /* 苍炎刃鬼（charcadet 的进化型） */
   ceruledge: { species: '苍炎刃鬼', form: 'charcadet', skills: [PET_FORMSKILL_CERULEDGE] },
-  /* 🦗 巨钳螳螂（scyther 的进化型 · 商店买金属膜）—— 招式**暂时**同飞天螳螂（电光一闪） */
-  scizor: { species: '巨钳螳螂', form: 'scyther', skills: [[PET_SKILL_QUICKATTACK]] },
-  /* 🦗 劈斧螳螂（scyther 的进化型 · 商店买黑奇石）—— 招式**暂时**同飞天螳螂（电光一闪） */
-  kleavor: { species: '劈斧螳螂', form: 'scyther', skills: [[PET_SKILL_QUICKATTACK]] },
+  /* 🦗 巨钳螳螂（scyther 的进化型 · 商店买金属膜）—— 招式同飞天螳螂那两招（电光一闪 + ✂️ 十字剪） */
+  scizor: { species: '巨钳螳螂', form: 'scyther', skills: [[PET_SKILL_QUICKATTACK, PET_SKILL_CROSSCUT]] },
+  /* 🦗 劈斧螳螂（scyther 的进化型 · 商店买黑奇石）—— 同上 */
+  kleavor: { species: '劈斧螳螂', form: 'scyther', skills: [[PET_SKILL_QUICKATTACK, PET_SKILL_CROSSCUT]] },
   /* 始源盖欧卡（kyogre 的进化型） */
   kyogre1: { species: '始源盖欧卡', form: 'kyogre', skills: [[PET_SKILL_ORIGINPULSE_STAR, PET_SKILL_THUNDER_STAR]] },
   /* 始源固拉多（groudon 的进化型） */
@@ -31990,6 +32083,22 @@ const PET_SKILL_TABLE = {
   "苍炎刃鬼": {
     "悔念剑": 6,
     "影子偷袭": 2,
+  },
+  /* 🦗 飞天螳螂线（用户 2026-10 新增）—— 三只**暂时都只有「电光一闪」一招数值**；
+     十字剪的「×2 宝可梦攻击力」按用户口径写成 2（等于代码里的 `melee.mul`，两边一致就不会打架）。
+     ⚠️ 巨钳螳螂 / 劈斧螳螂那两行是**按本表的进化惯例推的**（进化形态倍率更高）——
+        用户还没给这两只的数，等他填 `docs\宝可梦技能数值表*.csv` 时以他写的为准。 */
+  "飞天螳螂": {
+    "电光一闪": 2,
+    "十字剪": 2,
+  },
+  "巨钳螳螂": {
+    "电光一闪": 2.5,
+    "十字剪": 2.5,
+  },
+  "劈斧螳螂": {
+    "电光一闪": 3,
+    "十字剪": 3,
   },
   "多龙梅西亚": {
     "电光一闪": 2,
