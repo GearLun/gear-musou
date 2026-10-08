@@ -18826,20 +18826,64 @@ const SAVE_LAYOUT = [
   ['setsUse', 1, 3],     // ⑪ 套装启用
   ['flag',    1, 2],     // ⑫ egg / setAll 两个一次性标记
   /* 🔗 **刷闪连锁**（用户 2026-10 要求「导出存档时额外保留连锁次数」）：
-     ⚠️ **必须追加在末尾**（不能插在中间）：老存档码解码时会在**左侧补 0 到固定长度**
-        （`dec.padStart(SAVE_DIGITS + SAVE_CK)`），所以老码解出来这两段是 0
-        = 「没有连锁机会」——**能正常导入**，只是连锁信息丢失（金币/图鉴等全部保留）。
-        长度校验用的是 `SAVE_DIGITS` 常量（不是码的 length），所以追加是安全的。 */
+     ⚠️ **必须追加在末尾**（不能插在中间）：老存档码解码时会**按老布局长度左补 0**
+        （见 `SAVE_LAYOUTS` 的说明），补出来的这两段是 0 = 「没有连锁机会」——
+        能正常导入，只是连锁信息丢失（金币/图鉴等全部保留）。
+        长度校验按**码长自动选布局**，所以追加是安全的。 */
   ['chain',   2, 1],     // ⑬ 连锁可用次数（0~99，够用了）
   ['chainP',  2, 1],     // ⑭ 选中的连锁目标 = **闪光图鉴里的槽位下标**（0 = 没选）
 ];
-const SAVE_DIGITS = SAVE_LAYOUT.reduce((a, f) => a + f[1] * f[2], 0);   // 总位数（148）
+/* ══════════════════════════════════════════════════════════════════════════
+   🗂️ **历史布局注册表**（用户 2026-10 报的 bug：「老版本存档码在新版本会错位，闪光图鉴乱了」）
+   ──────────────────────────────────────────────────────────────────────────
+   病根：解码时原来是 `dec.padStart(当前总位数, '0')` —— **左补 0**。
+   一旦布局加过字段（总位数变长），老码被补成新长度 → **整串数据右移**：
+     · `ver` 读到的是老码的备用位；
+     · 10 位的十进制字段（`bank` / `earned`）被从中间切开 → **金币缩水、图鉴乱码**（用户看到的就是这个）。
+   修法：把**每一代布局**都登记在下面，解码时**按码的十进制长度自动认出是哪一代**，
+        再**按那代的偏移**解析（老码按**老长度**左补 0 —— 它本来就是那个长度，等于没补）。
+   ⚠️ 以后再加字段：**只在末尾追加**（`SAVE_LAYOUT` 改完，这里**不用**加新的一代 ——
+      因为长度变了会自动落到 else 分支用当前布局解析，而末尾追加对老码无影响）。
+   ⚠️ **只有在「改动已有字段的位宽/含义」时才需要新增一代**（那会破坏兼容，必须升 `SAVE_VER`）。
+   实测长度（**全部含末尾 2 位校验**，因为解码算出来的 `dec` 就是含校验的整串）：
+     v1 = 148 数据 + 2 校验 = **150**；v2 = 152 数据 + 2 校验 = **154**。
+   ⚠️⚠️ `total` 必须写**含校验**的长度：解码里是 `SAVE_LAYOUTS.filter(L => L.total === dec.length)`，
+      `dec` 是「数据 + 校验」的整串 —— 这里写错（只写数据位宽）会让**所有码都匹配不上**，
+      全部落到 else 用当前布局 → 老码照样错位（本轮就踩了这个：登记 148/152，实际 150/154）。
+   ══════════════════════════════════════════════════════════════════════════ */
 const SAVE_CK = 2;                                                      // 末尾 2 位校验数字
-const SAVE_OFF = (() => {
+const SAVE_LAYOUTS = [
+  /* v1：最初的布局（没有末尾的「刷闪连锁」两段）—— 148 数据 + 2 校验 = 150 */
+  { ver: 1, dataW: 148, total: 150, layout: SAVE_LAYOUT.filter(f => f[0] !== 'chain' && f[0] !== 'chainP') },
+  /* v2：追加「刷闪连锁」—— 152 数据 + 2 校验 = 154；与 v1 共用同一个格式版本号（兼容追加，不算破坏） */
+  { ver: 1, dataW: 152, total: 154, layout: SAVE_LAYOUT },
+];
+const SAVE_DIGITS = SAVE_LAYOUT.reduce((a, f) => a + f[1] * f[2], 0);   // 当前数据位数（152）
+/* 按某份布局算字段偏移（解码要走**那一代**的偏移，不能用当前的） */
+function saveOffsetsOf(layout) {
   const o = {}; let p = 0;
-  for (const [k, w, n] of SAVE_LAYOUT) { o[k] = { p, w, n }; p += w * n; }
+  for (const [k, w, n] of layout) { o[k] = { p: p, w: w, n: n }; p += w * n; }
   return o;
-})();
+}
+const SAVE_OFF = saveOffsetsOf(SAVE_LAYOUT);
+/* 每代布局的每个段字符串（导出时按它拼，**不写死长度**：
+   漏拼一个段会让整串错位，所以必须和 SAVE_LAYOUT 保持一致 —— 这是唯一数据源） */
+const SAVE_SEG_BUILD = {
+  ver: () => savePad(SAVE_VER, 1) + '0',                                  // 格式版本 + 备用位
+  tree: () => META_TREE.map((n, i) => savePad(n ? metaLv(n.id) : 0, 2)).join('') + '0'.repeat(2 * Math.max(0, 12 - META_TREE.length)),
+  treeRes: () => '0'.repeat(16),                                          // 预留（养成 / 技能书）
+  dex: () => SHINY_SPECIES.map(id => shinyGot(id) ? '1' : '0').join('') + '0'.repeat(Math.max(0, 24 - SHINY_SPECIES.length)),
+  dexOn: () => SHINY_SPECIES.map(id => shinyOn(id) ? '1' : '0').join('') + '0'.repeat(Math.max(0, 24 - SHINY_SPECIES.length)),
+  dexRes: () => '0'.repeat(24),                                           // 预留（图鉴）
+  runs: () => savePad(meta.runs, 6),
+  bank: () => savePad(meta.bank, 10),
+  earned: () => savePad(meta.earned, 10),
+  sets: () => CLASS_SETS.map(c => meta.sets[c.role] ? '1' : '0').join('').padEnd(3, '0'),
+  setsUse: () => CLASS_SETS.map(c => meta.use[c.role] ? '1' : '0').join('').padEnd(3, '0'),
+  flag: () => (meta.egg ? '1' : '0') + (meta.setAll ? '1' : '0'),
+  chain: () => savePad(meta.chain || 0, 2),
+  chainP: () => savePad(chainPickId() ? (SHINY_SPECIES.indexOf(chainPickId()) + 1) : 0, 2),
+};
 function savePad(v, w) {
   const mx = Math.pow(10, w) - 1;
   return String(Math.max(0, Math.min(mx, Math.floor(Number(v) || 0)))).padStart(w, '0');
@@ -18847,20 +18891,12 @@ function savePad(v, w) {
 /* 摊平成一串十进制数字（每位一个字符，方便整体换 64 进制） */
 function saveDigits() {
   let s = '';
-  s += savePad(SAVE_VER, 1) + '0';                                        // ver + 备用
-  for (let i = 0; i < 12; i++) s += savePad(META_TREE[i] ? metaLv(META_TREE[i].id) : 0, 2);
-  s += '0'.repeat(16);                                                    // 预留（养成 / 技能书）
-  for (let i = 0; i < 24; i++) s += (SHINY_SPECIES[i] && shinyGot(SHINY_SPECIES[i])) ? '1' : '0';
-  for (let i = 0; i < 24; i++) s += (SHINY_SPECIES[i] && shinyOn(SHINY_SPECIES[i])) ? '1' : '0';
-  s += '0'.repeat(24);                                                    // 预留（图鉴）
-  s += savePad(meta.runs, 6) + savePad(meta.bank, 10) + savePad(meta.earned, 10);
-  for (const c of CLASS_SETS) s += meta.sets[c.role] ? '1' : '0';
-  for (const c of CLASS_SETS) s += meta.use[c.role] ? '1' : '0';
-  s += (meta.egg ? '1' : '0') + (meta.setAll ? '1' : '0');
-  /* 🔗 刷闪连锁：可用次数 + 选中的目标（存**图鉴槽位下标**，1-based；0 = 没选，见 SAVE_LAYOUT 的说明） */
-  s += savePad(meta.chain || 0, 2);
-  const chainSlot = chainPickId() ? (SHINY_SPECIES.indexOf(chainPickId()) + 1) : 0;
-  s += savePad(chainSlot, 2);
+  for (const [k, w, n] of SAVE_LAYOUT) {
+    const one = SAVE_SEG_BUILD[k] ? SAVE_SEG_BUILD[k]() : '0'.repeat(w * n);
+    s += one;
+    /* 🔒 自检：每段长度必须等于它在表里声明的长度，否则整串会错位（宁可在这里暴露，也不要静默写坏存档） */
+    if (one.length !== w * n) throw new Error('存档码段 ' + k + ' 长度不符：' + one.length + ' ≠ ' + (w * n));
+  }
   return s;
 }
 /* 校验：按位置加权求和 → 2 位十进制（防手抄漏一位 / 抄错一位） */
@@ -18886,6 +18922,15 @@ function b64ToDec(str) {
   return n.toString();
 }
 function exportSaveCode() { const d = saveDigits(); return SAVE_PREFIX + decToB64(d + saveCk(d)); }
+/* 🧪 **按「历史布局」导出**（只给测试用：验证老版本存档码在新版本里能被正确解析、不错位）。
+   ⚠️ 这是**永久的回归测试工具**，不要在正常导出路径上用它（`exportSaveCode` 才是给玩家的那个）。
+   ⚠️ 老码**没有**末尾的「刷闪连锁」两段 —— 这正是当年错位的根源。 */
+function exportSaveCodeLegacy() {
+  const L = SAVE_LAYOUTS[0];   // 注册表里的第一代（v1）
+  let s = '';
+  for (const [k, w, n] of L.layout) s += SAVE_SEG_BUILD[k] ? SAVE_SEG_BUILD[k]() : '0'.repeat(w * n);
+  return SAVE_PREFIX + decToB64(s + saveCk(s));
+}
 /* 🌟 特殊存档码（用户要求）：「GearLun」= 一键导入**技能树全满 + 三职业闪光套装全满**的存档，
    传承金币 0、闪光图鉴**留空**。不区分大小写；走的是**同一条导入路径**（照样要二次确认覆盖）。
    ⚠️ 实现方式：`decodeSaveCode()` 识别到这个码就直接返回一份**预设好的 data**，
@@ -18909,14 +18954,24 @@ function decodeSaveCode(code) {
   if (raw.slice(0, SAVE_PREFIX.length) !== SAVE_PREFIX) return { ok: 0, why: '存档码格式不对（应以 ' + SAVE_PREFIX + ' 开头）' };
   const dec = b64ToDec(raw.slice(SAVE_PREFIX.length));
   if (dec === null) return { ok: 0, why: '存档码里有非法字符（只允许 0-9 A-Z a-z - _）' };
-  const all = dec.padStart(SAVE_DIGITS + SAVE_CK, '0');
-  if (all.length !== SAVE_DIGITS + SAVE_CK) return { ok: 0, why: '存档码长度不对（可能少抄了一段）' };
-  const dig = all.slice(0, SAVE_DIGITS), ck = all.slice(SAVE_DIGITS);
+  /* ── 🗂️ 按**码的十进制长度**认布局版本（用户 2026-10 报的「老码错位」就是这里修掉的）──
+     ⚠️⚠️ 以前是 `padStart(当前总位数)`（左补 0）→ 布局加过字段之后老码被补长 → **整串右移**
+        → `ver` 读到备用位、10 位的 `bank`/`earned` 被从中间切开 → **闪光图鉴乱码、金币缩水**。
+     现在：先看长度落在哪一代，再用**那一代的偏移**解析；老码按**老长度**左补 0（它本来就是那么长）。
+     ⚠️ 末尾追加字段**不需要**在这里加新代（长度自动落到 else 用当前布局，追加对老码无影响）。 */
+  const known = SAVE_LAYOUTS.filter(L => L.total === dec.length);
+  const useL = known.length ? known[known.length - 1] : null;
+  const dataW = useL ? useL.dataW : SAVE_DIGITS;
+  const all = dec.padStart(dataW + SAVE_CK, '0');
+  if (all.length !== dataW + SAVE_CK) return { ok: 0, why: '存档码长度不对（可能少抄了一段）' };
+  const dig = all.slice(0, dataW), ck = all.slice(dataW);
   if (saveCk(dig) !== ck) return { ok: 0, why: '存档码校验失败（抄漏/抄错了一位？）' };
-  if (Number(dig[SAVE_OFF.ver.p]) !== SAVE_VER) return { ok: 0, why: '存档码版本不认识（v' + dig[SAVE_OFF.ver.p] + '）' };
-  const seg = (k, i) => dig.substr(SAVE_OFF[k].p + SAVE_OFF[k].w * i, SAVE_OFF[k].w);
-  const num = (k, i) => Number(seg(k, i));
-  const wide = (k) => Number(dig.substr(SAVE_OFF[k].p, SAVE_OFF[k].w * SAVE_OFF[k].n));   // 单值字段（位数 × 槽数）
+  const LAY = useL ? useL.layout : SAVE_LAYOUT;
+  const OFF = useL ? saveOffsetsOf(LAY) : SAVE_OFF;
+  const seg = (k, i) => { const o = OFF[k]; return o ? dig.substr(o.p + o.w * i, o.w) : ''; };   // 老布局没有的字段 → 空串
+  const num = (k, i) => { const v = Number(seg(k, i)); return isFinite(v) ? v : 0; };
+  const wide = (k) => { const o = OFF[k]; if (!o) return 0; const v = Number(dig.substr(o.p, o.w * o.n)); return isFinite(v) ? v : 0; };
+  if (num('ver', 0) !== SAVE_VER) return { ok: 0, why: '存档码版本不认识（v' + num('ver', 0) + '）' };
   const tree = {}, dex = {}, dexOn = {};
   META_TREE.forEach((n, i) => { tree[n.id] = num('tree', i); });                  // 多余槽位留给以后新增的养成项
   SHINY_SPECIES.forEach((id, i) => {
@@ -18928,12 +18983,13 @@ function decodeSaveCode(code) {
     use[c.role] = sets[c.role] && num('setsUse', i) ? 1 : 0;
   });
   return {
-    ok: 1, why: '', digits: dig,
+    ok: 1, why: '', digits: dig, dataW: dataW,
     data: {
       tree, dex, dexOn, sets, use,
       runs: wide('runs'), bank: wide('bank'), earned: wide('earned'),
       egg: num('flag', 0), setAll: num('flag', 1),
-      /* 🔗 刷闪连锁：槽位下标 → 宝可梦 id（越界/空位当没选）。老存档码这两段是 0 → chain 0、没目标。 */
+      /* 🔗 刷闪连锁：槽位下标 → 宝可梦 id（越界/空位当没选）。
+         ⚠️ 老布局（没有这两段的）→ 取到 0 → 「没连锁机会」，但**其它字段一个都不会错位**。 */
       chain: wide('chain'),
       chainP: (() => { const s2 = wide('chainP'); return (s2 >= 1 && SHINY_SPECIES[s2 - 1]) ? SHINY_SPECIES[s2 - 1] : ''; })(),
     },
@@ -29315,7 +29371,7 @@ window.__musouShinyWave = (forceShiny) => { const r = shinyMutWaveEnd(wave, forc
 window.__musouShinyOpen = () => { openShinyDex(); return window.__musouShinyDex(); };   // 测试钩子：打开图鉴面板
 window.__musouShinyClose = () => { $('sc-shiny').classList.remove('show'); };
 window.__musouPetSkillOf = (id) => skDump(petSkillOf(id));   // 测试钩子：某只宝可梦**当前实际生效**的那一招（含奇物·千年之愿把破灭之愿换成破灭之愿☆）
-window.__musouMetaBank = (v) => { meta.bank = Math.max(0, v | 0); metaSave(); syncMetaBtn(); };   // 测试钩子：设定传承金币
+window.__musouMetaBank = (v) => { if (v !== undefined) { meta.bank = Math.max(0, v | 0); metaSave(); syncMetaBtn(); } return meta.bank; };   // 测试钩子：读/写传承金币（不传 = 读）   // 测试钩子：设定传承金币
 window.__musouMetaSetOwn = (role, own, use) => { meta.sets[role] = own ? 1 : 0; meta.use[role] = use ? 1 : 0; metaSave(); }; // 测试钩子：设定套装解锁/启用
 window.__musouSetAll = () => ({ sets: metaSetsOwned(), need: CLASS_SETS.length, claimed: meta.setAll ? 1 : 0, reward: SET_ALL_REWARD, bank: meta.bank, gain: lastSetAllGain }); // 测试钩子：三职业闪光套装集齐奖励状态
 window.__musouSetAllTry = () => metaSetAllCheck();   // 测试钩子：再走一次发奖判定（已领过 / 没集齐都返回 0）
@@ -29324,9 +29380,37 @@ window.__musouMetaTreeCaps = () => META_TREE.map(n => ({ id: n.id, max: n.max })
 window.__musouMetaBuy = (id) => metaBuy(id);     // 测试钩子：走真实购买流程
 /* 💾 存档码钩子（导出 / 解码 / 覆盖导入）—— 导入会**清掉当前局外存档**，测试里请自行备份后用完恢复 */
 window.__musouSaveCode = () => exportSaveCode();                       // 导出当前局外存档的存档码
-window.__musouSaveLen = () => SAVE_DIGITS + SAVE_CK;                   // 十进制总位数（148 + 2 位校验）
+window.__musouSaveLen = () => SAVE_DIGITS + SAVE_CK;                   // 十进制总位数（151 + 2 位校验）
 window.__musouSaveLayout = () => SAVE_LAYOUT.map(f => f[0] + ':' + (f[1] * f[2])).join(' ');   // 字段表（含预留段）
-window.__musouSaveDecode = (code) => { const r = decodeSaveCode(String(code || '')); return r.ok ? { ok: 1, data: r.data, digits: r.digits, special: r.special || '' } : { ok: 0, why: r.why }; };
+/* 🗂️ 历史布局注册表读数（用户 2026-10 报的「老存档码错位」就是按它认代的）。
+   每代给出：格式版本 / 十进制总位数 / 字段偏移表。 */
+window.__musouSaveLayouts = () => SAVE_LAYOUTS.map(L => ({
+  ver: L.ver, digits: L.dataW, total: L.total,
+  fields: L.layout.map(f => f[0] + ':' + (f[1] * f[2])).join(' '),
+}));
+/* 🧪 按历史布局（第一代）导出 —— 用来验证「老码在新版本里能正确解析、不错位」 */
+window.__musouSaveCodeLegacy = () => exportSaveCodeLegacy();
+/* 🧪 读数：当前布局 / 历史布局各自算出来的**数字串**（排查"校验对不上"时逐位对照用）。
+   `legacy` 连带把校验和也切出来，方便直接看出是"数据不同"还是"校验算错"。 */
+window.__musouSaveDigits = () => {
+  const now = saveDigits();
+  const L = SAVE_LAYOUTS[0];
+  let s = '';
+  for (const [k, w, n] of L.layout) s += SAVE_SEG_BUILD[k] ? SAVE_SEG_BUILD[k]() : '0'.repeat(w * n);
+  /* 🧪 顺便把**解码侧的中间量**也算出来：认到哪一代、校验是"算法不同"还是"数据不同" */
+  const diag = (code) => {
+    const d = b64ToDec(String(code || '').slice(SAVE_PREFIX.length));
+    if (d === null) return { err: '非法字符' };
+    const known = SAVE_LAYOUTS.filter(x => x.total === d.length);
+    const w = known.length ? known[known.length - 1].dataW : SAVE_DIGITS;
+    const all = d.padStart(w + SAVE_CK, '0');
+    return { decLen: d.length, knownW: known.map(x => x.dataW), useW: w, allLen: all.length,
+      dataLen: w, ckInCode: all.slice(w), ckCalc: saveCk(all.slice(0, w)), same: saveCk(all.slice(0, w)) === all.slice(w) };
+  };
+  return { now: now, nowCk: saveCk(now), legacy: s, legacyCk: saveCk(s), legacyW: L.dataW,
+    diagLegacy: diag(exportSaveCodeLegacy()), diagNow: diag(exportSaveCode()) };
+};
+window.__musouSaveDecode = (code) => { const r = decodeSaveCode(String(code || '')); return r.ok ? { ok: 1, data: r.data, digits: r.digits, dataW: r.dataW, special: r.special || '' } : { ok: 0, why: r.why }; };
 window.__musouSaveApply = (code) => { const r = applySaveCode(String(code || '')); if (r.ok) { renderMeta(); renderShinyDex(); } return r.ok ? { ok: 1, data: r.data, special: r.special || '' } : { ok: 0, why: r.why }; };
 window.__musouAimRate = () => AIM_TURN_RATE;                           // 📱 手机端线性攻击的转向速度（rad/s）
 window.__musouAimTurn = (cur, want, dt) => turnToward(cur, want, dt);   // 转向助手（钉「0.5 秒转满 360°」）
