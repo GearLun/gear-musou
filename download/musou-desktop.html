@@ -6914,15 +6914,20 @@ const PET_SKILL_ROCKAXE = {
   slash: { charge: 0.5, reach: 122 * 4.5 * 0.8, arc: Math.PI, mul: 7, fxK: 7 }
 };
 /* 🪨 **岩崩（劈斧螳螂 · 用户 2026-10 点名 · 独立 kind `rockfall`）**：
-   「攻击范围约为400px，在范围内落下岩石，可以暂停敌人的行动0.5秒，并且造成5x宝可梦攻击力的伤害，技能间隔1秒。」
-   · `r: 400` 半径内**随机落下 `n` 块石头**（每块 `fall` 秒落地）→ 落地时对它脚下 `boomR` 内的敌人
+   用户原话（两轮，**以最新为准**）：
+     ① 「攻击范围约为400px，在范围内落下岩石，可以暂停敌人的行动0.5秒，并且造成5x宝可梦攻击力的伤害，技能间隔1秒。」
+     ② **「岩崩需要自动索敌，而不是随机释放，对一个敌人最多索敌一次。每个岩崩的攻击范围再扩大至现在的2倍，
+          岩崩的个数减少到三个。减少岩崩攻击的震屏幕效果。」**
+   → 现在：**索敌半径 400** 内按距离取最近 **3 个敌人**（**每只最多一块**，不是随机撒）→
+     石头落地对它脚下 **`boomR` 210**（105 × 2，用户「攻击范围再扩大至现在的2倍」）内的敌人
      造成 `mul × 宝可梦攻击力` 的伤害 + **定身 `stun` 秒**（复用雷系的 `e.stunT`，Boss 免疫由 `stunEnemy` 统一处理）。
    · 出手间隔 **1 秒**（`cd: 1` → 真实 1 秒，`PET_ATK_RATE` 会 ÷2，所以写 `PET_CD_SEC(1)`）。
+   · 📳 **震动很轻**：放技能 `shake 1` · 每块落地 `shake 2`（原来 3 / 5，用户嫌震）。
    · 视觉：落点先铺一圈**预警环**（0.45 秒）+ 落石本体（GROUND 的 `cell` 条带染色）。 */
 const PET_SKILL_ROCKFALL = {
   id: 'rockfall', name: '岩崩', icon: '🪨', kind: 'rockfall', cd: PET_CD_SEC(1), range: 400, fxEl: 'GROUND',
-  desc: '在身前 400px 范围内砸落岩石：每块 宝可梦攻击力 ×5 并定身 0.5 秒 · ' + petCdText(1),
-  rockfall: { r: 400, n: 6, fall: 0.5, warn: 0.45, boomR: 105, mul: 5, stun: 0.5, fxK: 6, spread: 1 }
+  desc: '锁定 400px 内最近的 3 个敌人各砸一块岩石（同一只只砸一次）：每块 宝可梦攻击力 ×5 并定身 0.5 秒 · ' + petCdText(1),
+  rockfall: { r: 400, n: 3, fall: 0.5, warn: 0.45, boomR: 210, mul: 5, stun: 0.5, fxK: 6, pick: 1 }
 };
 const PET_SKILL_ZENHEADBUTT = {
   id: 'zenheadbutt', name: '意念头锤', icon: '🧠', kind: 'dash', cd: 3.0, range: 520, fxEl: 'PSYCHIC', fxLife: 0.5,
@@ -8446,25 +8451,47 @@ function drawPetMeteors() {
    ═══════════════════════════════════════════════════════════════════════════ */
 let petRocks = [];
 let dbgPetRocks = 0;
-/* 放一次：半径 `R.r` 内随机撒 `n` 块（避开玩家脚下那一小圈，不然全砸自己身上看不见） */
+let dbgPetRockPicks = 0;   // 🎯 最近一次岩崩索敌到几个目标（测试用：钉「一个敌人最多索敌一次」）
+/* 🎯 **放一次 = 自动索敌**（用户 2026-10 改口径：「岩崩需要自动索敌，而不是随机释放，对一个敌人最多索敌一次」）：
+   ① 把半径 `R.r` 内的敌人按「离自己最近」排序，取前 `R.n` 个，**每个敌人最多落一块**（`picked` 去重，
+      同一只绝不会被两块石头砸 —— 用户点名）；
+   ② 目标数不够（场上没那么多敌人）就**有几个砸几个**，不再补随机落点（随机落点已被用户否掉）。
+   ⚠️ 落点用**记录下来的目标坐标**（`tx/ty`），不是石头的实时位置 —— 敌人会走位，但落点已定，
+      和陨石那套（`petMeteorCast`）是同一个口径，别改成"跟着敌人跑"。
+   ⚠️ 落点仍钳在地图内（`Math.max(30, Math.min(W-30, …))`）。 */
 function petRockfallCast(u, sk) {
   const R = sk.rockfall, el = sk.fxEl || petFormElement(u);
   const tint = PET_FX_TINT[el] || '#c98a52';
-  for (let i = 0; i < R.n; i++) {
-    const a = rnd(0, TAU);
-    const d = rnd(R.r * 0.18, R.r);
-    const rx = Math.max(30, Math.min(W - 30, u.x + Math.cos(a) * d));
-    const ry = Math.max(30, Math.min(H - 30, u.y + Math.sin(a) * d));
+  /* 索敌：范围内 → 按距离升序 → 前 n 个 */
+  const list = [];
+  for (const e of enemies) {
+    if (e.dead) continue;
+    const d = Math.hypot(e.x - u.x, e.y - u.y);
+    if (d > R.r) continue;
+    list.push({ e, d });
+  }
+  list.sort((a, b) => a.d - b.d);
+  const picks = list.slice(0, R.n);
+  const picked = new Set();
+  let i = 0;
+  for (const it of picks) {
+    if (picked.has(it.e)) continue;          // 🎯 一个敌人最多索敌一次
+    picked.add(it.e);
+    const rx = Math.max(30, Math.min(W - 30, it.e.x));
+    const ry = Math.max(30, Math.min(H - 30, it.e.y));
     petRocks.push({
-      x: rx, y: ry, t: R.fall + i * 0.06, life: R.fall + i * 0.06,   // 略微分批落下，看着更像"崩"
+      x: rx, y: ry, t: R.fall + (i++) * 0.06, life: R.fall + (i - 1) * 0.06,   // 略微分批落下，看着更像"崩"
       warn: R.warn, boomR: R.boomR, el, tint,
       dmg: petHitDmg(u.petId, R.mul, sk), stun: R.stun, owner: u.petId, fxK: R.fxK || 6,
       seed: rnd(0, 1000), dead: false
     });
   }
-  dbgPetRocks += R.n;
+  dbgPetRocks += picked.size;
+  dbgPetRockPicks = picked.size;
   fxPush(el, 'cell', u.x, u.y, 3.2, 0, 0, 0, 0.5, tint);
-  shake = Math.max(shake, 3);
+  /* ⚡ 放技能这一下的震动**很轻**（用户：「减少岩崩攻击的震屏幕效果」）——
+     真正落地的那一下才震（见 updatePetRocks，那里也从 5 降到 2）。 */
+  shake = Math.max(shake, 1);
 }
 function updatePetRocks(dt) {
   if (!petRocks.length) return;
@@ -8491,7 +8518,8 @@ function updatePetRocks(dt) {
     rings.push({ x: q.x, y: q.y, r: 12, vr: 760, life: 0.4, max: 0.4, color: q.tint, width: 7 });
     burst(q.x, q.y, 22, q.tint, 440);
     dbgPetMelee += Math.max(1, n);
-    shake = Math.max(shake, 5);
+    /* 📳 落地震动降到 2（用户：「减少岩崩攻击的震屏幕效果」）—— 原来 5 太重，3 块石头连砸像地震 */
+    shake = Math.max(shake, 2);
     sfx.hit();
   }
   petRocks = petRocks.filter(q => !q.dead);
@@ -8556,6 +8584,15 @@ function updatePetRockfall(u, dt, sk, foe, moving) {
     petAnim(u, moving ? 'walk' : 'idle'); petTickFrame(u, dt, true);
   }
 }
+/* 🧪 测试钩子：岩崩的读数（索敌到几个目标 / 一共放了几块 · 在场落石的位置）。
+   用途：钉「自动索敌 · 一个敌人最多一块 · 石头数 = 3 · 落点 = 目标坐标」—— 光看伤害抓不到索敌口径。 */
+window.__musouRockInfo = () => ({
+  total: dbgPetRocks,          // 累计放出的石头数
+  lastPicks: dbgPetRockPicks,  // 最近一次出手索敌到几个目标（去重后）
+  live: petRocks.length,
+  list: petRocks.map(q => ({ x: Math.round(q.x), y: Math.round(q.y), boomR: q.boomR, t: +q.t.toFixed(2), dmg: q.dmg, stun: q.stun })),
+  cfg: (() => { const R = PET_SKILL_ROCKFALL.rockfall; return { r: R.r, n: R.n, boomR: R.boomR, mul: R.mul, stun: R.stun, cd: PET_SKILL_ROCKFALL.cd }; })()
+});
 /* 🌙 **月亮之力（仙子伊布）**：一次放出 3 个圆形月亮，**自动追踪**最近的敌人，撞到就炸开大范围 ——
    爆炸半径 = 破灭之愿★ 的大小（`150 × 1.5 × 1.5 = 337.5`）· 爆炸伤害 = 宝可梦伤害 ×10 ·
    出手间隔 1 秒（写在技能表 cd 上）。月亮飞满 4 秒自然消散（追不上就没了，不会永远挂着）。 */
@@ -31006,7 +31043,19 @@ window.__musouPetPanel = (act) => {   // 测试钩子：'open' / 'close' / 'togg
   if (act === 'state') return petPanelOn ? 1 : 0;
   return openPetPanel();
 };
-window.__musouPetSetSkill = (id, sid) => petSkillSet(id, sid);
+window.__musouPetSetSkill = (id, sid) => petSkillSet(id, sid);   // 面板同款：**会校验技能表**（表里没有就设不上）
+/* 🧪 测试钩子：**强制**给某只装上某一招（跳过热能表的校验）。
+   ⚠️ 为什么需要它：`petSkillSet` 只认「当前形态技能表里已有的招」——
+      要验「劈斧螳螂的岩崩」就得先真的进化成劈斧螳螂；而在无头桩里走商店买黑奇石那条路很绕
+      （商店要 `shopOn && isTrainer()`，还得先关掉所有面板），容易假红。
+      本钩子只绕**校验**，技能逻辑一律照真（`petSkillOf` / 出手机器人完全相同）。
+   ⚠️ 别在游戏逻辑里用它 —— 它不校验技能表，装上不存在的 id 会让那只看不到招式。 */
+window.__musouPetForceSkill = (id, sid) => {
+  if (!p.petSkill) p.petSkill = {};
+  p.petSkill[id] = sid;
+  petSkillReset(id);
+  return petSkillOf(id) ? petSkillOf(id).id : '';
+};
 /* 测试钩子：某只**当前等级下能选的全部招式**（技能表）。
    ⚠️ 别拿 `__musouPetSkillOf` 当它用 —— 那个返回的是「**当前选中**的那一招」，
       玩家没手动换招时它不会自动变成新解锁的招（本轮就在这上面白查过）。 */
