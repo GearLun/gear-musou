@@ -400,8 +400,12 @@
   .shop-slot .up-btn { flex: 1; min-width: 0; }
   .shop-slot .up-btn.sold { opacity: .4; pointer-events: none; }
   /* 🔄 2026-10 商店改版：单格刷新按钮已废弃 → 统一走底部那颗「一键三换」。
-     按钮仍留在 DOM 里（`shopPaint()` 会写它们的文案），但**整列隐藏**（display:none 不占位）。 */
-  .shop-slot .btn.btn2.shop-rr { display: none; }
+     按钮仍留在 DOM 里（`shopPaint()` 会写它们的文案），但**整列隐藏**（display:none 不占位）。
+     ⚠️⚠️ 必须**排除背包的「💰卖」按钮**（用户 2026-10 报的 bug：「武器大师商店里卖武器的按钮不见了」）：
+        卖按钮用的是同一套 class（`btn btn2 shop-rr`），旧选择器把它一起藏了 ——
+        而且**无头测试不加载 CSS**，所以那些"逐格检查 display"的测试全绿、抓不到。
+        现在卖按钮多了专属 class `wm-sell`，这条规则用 `:not(.wm-sell)` 放过它。 */
+  .shop-slot .btn.btn2.shop-rr:not(.wm-sell) { display: none; }
   .btn.btn2.shop-rr {
     font-size: 15px; padding: 8px 16px 8px 18px; letter-spacing: .1em;
     align-self: center; white-space: nowrap;
@@ -820,12 +824,12 @@
       <div class="wm-col">
         <div class="shop-sec">🎒 背包（旁边小按钮 = 出售）</div>
         <div class="up-list">
-          <div class="shop-slot" id="wm-sw0"><button class="up-btn" id="wm-s0"></button><button class="btn btn2 shop-rr" id="wm-x0"></button></div>
-          <div class="shop-slot" id="wm-sw1"><button class="up-btn" id="wm-s1"></button><button class="btn btn2 shop-rr" id="wm-x1"></button></div>
-          <div class="shop-slot" id="wm-sw2"><button class="up-btn" id="wm-s2"></button><button class="btn btn2 shop-rr" id="wm-x2"></button></div>
-          <div class="shop-slot" id="wm-sw3"><button class="up-btn" id="wm-s3"></button><button class="btn btn2 shop-rr" id="wm-x3"></button></div>
-          <div class="shop-slot" id="wm-sw4"><button class="up-btn" id="wm-s4"></button><button class="btn btn2 shop-rr" id="wm-x4"></button></div>
-          <div class="shop-slot" id="wm-sw5"><button class="up-btn" id="wm-s5"></button><button class="btn btn2 shop-rr" id="wm-x5"></button></div>
+          <div class="shop-slot" id="wm-sw0"><button class="up-btn" id="wm-s0"></button><button class="btn btn2 shop-rr wm-sell" id="wm-x0"></button></div>
+          <div class="shop-slot" id="wm-sw1"><button class="up-btn" id="wm-s1"></button><button class="btn btn2 shop-rr wm-sell" id="wm-x1"></button></div>
+          <div class="shop-slot" id="wm-sw2"><button class="up-btn" id="wm-s2"></button><button class="btn btn2 shop-rr wm-sell" id="wm-x2"></button></div>
+          <div class="shop-slot" id="wm-sw3"><button class="up-btn" id="wm-s3"></button><button class="btn btn2 shop-rr wm-sell" id="wm-x3"></button></div>
+          <div class="shop-slot" id="wm-sw4"><button class="up-btn" id="wm-s4"></button><button class="btn btn2 shop-rr wm-sell" id="wm-x4"></button></div>
+          <div class="shop-slot" id="wm-sw5"><button class="up-btn" id="wm-s5"></button><button class="btn btn2 shop-rr wm-sell" id="wm-x5"></button></div>
         </div>
       </div>
     </div>
@@ -15976,6 +15980,17 @@ function wmPaint() {
     const b = $('wm-s' + i), sb = $('wm-x' + i);
     if (!b) continue;
     const box = $('wm-sw' + i) || b.parentNode;      // 整格（按钮 + 出售小按钮）；老外壳没有 id 时退回 parentNode
+    /* 🛡️ **兜底补 class**（用户 2026-10 报的 bug：「武器大师商店里卖武器的按钮不见了」）：
+       真凶是 CSS —— `.shop-slot .btn.btn2.shop-rr { display:none }`（那是给「已废弃的单格刷新按钮」用的），
+       而卖按钮用的是**同一套 class** → 被一起藏了。修法两处：
+         ① `index.html` 给卖按钮加专属 `wm-sell`，CSS 改成 `:not(.wm-sell)`；
+         ② **这里再兜一层** —— 万一玩家用的是**旧外壳**（浏览器缓存里的老 HTML，没有 wm-sell），
+            就在运行时把 class 补上，老外壳也能立刻看到卖按钮。
+       ⚠️ 只加不删，别 className 整体重写（那会把 `btn` / `btn2` / `shop-rr` 的样式全弄丢）。 */
+    if (sb && sb.classList && !sb.classList.contains('wm-sell')) {
+      if (sb.classList.add) sb.classList.add('wm-sell');
+      else sb.className = (sb.className || '') + ' wm-sell';
+    }
     const show = i < bagShow;
     if (box && box.style) box.style.display = show ? '' : 'none';
     if (b.style) b.style.display = show ? '' : 'none';
@@ -19446,14 +19461,46 @@ function decodeSaveCode(code) {
      ⚠️⚠️ 以前是 `padStart(当前总位数)`（左补 0）→ 布局加过字段之后老码被补长 → **整串右移**
         → `ver` 读到备用位、10 位的 `bank`/`earned` 被从中间切开 → **闪光图鉴乱码、金币缩水**。
      现在：先看长度落在哪一代，再用**那一代的偏移**解析；老码按**老长度**左补 0（它本来就是那么长）。
-     ⚠️ 末尾追加字段**不需要**在这里加新代（长度自动落到 else 用当前布局，追加对老码无影响）。 */
+     ⚠️ 末尾追加字段**不需要**在这里加新代（长度自动落到 else 用当前布局，追加对老码无影响）。
+     🛡️ **自校验兜底**（用户第二次报「还是有错位」后加的）：万一某个旧代的长度**没登记**，
+        光看长度会退化成"按当前布局解析" → 照样错位。所以这里改成**候选 + 校验位择优**：
+        ① 长度命中登记表 → 就用那一代（正常路径，零开销）；
+        ② 没命中 → 拿 `dataW = dec.length - 2`（最直白：这串就是它自己的数据 + 2 位校验）试一次，
+           再按**当前布局**左补 0 试一次，**谁的校验位对得上就用谁**；
+        ③ 两个都对不上 → 报「校验失败」（这时确实抄错了，不是布局问题）。
+        校验位是 2 位十进制（1% 误判率），而错位的解析**几乎不可能**同时撞对校验 —— 足够可靠。 */
+  const cands = [];
   const known = SAVE_LAYOUTS.filter(L => L.total === dec.length);
-  const useL = known.length ? known[known.length - 1] : null;
-  const dataW = useL ? useL.dataW : SAVE_DIGITS;
-  const all = dec.padStart(dataW + SAVE_CK, '0');
-  if (all.length !== dataW + SAVE_CK) return { ok: 0, why: '存档码长度不对（可能少抄了一段）' };
-  const dig = all.slice(0, dataW), ck = all.slice(dataW);
-  if (saveCk(dig) !== ck) return { ok: 0, why: '存档码校验失败（抄漏/抄错了一位？）' };
+  if (known.length) {
+    const k = known[known.length - 1];
+    cands.push({ dataW: k.dataW, layout: k.layout, src: 'v' + k.ver });
+  } else {
+    /* ② 未知长度：先按"它自己的长度"当数据宽（老代可能比现在短/长，且末尾就是校验） */
+    cands.push({ dataW: Math.max(0, dec.length - SAVE_CK), layout: null, src: '按码长(' + (dec.length - SAVE_CK) + ')' });
+    /* ②b 再按当前布局左补 0（末尾追加字段的情形：老码短、新布局长） */
+    if (SAVE_DIGITS + SAVE_CK !== dec.length) cands.push({ dataW: SAVE_DIGITS, layout: SAVE_LAYOUT, src: '当前布局' });
+    /* ②c 再来一次"贴右边"的解释：末尾字段是追加的 → 老码的数据正好是当前数据的**后缀** */
+    if (dec.length > SAVE_CK && dec.length !== SAVE_DIGITS + SAVE_CK) {
+      cands.push({ dataW: dec.length - SAVE_CK, layout: SAVE_LAYOUT, src: '当前布局·贴右', right: true });
+    }
+  }
+  let pick = null;
+  for (const c of cands) {
+    const all2 = c.right ? dec.slice(0, c.dataW) : dec.padStart(c.dataW + SAVE_CK, '0');
+    if (all2.length !== c.dataW + SAVE_CK) continue;          // 码比布局还长 → 这个候选不成立
+    const d2 = all2.slice(0, c.dataW), k2 = all2.slice(c.dataW);
+    if (saveCk(d2) === k2) { pick = { dataW: c.dataW, layout: c.layout, src: c.src, dig: d2, ck: k2 }; break; }
+  }
+  if (!pick) {
+    const first = cands[0];
+    const all2 = first.right ? dec.slice(0, first.dataW) : dec.padStart(first.dataW + SAVE_CK, '0');
+    if (all2.length !== first.dataW + SAVE_CK) return { ok: 0, why: '存档码长度不对（可能少抄了一段）' };
+    return { ok: 0, why: '存档码校验失败（抄漏/抄错了一位？）' };
+  }
+  const useL = pick.layout ? { layout: pick.layout, dataW: pick.dataW } : null;
+  const dataW = pick.dataW;
+  const all = pick.dig + pick.ck;
+  const dig = pick.dig;
   const LAY = useL ? useL.layout : SAVE_LAYOUT;
   const OFF = useL ? saveOffsetsOf(LAY) : SAVE_OFF;
   const seg = (k, i) => { const o = OFF[k]; return o ? dig.substr(o.p + o.w * i, o.w) : ''; };   // 老布局没有的字段 → 空串
