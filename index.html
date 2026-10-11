@@ -1772,6 +1772,10 @@ function startWave(k) {
         而免费奇物 2026-10 改成**每 10 层**后第 5 波已经没有奇物面板 → 那条判据恒为假 →
         **法师永远转不了职**。别再挂回奇物面板。 */
   if (k === JOB_WAVE && isMage() && !p.job) { p.jobPend = 1; tryOpen(); }
+  /* 🛡 奇物·超级护盾：**每波开始**发 30 护盾（用户 2026-10 报的 bug → 见 `grantSupershieldAtWaveStart` 的注释）。
+     放在 `startWave` 开场（和魔法转职同一个理由）：无论玩家是「打到这一波」还是「读档 / 钩子直接进这一波」，
+     护盾都一定发到手；面板开着时它会自己推迟（那道闸在函数里）。 */
+  grantSupershieldAtWaveStart();
   /* 🌊 水法师：水柱伤害的「每持续喷 1 秒 +8%」加成**每波开始清空**（用户要求） */
   p.waterRampT = 0;
   /* ♾ 无尽模式：血量档位**按层数**走（每 10 层一档、最多 2 档 = ×2/×4），
@@ -15179,6 +15183,38 @@ function addOshield(n) {
   p.oshield = Math.min(oshMax(), before + n);
   return p.oshield - before;
 }
+/* 🧪 诊断：超级护盾每波发放的记录（`{w, before, after, max}`）—— 排查「每波 +30 到底有没有生效」 */
+let dbgSS = [];
+window.__musouSuperShieldLog = () => dbgSS.slice();
+/* 🛡 **奇物·超级护盾：每波开始发 30 护盾**（用户 2026-10 报的 bug：「超级护盾奇物没有开局给30护盾值盾」）
+   ─────────────────────────────────────────────────────────────────────────
+   **病根**：这 30 点原来挂在**波次清剿完毕**那一段（`killEnemy` 之后的推进分支里）。
+   实测（逐帧日志）：清剿那一刻确实 +30 了，但**下一波一开打就被敌人磨光**
+   （日志 `30→21→12→3→0`，同时场上 42→52 只怪）→ 玩家进新波时看到的是 **0 护盾**，
+   于是报「没给护盾」。（顺带排除过一个猜测：护盾**不依赖任何质变** ——
+   `hurtPlayer` 的护盾吸收、HUD 那一行、护盾圈绘制都是无条件的。）
+   **修法**：按奇物文案「**每波开始时**获得 30 护盾」挪到 `startWave` 里发 ——
+   这样每一波**开局那一刻**玩家身上就是 30 点，正好用来挡开场的怪潮。
+   ⚠️ **两道闸**：
+     ① `p.ssWave` 记「这一波已经发过」→ `startWave(k)` 在**同一波**被调两次（读档 / 商店回来 / 钩子）
+        也只发一次，不会白送；
+     ② 面板开着（`choosing`）时**不立刻发**，等面板关掉后由 `frame()` 里那句补发 ——
+        否则「第 30 波奇物面板选到的超级护盾」会在玩家还没关面板时就把护盾消耗掉。 */
+function grantSupershieldAtWaveStart() {
+  if (!artGot('supershield')) return false;
+  if (p.ssWave === wave) return false;          // ① 这一波已经发过
+  if (choosing) return false;                   // ② 面板还开着 → 等关掉再发（frame 里会重试）
+  p.ssWave = wave;
+  const before = p.oshield || 0;
+  addOshield(SUPERSHIELD_WAVE);
+  dbgSS.push({ w: wave, before: before, after: p.oshield || 0, max: oshMax() });
+  addRing(p.x, p.y, '#8fd8ff', 9);
+  rings.push({ x: p.x, y: p.y, r: 8, vr: 560, life: 0.4, max: 0.4, color: '#8fd8ff', width: 5 });
+  oshFx(SUPERSHIELD_WAVE, 'super');
+  return true;
+}
+/* 🧪 测试钩子：读「这一波是否已经发过超级护盾」（配合 `__musouStartWave` 验两道闸） */
+window.__musouSSWave = () => p.ssWave || 0;
 /* 弹射导弹：闪避后 3 枚自动追踪导弹，命中处范围爆炸 —— 伤害 = 普通攻击 ×3（纯 AoE 手段，不再吃等级成长） */
 const MISSILE_DMG_MUL = 3;
 function atkDmgNow() { return isArcher() ? archerAtkDmg() : (isMage() ? mageAtkDmg() : dmgNow()); }   // 角色当前普通攻击伤害（战士/弓/法各自口径）
@@ -26871,20 +26907,33 @@ function updateGame(dt, rawDt) {
       waveT = -1;
       score += 200 + wave * 100;
       addText(p.x, p.y - 44, '波次清剿 +' + (200 + wave * 100), 18, '#ffe9a8', '#5a3a00');
-      /* 每波清剿完毕：护盾清零 + 全图掉落一次性吸走（顺序：先清护盾，再发超级护盾的 +30） */
+      /* 每波清剿完毕：护盾清零 + 全图掉落一次性吸走 */
       wipeShieldsAtWaveEnd();
       vacuumOrbs();
-      /* 奇物·超级护盾：每波清剿完毕 +30 护盾（上限 50，持本奇物则 200）
-         —— 同样只走特效（蓝色光环 + 粒子），不再飘字 */
-      if (artGot('supershield')) {
-        addOshield(SUPERSHIELD_WAVE);
-        addRing(p.x, p.y, '#8fd8ff', 9);
-        rings.push({ x: p.x, y: p.y, r: 8, vr: 560, life: 0.4, max: 0.4, color: '#8fd8ff', width: 5 });
-        oshFx(SUPERSHIELD_WAVE, 'super');
+      /* 🛡 奇物·超级护盾的 +30 **不在这里发** —— 已挪到 `grantSupershieldAtWaveStart()`
+         （在 `startWave` 里），原因见那个函数的注释：用户报「没开局给 30 护盾」，
+         实测根因是**清剿时发的 30 点会在下一波开头被敌人磨光**（日志：30→21→12→3→0），
+         所以它必须发在**新波开始**那一刻才真的挡刀。 */
+      /* 🔗 **无尽模式第 30 层结算 → 给一次刷闪连锁**（用户 2026-10 报的 bug：
+         「无尽模式30层结束后结算不给连锁机会」）
+         ─────────────────────────────────────────────────────────────────
+         **病根**：连锁只有两个来源 —— ①`victory()`（通关）②图鉴彩蛋。而**无尽模式没有通关**
+         （`victory()` 在无尽里永远不会被调用，见 `killEnemy` 里那条 `endlessMode() && e.boss` 分支），
+         所以无尽玩家**永远拿不到连锁**。@7022 的注释本来就把「无尽 30 关后给」写成了设计意图，
+         但代码里从来没实现过。
+         **修法**：按注释的口径，在**清剿完第 30 层（以及之后每 30 层：60 / 90 …）**时 `chainGrant()`。
+         ⚠️ `p.chain30` 记「本局这一段已经给过」→ 同一段不会重复发（读档回来 / 清剿判据重入都安全）。 */
+      if (endlessMode() && wave >= 30 && wave % 30 === 0 && p.chain30 !== wave) {
+        p.chain30 = wave;
+        const hadChain = !!meta.chain;
+        chainGrant();
+        bigBanner('🔗 刷 闪 连 锁 !', '♾ 无尽第 ' + wave + ' 层 · 拿到 1 次连锁机会');
+        addText(p.x, p.y - 74, '🔗 连锁机会 +1（下一局去闪光图鉴里选一只）', 19, '#8fd8ff', '#0a2a3a');
+        if (sfx && sfx.musou) sfx.musou();
+        if (!hadChain) metaSave();   // 反正 chainGrant 里已经 save 过，这里只是把"已经有"的情况也说清楚
       }
       /* 🥚 训练家的宝可梦蛋：第 1 波清剿后到手 · 第 5 波清剿后孵化成波克比（图鉴 175） */
-      petEggWaveEnd(wave);
-      /* ✨ 刷闪！（质变）：每波清剿后一只基础宝可梦来访送金币，小概率是闪光（收录进闪光图鉴） */
+      petEggWaveEnd(wave);      /* ✨ 刷闪！（质变）：每波清剿后一只基础宝可梦来访送金币，小概率是闪光（收录进闪光图鉴） */
       shinyMutWaveEnd(wave);
       /* 🐾 捕捉宝可梦：第 10 波（多龙梅西亚 / 迷你龙）· 第 15 波（伊布 / 炭小侍）各弹一次二选一 */
       petCatchWaveEnd(wave);
@@ -29307,6 +29356,10 @@ function frame(now) {
     return;
   }
   lastOverlayKey = ovk;
+  /* 🛡 补发超级护盾（用户 2026-10 报的 bug）：`startWave` 那一刻如果面板正开着，
+     `grantSupershieldAtWaveStart()` 会**推迟**（否则第 30 波奇物面板里选到的护盾会被当场消耗掉）。
+     这里就是那个「面板关掉了、世界重新跑起来」的收口 —— 每帧试一次，发过就不再发（函数里有两道闸）。 */
+  if (state === 'play' && !choosing) grantSupershieldAtWaveStart();
   if (state === 'play') updateGame(dt, rawDt);
   else {
     /* 标题界面也放点粒子雨烘托气氛 */
@@ -29541,6 +29594,12 @@ window.__musouStarPick = (id) => {
 };
 /* 🧪 测试钩子：直接发一件奇物 */
 window.__musouArtGive = (id) => { if (!ART_DEFS[id]) return false; artGain(id); petSummonSync(); return artGot(id); };
+/* 🧪 测试钩子：护盾上限（奇物·超级护盾 50 → 200）—— 验「拿到超级护盾上限就变 200」 */
+window.__musouOshMax = () => oshMax();
+/* 🧪 测试钩子：把**刷怪队列**清空（波次清剿的判据是 `spawnQ.length === 0 && waveFoes() === 0`，
+   `__musouClearField()` 只清场上的敌人、**不动队列**）→ 配合跑够 `waveT` 就能触发真实的清剿结算。
+   用途：验「超级护盾每波 +30」「连锁机会」这类**波次结算**里的效果。 */
+window.__musouDrainSpawnQ = () => { spawnQ = []; return true; };
 /* 🧪 测试钩子：读某只宝可梦当前形态 key / 中文名（天空谢米那条要用） */
 window.__musouPetFormKey = (id) => petFormKey(id);
 window.__musouPetFormName = (id) => {
