@@ -484,7 +484,7 @@
       <div class="load-tip">游戏正在加载中，请稍后,若长时间无法加载，请刷新网页。</div>
       <div class="load-bar"><i id="load-fill"></i></div>
     </div>
-    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.0.7</small></div>
+    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.0.8</small></div>
     <!-- 🏷️ 版本角标（内容由 game.js 的 verBadgePaint() 填）：玩家一眼看出自己跑的是哪一版，
          省得拿着旧的下载文件来问「怎么没改」 -->
     <div id="ver-badge" class="ver-badge"></div>
@@ -921,7 +921,7 @@
 <script>
 'use strict';
 /* ============================================================
-   草·割无双  MUSOU MOW  —  无双割草 正式版 v1.0.6
+   草·割无双  MUSOU MOW  —  无双割草 正式版 v1.0.8
 
    🏷️ **版本角标**：`VER_TXT` / `BUILD_TAG` 就是主页左下角那个角标的内容。
       改版本号时**只改这两行**（`index.html` 的 `.title small` 也一起改）。
@@ -951,8 +951,8 @@ const $ = id => document.getElementById(id);
 /* 🏷️ 版本角标（主页左下角 `#ver-badge`）：`VER_TXT` = 玩家看到的版本号 · `BUILD_TAG` = 这份产物的构建标记。
    ⚠️ 改版本号时**只改这两行** + `index.html` 的 `.title small`。
    为什么要它：用户拿旧的下载文件来问「怎么和没改一样」—— 有角标一眼就能看出手上是哪一版。 */
-const VER_TXT = 'v1.0.7';
-const BUILD_TAG = 'build 10-09 04:24';
+const VER_TXT = 'v1.0.8';
+const BUILD_TAG = 'build 10-12 15:44';
 function verBadgePaint() {
   const el = $('ver-badge');
   if (!el) return;
@@ -19714,6 +19714,18 @@ function buildSaveData(nextWave, artDueWv) {
     starPick: (typeof p.starPick === 'string') ? p.starPick : '',
     starShow: p.starShow || 0,          // 面板弹出次数（防死循环那个计数，一起存避免读档后重数）
     starPend: p.starPend || 0,
+    /* ✨🔗 **刷闪连锁的「本局正在用」标记必须进存档**（用户 2026-10 报的 bug：
+       「选择一个连锁然后用训练家职业进入游戏后，如果中途退出，然后再回到游戏以后连锁就会失效」）。
+       ⚠️⚠️ 这两个字段**不存档**时，「暂停 → 💾 保存并回主页 → ▶ 继续」这条路会把它丢掉：
+         `loadGame()` 一进来就 `resetRun()`（把 `p.chainRun/p.chainId` 清 0），
+         而它只还原 `role/weapon/job/starPick/...`，**从来没有还原连锁** → 本局连锁静默失效
+         （`shinyMutWaveEnd` 那句 `p.chainRun && p.chainId` 判据变假 → 刷闪来访退回「全物种随机」）。
+       ⚠️ **为什么必须存进「本局存档」而不是靠 `meta.chainP` 反推**：
+         `chainRunClear()`（回主页 / 通关 / 败阵）会把 `meta.chainP` **一起清掉** ——
+         而回主页这条路上，存档是**先写好的**（`saveGameAtWaveStart()` 在 `chainRunClear()` 之前），
+         所以只有本局存档里那份才活得过「退出 → 继续」。 */
+    chainRun: p.chainRun ? 1 : 0,
+    chainId: (p.chainRun && p.chainId) ? p.chainId : '',
     ronin: p.ronin || 0,           // 战士分支：1 = 浪客
     knight: p.knight || 0,         // 战士分支：1 = 🛡️ 骑士（举盾冲锋）
     wm: p.wm || 0, wmBag: (p.wmBag || []).slice(), wmUid: p.wmUid || 0, wmFree: p.wmFree || 0,   // 🗡️ 武器大师：分支 + 武器实例（品质/星级/装备）+ 未用完的免费次数
@@ -19805,6 +19817,15 @@ function loadGame() {
      而 `p.weapon` 已经从存档还原（例如 'trainer'）→ 玩家随手一点就把职业换掉。
      读档语义 = 「武器早就定了」，所以这里连 `weaponPend` 一起清 0。 */
   p.weaponPend = 0;
+  /* ✨🔗 **连锁的「本局正在用」标记也要还原**（用户 2026-10 报的 bug：
+     「选择一个连锁然后用训练家职业进入游戏后，如果中途退出，然后再回到游戏以后连锁就会失效」）。
+     `resetRun()`（本函数第一行就调了）会把 `p.chainRun/p.chainId` 清 0，必须在这里补回来 ——
+     否则 `shinyMutWaveEnd()` 里那句 `p.chainRun && p.chainId` 判据变假 → 刷闪来访从
+     「只来访锁定的那一只」退回「全物种随机」，而**连锁机会在「确定继续」时就已经被消耗掉了**
+     （`meta.chain = 0`）→ 玩家等于**白花一次连锁**。
+     ⚠️ 判据：只有 `chainRun` 为真**且** `chainId` 是合法物种时才认（脏存档不会把连锁带进来）。 */
+  p.chainRun = (s.chainRun && s.chainId && SHINY_SPECIES.indexOf(s.chainId) >= 0) ? 1 : 0;
+  p.chainId = p.chainRun ? s.chainId : '';
   selRole = p.role;
   diffMode = (s.diff === 'easy') ? 'easy' : (s.diff === 'hell') ? 'hell' : (s.diff === 'endless' ? 'endless' : 'hard');        // 存档绑定难度（旧档缺省困难）
   selDiff = diffMode;
@@ -29623,6 +29644,9 @@ window.__musouArt = (id) => { if (state === 'play' && p.alive && !p.art[id]) art
 window.__musouArtWave = (w) => { if (state === 'play' && p.alive) triggerArtPick(w); }; // 测试钩子：触发某波奇物奖励
 window.__musouSetWave = (w) => { if (state === 'play') wave = clampWave(w); }; // 测试钩子：设定波次（用于猫咪阶段）
 window.__musouSaveNow = () => { if (state === 'play' && p.alive) saveGame(wave, 0); }; // 测试钩子：立即存档
+/* 🧪 测试钩子：**看一眼这次会写进存档的字段**（不落盘）——
+   用来验「某某状态有没有真的进存档」（如连锁的 chainRun/chainId），比读 localStorage 更直接。 */
+window.__musouBuildSave = () => buildSaveData(wave, 0);
 /* 🏠 测试钩子：只回主页（收面板 + 切状态），**不写档** —— 给「已经造好档、只想验证主页流程」的用例 */
 window.__musouBackToTitle = () => {
   hideAllPanels();
@@ -29968,7 +29992,11 @@ window.__musouChainSet = (n, pick) => {      // 测试钩子：直接写连锁�
 /* 🔗 测试钩子：把**本局**标记成「正在用连锁」并锁定目标（`shinyMutWaveEnd` 认的就是 `p.chainRun/p.chainId`）。
    正常流程里这两个字段是选训练家开局时设的，测试要单独验证"连锁只来访它"时用这个。 */
 window.__musouChainRun = (pick) => {
-  p.chainRun = (pick && SHINY_SPECIES.indexOf(pick) >= 0) ? 1 : 0;
+  /* ⚠️ **传参会改状态、不传参只读**（`pick` 为 undefined → 会把标记清 0）。
+     测试里要读当前标记就**必须把目标传进去**（`__musouChainRun(currentPick)`），
+     否则读到的是「刚被自己清掉」的 0（本轮排查时被这一点绕了很久）。 */
+  const ix = (pick && SHINY_SPECIES.indexOf(pick));
+  p.chainRun = (pick && ix >= 0) ? 1 : 0;
   p.chainId = p.chainRun ? pick : '';
   return { chainRun: p.chainRun, chainId: p.chainId };
 };
