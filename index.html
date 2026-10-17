@@ -2920,6 +2920,103 @@ function pxCardSprite() {
   });
 }
 
+/* 🐱 咖啡猫伙伴（像素贴图 + 缓存，4 个阶段）：原来是 82 行矢量（椭圆身体 + 三角耳 + 圆眼 + 曲线尾巴）。
+   art 26×24，中心 (13,13)；`stage` 0=小猫 1=成年猫 2=大猫 3=猛虎（虎纹 + 白腹 + 额「王」+ 金项圈）。 */
+function pxCatSprite(stage) {
+  const tiger = stage === 3;
+  const key = 'SPR:cat' + stage;
+  return pxMakeSprite(key, 26, 24, (px) => {
+    const B = tiger ? '#ff9d3c' : '#ff9a4c';
+    const D = tiger ? '#5e2c00' : '#6e3a12';
+    const L = tiger ? '#ffc477' : '#ffc477';
+    const k = '#2a1408';
+    /* 尾巴（像素弧，向左上翘） */
+    for (let i = 0; i < 7; i++) {
+      const t = i / 6;
+      const tx = 8 - t * 7, ty = 15 - t * 8 + Math.sin(t * 3) * 2;
+      pxRect(px, Math.round(tx), Math.round(ty), 2, 2, tiger && i % 2 === 1 ? D : B);
+    }
+    /* 身体 */
+    pxEll(px, 13, 17, 6.5, 4.8, B);
+    pxEll(px, 13, 16.2, 5.2, 3.4, L);
+    if (tiger) pxEll(px, 13, 17.6, 4.2, 3.0, '#fff3d6');       // 白腹
+    /* 头 */
+    pxEll(px, 13, 9, 6.2, 5.2, B);
+    pxEll(px, 12.2, 8.4, 4.6, 3.6, L);
+    /* 耳朵（三角，内耳粉） */
+    pxPoly(px, [[7, 6], [6, 2], [10, 6]], B);
+    pxPoly(px, [[19, 6], [20, 2], [16, 6]], B);
+    pxPut(px, 8, 5, pxCI(px, '#e8a0a0'));
+    pxPut(px, 18, 5, pxCI(px, '#e8a0a0'));
+    /* 虎纹 */
+    if (tiger) {
+      for (let i = -1; i <= 1; i++) pxRect(px, 13 + i * 3, 12, 1, 3, D);
+      pxRect(px, 11, 6, 1, 2, D); pxRect(px, 15, 6, 1, 2, D);   // 额纹（「王」的简化）
+      pxRect(px, 12, 8, 3, 1, D);
+    }
+    /* 眼睛 */
+    if (tiger) {
+      pxRect(px, 9, 8, 3, 1, '#ffe9a8');
+      pxRect(px, 15, 8, 3, 1, '#ffe9a8');
+      pxPut(px, 10, 8, pxCI(px, '#ffd166'));
+      pxPut(px, 16, 8, pxCI(px, '#ffd166'));
+    } else {
+      pxRect(px, 10, 8, 2, 2, '#2b3a1a');
+      pxRect(px, 15, 8, 2, 2, '#2b3a1a');
+    }
+    /* 鼻 + 胡须 */
+    pxPut(px, 13, 11, pxCI(px, '#d98a5a'));
+    pxRect(px, 7, 11, 3, 1, D);
+    pxRect(px, 17, 11, 3, 1, D);
+    /* 金项圈（猛虎） */
+    if (tiger) {
+      pxRect(px, 9, 13, 9, 1, '#ffd166');
+      pxPut(px, 13, 14, pxCI(px, '#c9a227'));
+    }
+    pxOutline(px, k);
+  });
+}
+
+/* 🪱 世界吞噬者·躯体节（像素贴图 + 缓存）：art 18×18，中心在 (18,18)*… 实际用 36×36 的画布
+   （art 半径 14，2x 放大 = 世界 28 半径），贴图时按 e.r 缩放。
+   紫黑甲壳 + 三阶明暗 + 两道甲片高光 + 中心核。`under` = 钻地版（整体压暗，靠 alpha 表达）。 */
+function pxPhantomSprite(under) {
+  const key = under ? 'SPR:phantomU' : 'SPR:phantom';
+  return pxMakeSprite(key, 36, 36, (px) => {
+    const base = under ? '#2a1740' : '#4a2f6e';
+    const lite = under ? '#3a2450' : '#6d4a9c';
+    const dark = under ? '#1b0f2b' : '#2e1b45';
+    const deep = under ? '#120a1c' : '#221238';
+    const core = under ? '#6b4b8a' : '#a97fe0';
+    const edge = under ? '#2a1740' : '#c79bff';
+    const k = '#140b20';
+    /* 壳体：用逐行半径铺方块（比画圆更像像素） */
+    const R = 14;
+    for (let y = -R; y <= R; y++) {
+      const kk = 1 - (y / R) * (y / R);
+      if (kk <= 0) continue;
+      const half = Math.round(R * Math.sqrt(kk));
+      for (let x = -half; x <= half; x++) {
+        const v = (x / R) * 0.55 + (y / R) * 0.75;      // 光从左上
+        const col = v < -0.42 ? lite : (v < 0.16 ? base : (v < 0.62 ? dark : deep));
+        pxPut(px, 18 + x, 18 + y, pxCI(px, col));
+      }
+    }
+    /* 甲片：两道上半环的高光（像素弧） */
+    for (let i = 0; i < 2; i++) {
+      const rr = 8 + i * 3.4;
+      for (let a = -2.5; a <= -0.6; a += 0.16) {
+        pxPut(px, Math.round(18 + Math.cos(a) * rr), Math.round(18 + Math.sin(a) * rr), pxCI(px, edge));
+      }
+    }
+    /* 中心核 */
+    pxEll(px, 18, 18, 4.2, 4.2, core);
+    pxEll(px, 18, 17.4, 2.6, 2.6, under ? '#8a6aa8' : '#d8c0ff');
+    pxPut(px, 17, 16, pxCI(px, '#ffffff'));
+    pxOutline(px, k);
+  });
+}
+
 /* 🗡️ 骑士长枪（像素贴图 + 缓存）：原来是一条 3.2px 粗的平滑横线 + 三角枪头。
    现在按 art 像素（1 art px = 2 世界 px）画成方块，再用 2x 最近邻放大贴出。
    原点在 art (12, 8) → 贴图时偏移 (-24, -16)。`gold` = 无双时的金色版。 */
@@ -7897,12 +7994,14 @@ function drawHoennFields() {
   for (const s of hoennSpikes) {
     if (s.ph === 'warn') {
       const k = Math.max(0, Math.min(1, s.t / HOENN.spikeWarn));
-      ctx.fillStyle = 'rgba(150,110,60,' + (0.14 + 0.10 * pulse).toFixed(2) + ')';
-      ctx.beginPath(); ctx.ellipse(s.x, s.y, s.r, s.r * 0.62, 0, 0, TAU); ctx.fill();
-      ctx.strokeStyle = 'rgba(215,175,105,0.9)'; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.ellipse(s.x, s.y, s.r, s.r * 0.62, 0, 0, TAU); ctx.stroke();
-      ctx.strokeStyle = 'rgba(255,236,185,' + (0.5 + 0.4 * pulse).toFixed(2) + ')'; ctx.lineWidth = 2.4;
-      ctx.beginPath(); ctx.ellipse(s.x, s.y, Math.max(4, s.r * k), s.r * 0.62 * k, 0, 0, TAU); ctx.stroke();
+      /* 🎨 像素化：扁椭圆预警（填充 + 两环）→ 压扁变换下的抖动椭圆 + 阶梯环 */
+      ctx.save();
+      ctx.translate(s.x, s.y);
+      ctx.scale(1, 0.62);
+      pxDitherEllipse(0, 0, s.r, s.r, 'rgba(150,110,60,0.9)', 0.14 + 0.10 * pulse, 0.5);
+      pxRing(0, 0, s.r, 'rgba(215,175,105,0.9)', 3, 0.9);
+      pxRing(0, 0, Math.max(4, s.r * k), 'rgba(255,236,185,' + (0.5 + 0.4 * pulse).toFixed(2) + ')', 2, 0.9);
+      ctx.restore();
       ctx.strokeStyle = 'rgba(255,215,140,0.55)'; ctx.lineWidth = 1.6;
       ctx.beginPath();
       ctx.moveTo(s.x - s.r * 1.2, s.y); ctx.lineTo(s.x - s.r * 0.5, s.y);
@@ -23472,21 +23571,28 @@ function drawEnemy(e, col) {
     return;
   }
 
-  /* ===== 测试沙盒·Boss：🪱 世界吞噬者的躯体各节（沿头部轨迹甩尾） ===== */
+  /* ===== 测试沙盒·Boss：🪱 世界吞噬者的躯体各节（沿头部轨迹甩尾） =====
+     🎨 像素化：原来是「实心圆 + 描边圆 + 内圆 + 三道高光弧」的纯几何体。
+     现在换成**缓存像素贴图**（紫黑甲壳 + 三阶明暗 + 甲片 + 中心核），随半径缩放贴出。
+     钻地时整体半透明（和原来一样）。 */
   if (e.segPhantom) {
     const under = !!e.segUnderground;
+    const sc2 = Math.max(0.6, e.r / 14);        // art 半径 14 → 按 e.r 缩放
+    const cv = pxPhantomSprite(under);
     ctx.globalAlpha = under ? 0.3 : 1;
-    ctx.fillStyle = under ? '#3a2450' : '#4a2f6e';
-    ctx.beginPath(); ctx.arc(0, 0, e.r, 0, TAU); ctx.fill();
-    ctx.strokeStyle = under ? '#2a1740' : '#221238'; ctx.lineWidth = 2.5; ctx.stroke();
-    ctx.fillStyle = under ? '#6b4b8a' : '#a97fe0';
-    ctx.beginPath(); ctx.arc(0, 0, e.r * 0.45, 0, TAU); ctx.fill();
-    if (!under) {   // 甲片：三处高光弧
-      ctx.strokeStyle = '#c79bff'; ctx.lineWidth = 2;
-      for (let i = 0; i < 3; i++) {
-        ctx.beginPath(); ctx.arc(0, 0, e.r * (0.35 + i * 0.22), e.bob + i, e.bob + i + 1.6); ctx.stroke();
-      }
+    if (cv) {
+      const sm0 = ctx.imageSmoothingEnabled;
+      if (sm0) ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(cv, -18 * sc2, -18 * sc2, 36 * sc2, 36 * sc2);
+      if (sm0) ctx.imageSmoothingEnabled = true;
+    } else {
+      /* 兜底：贴图建不出来时保持原来的几何画法，绝不消失 */
+      ctx.fillStyle = under ? '#3a2450' : '#4a2f6e';
+      ctx.beginPath(); ctx.arc(0, 0, e.r, 0, TAU); ctx.fill();
+      ctx.fillStyle = under ? '#6b4b8a' : '#a97fe0';
+      ctx.beginPath(); ctx.arc(0, 0, e.r * 0.45, 0, TAU); ctx.fill();
     }
+    ctx.globalAlpha = 1;
     ctx.restore();
     return;
   }
@@ -26544,78 +26650,21 @@ function drawCatBody(c, st) {
   ctx.translate(c.x, c.y + bob);
   const s = st === 0 ? 0.72 : (tiger ? 1.5 : (st === 2 ? 1.1 : 0.95));
   ctx.scale(s, s);
-  const body = st === 0 ? '#ffc477' : (tiger ? '#ff9d3c' : '#ff9a4c');   // 全阶段都是橘猫色
-  const dark = tiger ? '#5e2c00' : '#6e3a12';
-  /* 尾巴（老虎：环纹） */
-  ctx.strokeStyle = body; ctx.lineWidth = 5; ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(-11, 2);
-  ctx.quadraticCurveTo(-20, -2 + Math.sin(time * 7) * 2, -17, -10 + Math.sin(time * 7 + 1) * 3);
-  ctx.stroke();
-  if (tiger) {
-    ctx.strokeStyle = dark; ctx.lineWidth = 3;
-    ctx.beginPath();
-    ctx.moveTo(-19, -1 + Math.sin(time * 7) * 2); ctx.lineTo(-15, 0 + Math.sin(time * 7) * 2);
-    ctx.moveTo(-18.5, -7 + Math.sin(time * 7 + 1) * 3); ctx.lineTo(-15.2, -8.5 + Math.sin(time * 7 + 1) * 3);
-    ctx.stroke();
-  }
-  /* 身体 */
-  ctx.fillStyle = 'rgba(0,0,0,0.2)';
-  ctx.beginPath(); ctx.ellipse(0, 8, 12, 5, 0, 0, TAU); ctx.fill();
-  ctx.fillStyle = body;
-  ctx.beginPath(); ctx.ellipse(0, -2, 10, 8, 0, 0, TAU); ctx.fill();
-  if (tiger) {
-    ctx.fillStyle = '#fff3d6';   // 白虎腹
-    ctx.beginPath(); ctx.ellipse(0, 2, 6.5, 4.6, 0, 0, TAU); ctx.fill();
-  }
-  /* 虎纹 */
-  if (tiger) {
-    ctx.strokeStyle = dark; ctx.lineWidth = 1.8;
-    ctx.beginPath();
-    for (let i = -1; i <= 1; i++) {
-      ctx.moveTo(i * 4.5, -6);
-      ctx.quadraticCurveTo(i * 4.5 - Math.sign(i || 1) * 1.5, -1, i * 4.5, 4);
+  /* 🎨 像素化：82 行矢量（椭圆身体 + 三角耳 + 圆眼 + 曲线尾巴 + 文字「王」）
+     → **缓存像素贴图**（art 26×24，4 个阶段各一张）。贴图偏移 -13,-13 让 (0,0) 落在身体中心。 */
+  {
+    const cv = pxCatSprite(st);
+    if (cv) {
+      const sm0 = ctx.imageSmoothingEnabled;
+      if (sm0) ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(cv, -13, -13, 26, 24);
+      if (sm0) ctx.imageSmoothingEnabled = true;
+    } else {
+      /* 兜底：贴图建不出来时画个最简剪影，绝不整只消失 */
+      ctx.fillStyle = tiger ? '#ff9d3c' : '#ff9a4c';
+      ctx.beginPath(); ctx.ellipse(0, -2, 10, 8, 0, 0, TAU); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(0, -12, 6, 5, 0, 0, TAU); ctx.fill();
     }
-    ctx.stroke();
-  }
-  /* 耳朵 */
-  ctx.fillStyle = body;
-  ctx.beginPath(); ctx.moveTo(-8, -8); ctx.lineTo(-6, -17); ctx.lineTo(-1, -9); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(8, -8); ctx.lineTo(6, -17); ctx.lineTo(1, -9); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#e8a0a0';
-  ctx.beginPath(); ctx.moveTo(-6, -9); ctx.lineTo(-5.4, -14); ctx.lineTo(-3.2, -9.6); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(6, -9); ctx.lineTo(5.4, -14); ctx.lineTo(3.2, -9.6); ctx.closePath(); ctx.fill();
-  /* 眼睛（猛虎：眯眼凶相 + 眼角上挑） */
-  if (tiger) {
-    ctx.strokeStyle = '#ffe9a8'; ctx.lineWidth = 1.8;
-    ctx.beginPath(); ctx.moveTo(-7, -6); ctx.lineTo(-2.5, -3.6); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(7, -6); ctx.lineTo(2.5, -3.6); ctx.stroke();
-    ctx.fillStyle = '#ffd166';
-    ctx.beginPath(); ctx.arc(-5, -3.6, 1.5, 0, TAU); ctx.fill();
-    ctx.beginPath(); ctx.arc(5, -3.6, 1.5, 0, TAU); ctx.fill();
-  } else {
-    ctx.fillStyle = '#2b3a1a';
-    ctx.beginPath(); ctx.arc(-4, -4.6, 1.7, 0, TAU); ctx.fill();
-    ctx.beginPath(); ctx.arc(4, -4.6, 1.7, 0, TAU); ctx.fill();
-  }
-  /* 额头「王」字（老虎标志） */
-  if (tiger) {
-    ctx.fillStyle = '#5e2c00';
-    ctx.font = 'bold 8px "Microsoft YaHei",sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('王', 0, -11);
-    ctx.textAlign = 'left';
-  }
-  /* 嘴与胡须 */
-  ctx.fillStyle = '#d98a5a';
-  ctx.beginPath(); ctx.arc(0, -1.4, 1.6, 0, TAU); ctx.fill();
-  ctx.strokeStyle = dark; ctx.lineWidth = 0.8;
-  ctx.beginPath(); ctx.moveTo(-4, 1); ctx.lineTo(-12, 0); ctx.moveTo(-3.6, 3); ctx.lineTo(-11, 4.4); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(4, 1); ctx.lineTo(12, 0); ctx.moveTo(3.6, 3); ctx.lineTo(11, 4.4); ctx.stroke();
-  /* 猛虎项圈（哈根的羁绊） */
-  if (tiger) {
-    ctx.strokeStyle = '#ffd166'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(-7, -1); ctx.quadraticCurveTo(0, 3.4, 7, -1); ctx.stroke();
   }
   ctx.restore();
 }
