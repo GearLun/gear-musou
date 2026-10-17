@@ -2851,6 +2851,42 @@ function pxSlashArc(cx, cy, a0, a1, r0, r1, colCore, colEdge, colGlow, alpha) {
   ctx.globalAlpha = 1;
 }
 
+/* 像素锯齿环「按当前 ctx.strokeStyle / lineWidth / globalAlpha 画」——
+   用来一把替换掉预警圈里那一堆 `ctx.arc(...); ctx.stroke();`（圆心 / 半径 / 颜色都不变，只变画法）。 */
+function pxRingStroke(x, y, r) {
+  if (!isFinite(x) || !isFinite(y) || !isFinite(r) || r <= 0) return;
+  const col = ctx.strokeStyle;
+  if (!col || col === 'none') return;
+  pxRing(x, y, r, col, Math.max(2, ctx.lineWidth || 2), ctx.globalAlpha);
+  ctx.globalAlpha = 1;
+}
+
+/* 像素粗光线（法师光炮 / 水柱共用）：沿线段按栅格铺三层方块（外晕 / 中层 / 白芯）。
+   比原来 round-cap 的平滑粗线更像像素画，也保住「光束很粗很有力」的读感。 */
+function pxBeam(x1, y1, x2, y2, w, colGlow, colCore, alpha, k) {
+  if (!isFinite(x1) || !isFinite(y1) || !isFinite(x2) || !isFinite(y2) || !isFinite(w) || w <= 0) return;
+  const dx = x2 - x1, dy = y2 - y1;
+  const len = Math.hypot(dx, dy);
+  if (!isFinite(len) || len < 1) return;
+  const step = Math.max(3, Math.round(w * 0.55 / PX_FX_G) * PX_FX_G);
+  const n = Math.max(1, Math.round(len / step));
+  const sGlow = pxSnapS(w), sMid = pxSnapS(Math.max(2, w * 0.62)), sCore = pxSnapS(Math.max(2, w * 0.30));
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const x = pxSnap(x1 + dx * t), y = pxSnap(y1 + dy * t);
+    ctx.globalAlpha = 0.30 * alpha;
+    ctx.fillStyle = colGlow;
+    ctx.fillRect(x - sGlow / 2, y - sGlow / 2, sGlow, sGlow);
+    ctx.globalAlpha = 0.75 * alpha;
+    ctx.fillStyle = colGlow;
+    ctx.fillRect(x - sMid / 2, y - sMid / 2, sMid, sMid);
+    ctx.globalAlpha = 0.95 * alpha;
+    ctx.fillStyle = colCore;
+    ctx.fillRect(x - sCore / 2, y - sCore / 2, sCore, sCore);
+  }
+  ctx.globalAlpha = 1;
+}
+
 /* 像素火花（命中/爆点）：一个十字 + 四角小方块，比单纯一个圆点"精致"得多 */
 function pxSpark(x, y, size, color, color2, alpha) {
   if (!isFinite(x) || !isFinite(y)) return;
@@ -28235,9 +28271,9 @@ function drawGame() {
         ctx.fillStyle = cy + (0.12 + 0.10 * pulse).toFixed(2) + ')';
         ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, TAU); ctx.fill();
         ctx.strokeStyle = 'rgba(180,225,255,0.9)'; ctx.lineWidth = 3.4;
-        ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, TAU); ctx.stroke();
+        pxRingStroke(w.x, w.y, w.r);
         ctx.strokeStyle = 'rgba(240,250,255,' + (0.55 + 0.4 * pulse).toFixed(2) + ')'; ctx.lineWidth = 2.6;
-        ctx.beginPath(); ctx.arc(w.x, w.y, Math.max(6, w.r * k), 0, TAU); ctx.stroke();
+        pxRingStroke(w.x, w.y, Math.max(6, w.r * k));
         /* 四道向心箭头：缩到中心 = 本体从圆心现身 */
         ctx.strokeStyle = 'rgba(200,235,255,0.7)'; ctx.lineWidth = 2;
         for (let i = 0; i < 4; i++) {
@@ -28282,10 +28318,10 @@ function drawGame() {
       ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, TAU); ctx.fill();
       ctx.strokeStyle = 'rgba(255,180,90,0.85)';
       ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, TAU); ctx.stroke();
+      pxRingStroke(w.x, w.y, w.r);
       ctx.strokeStyle = 'rgba(255,235,180,' + (0.55 + 0.35 * pulse).toFixed(2) + ')';
       ctx.lineWidth = 2.4;
-      ctx.beginPath(); ctx.arc(w.x, w.y, Math.max(4, w.r * k), 0, TAU); ctx.stroke();
+      pxRingStroke(w.x, w.y, Math.max(4, w.r * k));
       ctx.strokeStyle = 'rgba(255,200,120,0.7)'; ctx.lineWidth = 1.6;
       ctx.beginPath();
       ctx.moveTo(w.x - w.r * 1.25, w.y); ctx.lineTo(w.x - w.r * 0.45, w.y);
@@ -28301,9 +28337,9 @@ function drawGame() {
       ctx.fillStyle = 'rgba(60,200,90,' + (0.10 + 0.10 * pulse).toFixed(2) + ')';
       ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, TAU); ctx.fill();
       ctx.strokeStyle = 'rgba(110,230,130,0.85)'; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, TAU); ctx.stroke();
+      pxRingStroke(w.x, w.y, w.r);
       ctx.strokeStyle = 'rgba(210,255,180,' + (0.5 + 0.4 * pulse).toFixed(2) + ')'; ctx.lineWidth = 2.4;
-      ctx.beginPath(); ctx.arc(w.x, w.y, Math.max(4, w.r * k), 0, TAU); ctx.stroke();
+      pxRingStroke(w.x, w.y, Math.max(4, w.r * k));
       /* 圈内几道细根须（预告这里要长出什么） */
       ctx.strokeStyle = 'rgba(90,200,110,0.55)'; ctx.lineWidth = 1.8;
       for (let i = 0; i < 4; i++) {
@@ -28321,10 +28357,10 @@ function drawGame() {
       ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, TAU); ctx.fill();
       ctx.strokeStyle = 'rgba(90,170,255,' + (0.5 + 0.3 * pulse).toFixed(2) + ')';
       ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, TAU); ctx.stroke();
+      pxRingStroke(w.x, w.y, w.r);
       ctx.strokeStyle = 'rgba(160,220,255,' + (0.55 + 0.4 * pulse).toFixed(2) + ')';
       ctx.lineWidth = 1.6;
-      ctx.beginPath(); ctx.arc(w.x, w.y, w.r * 0.55, 0, TAU); ctx.stroke();
+      pxRingStroke(w.x, w.y, w.r * 0.55);
       ctx.fillStyle = 'rgba(190,235,255,' + (0.6 * pulse + 0.3).toFixed(2) + ')';
     } else {
       /* 妖法师火焰阵法：追踪阶段是普通橙圈；与玩家重合后进入 0.5 秒引信（内圈收缩 + 更烫的红） */
@@ -28334,10 +28370,10 @@ function drawGame() {
       ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, TAU); ctx.fill();
       ctx.strokeStyle = fuse ? 'rgba(255,90,40,0.95)' : ('rgba(255,140,60,' + (0.45 + 0.3 * pulse).toFixed(2) + ')');
       ctx.lineWidth = fuse ? 4 : 3;
-      ctx.beginPath(); ctx.arc(w.x, w.y, w.r, 0, TAU); ctx.stroke();
+      pxRingStroke(w.x, w.y, w.r);
       ctx.strokeStyle = fuse ? 'rgba(255,240,180,0.95)' : ('rgba(255,209,102,' + (0.5 + 0.4 * pulse).toFixed(2) + ')');
       ctx.lineWidth = fuse ? 2.6 : 1.6;
-      ctx.beginPath(); ctx.arc(w.x, w.y, Math.max(4, w.r * (fuse ? fk : 0.55)), 0, TAU); ctx.stroke();
+      pxRingStroke(w.x, w.y, Math.max(4, w.r * (fuse ? fk : 0.55)));
       ctx.fillStyle = fuse ? 'rgba(255,220,140,0.95)' : ('rgba(255,180,90,' + (0.6 * pulse + 0.3).toFixed(2) + ')');
     }
     /* 阵法符文光点 */
@@ -29694,18 +29730,10 @@ function drawGame() {
       ctx.save();
       ctx.lineCap = 'round';
       for (const s of b.segs) {
-        ctx.globalAlpha = 0.45 * k;
-        ctx.strokeStyle = wcol;
-        ctx.lineWidth = b.w * (0.75 + 0.25 * k);
-        ctx.beginPath(); ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2); ctx.stroke();
-        ctx.globalAlpha = 0.95 * k;
-        ctx.strokeStyle = wcore;
-        ctx.lineWidth = Math.max(3, b.w * 0.34) * (0.6 + 0.4 * k);
-        ctx.beginPath(); ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2); ctx.stroke();
-        if (s.bounce) {   // 反射起点标记
-          ctx.globalAlpha = 0.8 * k;
-          ctx.fillStyle = wtip;
-          ctx.beginPath(); ctx.arc(s.x1, s.y1, 9 * k + 3, 0, TAU); ctx.fill();
+        /* 🎨 像素化：原来两笔 round-cap 平滑粗线 → 沿线段铺三层方块（外晕/中层/白芯） */
+        pxBeam(s.x1, s.y1, s.x2, s.y2, b.w * (0.75 + 0.25 * k), wcol, wcore, k, k);
+        if (s.bounce) {   // 反射起点标记（像素火花，不再是一个圆）
+          pxSpark(s.x1, s.y1, 6 * k + 3, wtip, '#ffffff', 0.85 * k);
         }
       }
       ctx.restore();
