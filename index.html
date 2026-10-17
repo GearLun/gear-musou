@@ -2784,6 +2784,91 @@ function pxRand(n) {
   return (x >>> 0) / 4294967296;
 }
 
+/* ============================================================
+   ✨ 像素特效库（Pixel FX）
+   ============================================================
+   用户要求「所有的攻击特效，挥砍特效等内容全部进行重构，华丽且精致」。
+   像素质感的关键不是"画得粗糙"，而是**边缘落在统一的栅格上**：
+     · 所有特效坐标/尺寸都吸附到 `PX_FX_G`（2px）网格 —— 与像素模型的一个画素同尺寸
+     · 圆形冲击波画成「阶梯环」（若干 2×2 方块沿圆周排布），而不是抗锯齿的细圆
+     · 挥砍画成「三段色带 + 阶梯弧」，白芯 / 亮边 / 外晕
+   这样整套特效和角色贴图是同一个像素尺度，画风才统一。
+   ============================================================ */
+const PX_FX_G = 2;                    // 特效栅格（= 模型 1 个画素）
+const pxSnap = (v) => Math.round(v / PX_FX_G) * PX_FX_G;
+const pxSnapS = (v) => Math.max(PX_FX_G, Math.round(v / PX_FX_G) * PX_FX_G);
+
+/* 像素方块：统一走这里，保证尺寸/位置都吸附栅格 */
+function pxBlock(x, y, s, color, alpha) {
+  if (alpha !== undefined) ctx.globalAlpha = alpha;
+  ctx.fillStyle = color;
+  const ss = pxSnapS(s);
+  ctx.fillRect(pxSnap(x) - ss / 2, pxSnap(y) - ss / 2, ss, ss);
+  if (alpha !== undefined) ctx.globalAlpha = 1;
+}
+
+/* 像素冲击环：沿圆周摆一圈 2×2 方块（阶梯感 = 像素画的圆） */
+function pxRing(x, y, r, color, thickness, alpha) {
+  if (!isFinite(x) || !isFinite(y) || !isFinite(r) || r <= 0) return;
+  const step = Math.max(PX_FX_G * 2, (r * 0.30) | 0);       // 步长随半径，别画太密
+  const n = Math.max(8, Math.min(40, Math.round(TAU * r / step)));
+  const ss = pxSnapS(thickness || 2);
+  ctx.fillStyle = color;
+  if (alpha !== undefined) ctx.globalAlpha = alpha;
+  const ox = pxSnap(x), oy = pxSnap(y);
+  for (let i = 0; i < n; i++) {
+    const a = i / n * TAU;
+    ctx.fillRect(pxSnap(ox + Math.cos(a) * r) - ss / 2, pxSnap(oy + Math.sin(a) * r) - ss / 2, ss, ss);
+  }
+  if (alpha !== undefined) ctx.globalAlpha = 1;
+}
+
+/* 像素挥砍弧：三段色带（白芯 / 亮边 / 外晕），沿弧长按栅格铺方块
+   a0→a1 弧度，r0→r1 半径区间，w = 弧厚 */
+function pxSlashArc(cx, cy, a0, a1, r0, r1, colCore, colEdge, colGlow, alpha) {
+  if (!isFinite(cx) || !isFinite(cy) || !isFinite(a0) || !isFinite(a1)) return;
+  const span = a1 - a0;
+  if (!isFinite(span) || span === 0) return;
+  const rMid = (r0 + r1) / 2;
+  const arcW = Math.abs(span) * rMid;                       // 弧长
+  const n = Math.max(6, Math.min(64, Math.round(arcW / PX_FX_G)));
+  const bandW = Math.max(PX_FX_G, (r1 - r0));
+  ctx.globalAlpha = alpha === undefined ? 1 : alpha;
+  for (let i = 0; i <= n; i++) {
+    const t = i / n;
+    const a = a0 + span * t;
+    /* 两端收窄、中段最宽（挥砍的"月牙"感） */
+    const taper = Math.sin(Math.min(1, Math.max(0, t)) * Math.PI);
+    const w2 = Math.max(PX_FX_G, bandW * (0.35 + 0.65 * taper));
+    for (let k = 0; k < 3; k++) {
+      const rr = r0 + w2 * (k + 0.5) / 3;
+      const col = k === 2 ? colCore : (k === 1 ? colEdge : colGlow);
+      if (!col) continue;
+      ctx.fillStyle = col;
+      const ss = pxSnapS(PX_FX_G);
+      ctx.fillRect(pxSnap(cx + Math.cos(a) * rr) - ss / 2, pxSnap(cy + Math.sin(a) * rr) - ss / 2, ss, ss);
+    }
+  }
+  ctx.globalAlpha = 1;
+}
+
+/* 像素火花（命中/爆点）：一个十字 + 四角小方块，比单纯一个圆点"精致"得多 */
+function pxSpark(x, y, size, color, color2, alpha) {
+  if (!isFinite(x) || !isFinite(y)) return;
+  const s = pxSnapS(size || 6);
+  const X = pxSnap(x), Y = pxSnap(y);
+  ctx.globalAlpha = alpha === undefined ? 1 : alpha;
+  ctx.fillStyle = color;
+  ctx.fillRect(X - s, Y - PX_FX_G / 2, s * 2, PX_FX_G);      // 横
+  ctx.fillRect(X - PX_FX_G / 2, Y - s, PX_FX_G, s * 2);      // 竖
+  if (color2) {
+    ctx.fillStyle = color2;
+    const h = pxSnapS(PX_FX_G * 2);
+    ctx.fillRect(X - h / 2, Y - h / 2, h, h);                 // 中心亮核
+  }
+  ctx.globalAlpha = 1;
+}
+
 function addPart(x, y, vx, vy, life, size, color, grav) {
   /* 🛡️ **NaN 网（粒子层）**：坐标/速度不是有限数就**直接不生成** ——
      真机上 NaN 粒子会让 `ctx.fillRect/translate` 收到 NaN，画布状态被写坏 → 之后每帧都画不出东西
@@ -8726,15 +8811,21 @@ function drawPetWaves() {
 function drawSlashStreak(len, w, wob, headX, headY, wobF, rot) {
   const L2 = len === undefined ? 30 : len, W2 = w === undefined ? 8 : w;
   const WO = wob === undefined ? 5 : wob, F = wobF === undefined ? 10 : wobF;
-  ctx.beginPath();
-  for (let i = 0; i <= 4; i++) {
-    const t = i / 4;
-    const xx = -Math.cos(p.face) * (W2 + t * L2);
-    const yy = Math.sin(p.face) * (W2 + t * L2) + Math.sin(time * F + i * 0.8) * t * WO;
-    if (i === 0) ctx.moveTo(-Math.cos(p.face) * (headX === undefined ? 6 : headX), headY === undefined ? 6 : headY);
-    else ctx.lineTo(xx, yy + (headY === undefined ? 6 : headY));
+  const hx = headX === undefined ? 6 : headX, hy = headY === undefined ? 6 : headY;
+  /* 🎨 像素化：原来是一条抗锯齿的多段折线（stroke），现在按采样点在 2px 栅格上铺方块，
+     挥动时方块错落 = 像素画里的「飘带」。战士 / 弓兵 / 法师的围巾都走这里。 */
+  const col = ctx.strokeStyle;
+  ctx.fillStyle = (col && col !== 'none') ? col : '#ffffff';
+  const N = Math.max(6, Math.min(26, Math.round((W2 + L2) / 3)));
+  const ss = pxSnapS(W2 * 0.55);
+  for (let i = 0; i <= N; i++) {
+    const t = i / N;
+    /* 起点在头/颈（hx,hy），往后甩出 (W2 + t*L2) */
+    const along = W2 + t * L2;
+    const xx = -Math.cos(p.face) * hx - Math.cos(p.face) * (along - W2);
+    const yy = hy + Math.sin(p.face) * (along - W2) + Math.sin(time * F + t * N * 0.8) * t * WO;
+    ctx.fillRect(pxSnap(xx) - ss / 2, pxSnap(yy) - ss / 2, ss, ss);
   }
-  ctx.stroke();
 }
 function petAtkTick(u, dt, moving) {
   u.atkT -= dt;
@@ -22802,26 +22893,67 @@ let sceneDark = false;
 const ground = document.createElement('canvas');
 ground.width = W; ground.height = H;
 function buildGround() {
+  /* 🎨 地表生成用**局部确定随机**：不吃全局 Math.random（见 tools\_fix-ground-rng.js 的说明） */
+  let _gs = sceneDark ? 777001 : 424242;
+  const gr = () => { _gs = (_gs * 1103515245 + 12345) & 0x7fffffff; return _gs / 0x7fffffff; };
+  const grR = (a, b) => a + (b - a) * gr();
   const g = ground.getContext('2d');
   if (!sceneDark) {
     /* —— 草原战场 —— */
     const grad = g.createLinearGradient(0, 0, 0, H);
     grad.addColorStop(0, '#3a4a35'); grad.addColorStop(0.5, '#33412f'); grad.addColorStop(1, '#2b3828');
     g.fillStyle = grad; g.fillRect(0, 0, W, H);
-    for (let i = 0; i < 3400; i++) {
-      const x = Math.random() * W, y = Math.random() * H;
-      g.strokeStyle = 'rgba(' + (Math.random() < 0.5 ? '130,150,105' : '90,110,75') + ',' + rnd(0.05, 0.16).toFixed(2) + ')';
-      g.lineWidth = 1;
-      g.beginPath();
-      g.moveTo(x, y);
-      g.lineTo(x + rnd(-3, 3), y - rnd(3, 8));
-      g.stroke();
+    /* 🎨 像素化地表（草原）：
+       ① 先铺一层 2px 棋盘抖动贴图（像素画的「草地颗粒」，用 createPattern 平铺，性能极好）
+       ② 再撒几千个 2px 方块当草丛（吸附 2px 栅格，边缘硬）
+       ③ 少量野花 / 碎石亮点，避免地表死板 */
+    {
+      const T = 24;
+      const c2 = document.createElement('canvas');
+      c2.width = T; c2.height = T;
+      const pg = c2.getContext && c2.getContext('2d');
+      if (pg) {
+        const cols = ['#3a4a35', '#33412f', '#2f3d2b', '#3e5138', '#2a3626'];
+        let sd = 1337;
+        const nr = () => { sd = (sd * 1103515245 + 12345) & 0x7fffffff; return sd / 0x7fffffff; };
+        for (let y = 0; y < T; y += 2) {
+          for (let x = 0; x < T; x += 2) {
+            pg.fillStyle = cols[(nr() * cols.length) | 0];
+            pg.fillRect(x, y, 2, 2);
+          }
+        }
+        const pat = g.createPattern(c2, 'repeat');
+        if (pat) {
+          const sm0 = g.imageSmoothingEnabled;
+          g.imageSmoothingEnabled = false;
+          g.save();
+          g.scale(4, 4);
+          g.fillStyle = pat;
+          g.fillRect(0, 0, W / 4, H / 4);
+          g.restore();
+          g.imageSmoothingEnabled = sm0;
+        }
+      }
+      /* 像素草丛 */
+      for (let i = 0; i < 5200; i++) {
+        const x = Math.floor(gr() * W / 2) * 2, y = Math.floor(gr() * H / 2) * 2;
+        g.fillStyle = 'rgba(' + (gr() < 0.5 ? '130,150,105' : '84,104,70') + ',' + grR(0.10, 0.26).toFixed(2) + ')';
+        g.fillRect(x, y, 2, 2);
+        if (gr() < 0.35) g.fillRect(x, y - 2, 2, 2);
+      }
+      /* 野花 / 碎石点缀 */
+      const dots = ['rgba(214,205,140,0.55)', 'rgba(160,190,225,0.40)', 'rgba(200,150,170,0.40)'];
+      for (let i = 0; i < 260; i++) {
+        const x = Math.floor(gr() * W / 2) * 2, y = Math.floor(gr() * H / 2) * 2;
+        g.fillStyle = dots[(gr() * 3) | 0];
+        g.fillRect(x, y, 2, 2);
+      }
     }
     for (let i = 0; i < 90; i++) {
-      const x = Math.random() * W, y = Math.random() * H;
-      g.fillStyle = 'rgba(0,0,0,' + rnd(0.05, 0.14).toFixed(2) + ')';
+      const x = gr() * W, y = gr() * H;
+      g.fillStyle = 'rgba(0,0,0,' + grR(0.05, 0.14).toFixed(2) + ')';
       g.beginPath();
-      g.ellipse(x, y, rnd(14, 50), rnd(8, 26), rnd(0, 3), 0, TAU);
+      g.ellipse(x, y, grR(14, 50), grR(8, 26), grR(0, 3), 0, TAU);
       g.fill();
     }
     const vig = g.createRadialGradient(W / 2, H / 2, 200, W / 2, H / 2, 780);
@@ -22838,34 +22970,66 @@ function buildGround() {
     g.fillStyle = grad; g.fillRect(0, 0, W, H);
     /* 暗色焦土斑 */
     for (let i = 0; i < 140; i++) {
-      const x = Math.random() * W, y = Math.random() * H;
-      g.fillStyle = 'rgba(0,0,0,' + rnd(0.12, 0.3).toFixed(2) + ')';
+      const x = gr() * W, y = gr() * H;
+      g.fillStyle = 'rgba(0,0,0,' + grR(0.12, 0.3).toFixed(2) + ')';
       g.beginPath();
-      g.ellipse(x, y, rnd(18, 64), rnd(10, 30), rnd(0, 3), 0, TAU);
+      g.ellipse(x, y, grR(18, 64), grR(10, 30), grR(0, 3), 0, TAU);
       g.fill();
     }
     /* 熔岩裂缝（暗红微光） */
     for (let i = 0; i < 46; i++) {
-      const x = rnd(0, W), y = rnd(0, H), segs = Math.floor(rnd(4, 10));
+      const x = grR(0, W), y = grR(0, H), segs = Math.floor(grR(4, 10));
       let px = x, py = y;
       g.lineCap = 'round';
       for (let s = 0; s < segs; s++) {
-        const nx2 = px + rnd(-26, 26), ny2 = py + rnd(6, 26);
-        g.strokeStyle = 'rgba(255,' + Math.floor(rnd(60, 90)) + ',40,' + rnd(0.08, 0.2).toFixed(2) + ')';
-        g.lineWidth = rnd(1, 2.4);
+        const nx2 = px + grR(-26, 26), ny2 = py + grR(6, 26);
+        g.strokeStyle = 'rgba(255,' + Math.floor(grR(60, 90)) + ',40,' + grR(0.08, 0.2).toFixed(2) + ')';
+        g.lineWidth = grR(1, 2.4);
         g.beginPath(); g.moveTo(px, py); g.lineTo(nx2, ny2); g.stroke();
         px = nx2; py = ny2;
       }
     }
-    /* 灰烬残草 */
-    for (let i = 0; i < 2600; i++) {
-      const x = Math.random() * W, y = Math.random() * H;
-      g.strokeStyle = 'rgba(' + (Math.random() < 0.5 ? '120,110,130' : '70,66,80') + ',' + rnd(0.04, 0.13).toFixed(2) + ')';
-      g.lineWidth = 1;
-      g.beginPath();
-      g.moveTo(x, y);
-      g.lineTo(x + rnd(-3, 3), y - rnd(3, 7));
-      g.stroke();
+    /* 🎨 像素化地表（黑暗战场）：同款 2px 抖动贴图 + 焦土颗粒 + 零星余烬亮点 */
+    {
+      const T = 24;
+      const c2 = document.createElement('canvas');
+      c2.width = T; c2.height = T;
+      const pg = c2.getContext && c2.getContext('2d');
+      if (pg) {
+        const cols = ['#151318', '#1b191f', '#0e0d11', '#201d26', '#0a090d'];
+        let sd = 424242;
+        const nr = () => { sd = (sd * 1103515245 + 12345) & 0x7fffffff; return sd / 0x7fffffff; };
+        for (let y = 0; y < T; y += 2) {
+          for (let x = 0; x < T; x += 2) {
+            pg.fillStyle = cols[(nr() * cols.length) | 0];
+            pg.fillRect(x, y, 2, 2);
+          }
+        }
+        const pat = g.createPattern(c2, 'repeat');
+        if (pat) {
+          const sm0 = g.imageSmoothingEnabled;
+          g.imageSmoothingEnabled = false;
+          g.save();
+          g.scale(4, 4);
+          g.fillStyle = pat;
+          g.fillRect(0, 0, W / 4, H / 4);
+          g.restore();
+          g.imageSmoothingEnabled = sm0;
+        }
+      }
+      /* 灰烬残草（像素方块） */
+      for (let i = 0; i < 4200; i++) {
+        const x = Math.floor(gr() * W / 2) * 2, y = Math.floor(gr() * H / 2) * 2;
+        g.fillStyle = 'rgba(' + (gr() < 0.5 ? '120,110,130' : '70,66,80') + ',' + grR(0.08, 0.20).toFixed(2) + ')';
+        g.fillRect(x, y, 2, 2);
+        if (gr() < 0.3) g.fillRect(x, y - 2, 2, 2);
+      }
+      /* 零星余烬（暖色亮点，只有很少一点） */
+      for (let i = 0; i < 150; i++) {
+        const x = Math.floor(gr() * W / 2) * 2, y = Math.floor(gr() * H / 2) * 2;
+        g.fillStyle = 'rgba(' + (gr() < 0.5 ? '255,120,60' : '255,80,40') + ',' + grR(0.20, 0.45).toFixed(2) + ')';
+        g.fillRect(x, y, 2, 2);
+      }
     }
     /* 中央惨淡幽光 + 重暗角 */
     const vig = g.createRadialGradient(W / 2, H / 2, 90, W / 2, H / 2, 700);
@@ -25881,11 +26045,20 @@ function drawPlayer() {
     ctx.translate(Math.cos(a) * 8, Math.sin(a) * 8);
     bladeAt(a, Lb, 3.4, glowCol, darkFx ? 22 : (musou ? 22 : (combo >= 50 ? 15 : 10)));
     ctx.restore();
-    // 刀风细线
-    ctx.strokeStyle = darkFx ? 'rgba(140,110,235,0.55)' : 'rgba(255,255,255,0.5)'; ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(0, 0, Lb + 8, Math.min(p.swStartA, a), Math.max(p.swStartA, a));
-    ctx.stroke();
+    /* 刀风细线 → 🎨 换成「像素挥砍弧」：白芯 + 亮边 + 外晕三段色带，
+       沿弧长按 2px 栅格铺方块（和角色贴图同一个像素尺度，边缘硬、有阶梯感）。
+       这是所有近战职业挥砍的公共观感来源。 */
+    {
+      const aLo = Math.min(p.swStartA, a), aHi = Math.max(p.swStartA, a);
+      pxSlashArc(0, 0, aLo, aHi, Lb * 0.52, Lb * 1.04,
+        darkFx ? '#e6dcff' : '#ffffff',
+        glowCol,
+        darkFx ? 'rgba(140,110,235,0.5)' : 'rgba(191,233,255,0.45)',
+        0.9);
+      /* 弧两端各来一个像素火花（起手 / 收刀），比一条均匀细线更有"斩"的读感 */
+      pxSpark(Math.cos(aLo) * Lb * 0.8, Math.sin(aLo) * Lb * 0.8, 4, glowCol, '#ffffff', 0.55 * pr);
+      pxSpark(Math.cos(aHi) * Lb * 0.8, Math.sin(aHi) * Lb * 0.8, 5, '#ffffff', glowCol, 0.9 * pr);
+    }
     /* 旋风斩满级：仍是「一把剑」高速回旋 —— 只加足下回旋虚线环作轴心参照，不再生成多余刀影 */
     if (p.mut.whirl >= 3) {
       ctx.save();
@@ -29082,6 +29255,21 @@ function drawGame() {
 
   /* 箭矢（Boss 大弹 = 拖尾能量球） */
   for (const s of shots) {
+    /* 🎨 像素拖尾：所有弹幕统一先铺一串 **2px 栅格方块**（越靠后越小越淡）。
+       这是"攻击特效像素化"的公共层 —— 不管弹体本身怎么画，拖尾都带像素阶梯感。 */
+    {
+      const sp2 = Math.hypot(s.vx || 0, s.vy || 0) || 1;
+      const ux = (s.vx || 0) / sp2, uy = (s.vy || 0) / sp2;
+      const tc = s.col || (s.void ? '#9ad8ff' : '#ffe9a8');
+      for (let k = 1; k <= 3; k++) {
+        const d = k * 7;
+        ctx.globalAlpha = 0.34 - k * 0.09;
+        ctx.fillStyle = tc;
+        const ss = pxSnapS(Math.max(2, 6 - k * 1.4));
+        ctx.fillRect(pxSnap(s.x - ux * d) - ss / 2, pxSnap(s.y - uy * d) - ss / 2, ss, ss);
+      }
+      ctx.globalAlpha = 1;
+    }
     /* 🍃🔥💧 宝可梦的属性弹：直接画对应属性的旋转贴图（帧号跟着时间走 + 每颗错开相位）；
        ⚠️ 贴图还没解码完时**不要 continue** —— 退回下面默认的大弹体绘制，免得开局几帧看不到弹幕 */
     if (s.petShot) {
@@ -29678,22 +29866,23 @@ function drawGame() {
     ctx.beginPath(); ctx.arc(bl.x, bl.y, 16 * (1 - k) + 6, 0, TAU); ctx.fill();
   }
 
-  /* 冲击环（⚠️ 半径/透明度都要是有限正数：真实 canvas 对 NaN / 负半径会抛异常 → drawGame 中断 → 画面卡住） */
+  /* 冲击环（⚠️ 半径/透明度都要是有限正数：真实 canvas 对 NaN / 负半径会抛异常 → drawGame 中断 → 画面卡住）
+     🎨 像素化：改成「阶梯环」（沿圆周摆一圈 2×2 方块）—— 和角色贴图同一个像素尺度，
+        比原来抗锯齿的细圆更符合像素画风。（`pxRing` 内部也会兜住 NaN） */
   for (const r0 of rings) {
     const rk = r0.max ? Math.max(0, Math.min(1, r0.life / r0.max)) : 1;
     const rr = (r0.shrink ? r0.r * rk : r0.r);
-    ctx.globalAlpha = rk * 0.9;
-    ctx.strokeStyle = r0.color;
-    ctx.lineWidth = (r0.width || 2) * rk + 1;
-    ctx.beginPath(); ctx.arc(r0.x, r0.y, (isFinite(rr) ? Math.max(0.5, rr) : 0.5), 0, TAU); ctx.stroke();
+    if (!isFinite(rr) || rr <= 0) continue;
+    pxRing(r0.x, r0.y, rr, r0.color, (r0.width || 2) * rk + 2, rk * 0.9);
     ctx.globalAlpha = 1;
   }
 
-  /* 粒子 */
+  /* 粒子（🎨 像素化：坐标与尺寸都吸附到 2px 栅格，边缘不再半像素糊） */
   for (const q of parts) {
     ctx.globalAlpha = Math.max(0, q.life / q.max);
     ctx.fillStyle = q.color;
-    ctx.fillRect(q.x - q.size / 2, q.y - q.size / 2, q.size, q.size);
+    const ps = pxSnapS(q.size);
+    ctx.fillRect(pxSnap(q.x) - ps / 2, pxSnap(q.y) - ps / 2, ps, ps);
   }
   ctx.globalAlpha = 1;
 
