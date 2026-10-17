@@ -1576,6 +1576,1076 @@ function shadeAir(x, y, r, h) {
   ctx.ellipse(x, y + r * 0.85, r * 0.92 * k, r * 0.38 * k, 0, 0, TAU);
   ctx.fill();
 }
+/* ============================================================
+   🎨 像素美术引擎（Pixel Art Engine）
+   ============================================================
+   为什么要有这一层：玩家反馈「角色 / 敌人都是几个简单的几何图形」，不像宝可梦那种像素画。
+   把 arc/ellipse 调粗调细解决不了 —— 像素质感来自三件事：
+     ① **整数网格**：每个「画素」都是方的、边缘硬（不允许抗锯齿糊边）
+     ② **三阶明暗 + 1px 描边**：亮 / 中 / 暗三档 + 贴近黑的轮廓，球体才有体积感
+     ③ **最近邻整数倍放大**：2x / 3x 放大不插值
+   所以这里做一层「小尺寸像素画布」：所有模型在 ~16×20 的画素网格上按**整数坐标**画，
+   再以整数倍光栅化到离屏 canvas，最后 `drawImage` 贴到世界坐标。
+
+   性能：每个 (模型, 帧, 配色) 只光栅化 **一次**，之后每帧就是 1 次 drawImage
+        —— 比原来 1000+ 行逐帧矢量绘制**更快**（矢量那段每帧要为每个敌人重算上百个路径）。
+   ============================================================ */
+const PX_PAD = 1;                    // 四边各留 1 像素给「向外长」的描边
+const PX_CV = Object.create(null);   // 缓存：key → 离屏 canvas
+let pxRasterN = 0, pxBlitN = 0;      // 诊断：光栅化次数 / 贴图次数（__musouPixelInfo 里读）
+
+/* ---------- 颜色工具：任意基色自动派生「亮 / 暗 / 更深」三阶 ---------- */
+function pxRgbOf(h) {
+  let s = String(h).replace('#', '');
+  if (s.length === 3) s = s[0] + s[0] + s[1] + s[1] + s[2] + s[2];
+  const n = parseInt(s, 16);
+  if (!isFinite(n)) return [128, 128, 128];
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
+function pxMixTo(h, r2, g2, b2, k) {
+  const c = pxRgbOf(h);
+  const m = (v, t) => Math.max(0, Math.min(255, Math.round(v + (t - v) * k)));
+  return 'rgb(' + m(c[0], r2) + ',' + m(c[1], g2) + ',' + m(c[2], b2) + ')';
+}
+const pxLight = (h, k) => pxMixTo(h, 255, 255, 255, k === undefined ? 0.34 : k);
+const pxDark = (h, k) => pxMixTo(h, 0, 0, 0, k === undefined ? 0.30 : k);
+const pxDeep = (h, k) => pxMixTo(h, 0, 0, 0, k === undefined ? 0.55 : k);
+
+/* 一张模型的标准调色板：从 ETYPES 的 col / dark / acc 三色自动铺开。
+   ⚠️ 这样「闪光（金色）」「绿身体词条」都会自动跟着变 —— 不用给每种配色再画一套。 */
+function pxPalOf(col, dark, acc) {
+  return {
+    b: col, l: pxLight(col, 0.32), d: dark || pxDark(col), dd: pxDeep(col, 0.62),
+    a: acc, al: pxLight(acc, 0.42), ad: pxDark(acc, 0.38),
+    k: pxDeep(col, 0.80),          // 描边（近黑，但不是纯黑 —— 纯黑会死板）
+    w: '#fbfaf2', e: '#191320',    // 眼白 / 瞳孔
+    s: pxLight(col, 0.62),         // 高光点
+    m: '#9aa3ae', ml: '#d6dde6', md: '#5b636d',   // 金属（甲片 / 刀刃）
+    sk: '#e8b98e', skd: '#b8845c'  // 皮肤（露脸的角色）
+  };
+}
+
+/* ---------- 像素画布 ---------- */
+function PXC(w, h) {
+  const px = {
+    w: w, h: h, bw: w + PX_PAD * 2, bh: h + PX_PAD * 2,
+    pal: [null], idx: Object.create(null), buf: null
+  };
+  px.buf = new Uint16Array(px.bw * px.bh);
+  return px;
+}
+function pxCI(px, c) {
+  if (c == null) return 0;
+  let i = px.idx[c];
+  if (i === undefined) { i = px.pal.length; px.pal.push(c); px.idx[c] = i; }
+  return i;
+}
+function pxPut(px, x, y, ci) {
+  x = (x | 0) + PX_PAD; y = (y | 0) + PX_PAD;
+  if (x < 0 || y < 0 || x >= px.bw || y >= px.bh) return;
+  px.buf[y * px.bw + x] = ci;
+}
+function pxAt(px, x, y) {
+  x = (x | 0) + PX_PAD; y = (y | 0) + PX_PAD;
+  if (x < 0 || y < 0 || x >= px.bw || y >= px.bh) return 0;
+  return px.buf[y * px.bw + x];
+}
+
+/* ---------- 基本图元（全部落在整数格上） ---------- */
+function pxRect(px, x, y, w, h, c) {
+  const ci = pxCI(px, c);
+  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) pxPut(px, x + i, y + j, ci);
+}
+function pxEll(px, cx, cy, rx, ry, c) {
+  const ci = pxCI(px, c);
+  const x0 = Math.floor(cx - rx) - 1, x1 = Math.ceil(cx + rx) + 1;
+  const y0 = Math.floor(cy - ry) - 1, y1 = Math.ceil(cy + ry) + 1;
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    const nx = (x + 0.5 - cx) / rx, ny = (y + 0.5 - cy) / ry;
+    if (nx * nx + ny * ny <= 1.0) pxPut(px, x, y, ci);
+  }
+}
+/* 三阶明暗的「球」：像素画里所有身体部件（头 / 躯干 / 肩甲 / 眼睛）都用它 —— 体积感就靠这个 */
+function pxBall(px, cx, cy, rx, ry, cl, cb, cd, cdd, spec) {
+  const iL = pxCI(px, cl), iB = pxCI(px, cb), iD = pxCI(px, cd);
+  const iDD = cdd ? pxCI(px, cdd) : iD;
+  const x0 = Math.floor(cx - rx) - 1, x1 = Math.ceil(cx + rx) + 1;
+  const y0 = Math.floor(cy - ry) - 1, y1 = Math.ceil(cy + ry) + 1;
+  for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) {
+    const nx = (x + 0.5 - cx) / rx, ny = (y + 0.5 - cy) / ry;
+    if (nx * nx + ny * ny > 1.0) continue;
+    /* 光从左上来：v 越小越亮 */
+    const v = ny * 0.92 + nx * 0.30;
+    pxPut(px, x, y, v < -0.52 ? iL : (v < 0.16 ? iB : (v < 0.62 ? iD : iDD)));
+  }
+  if (spec !== false) {   // 左上高光点
+    const sx = cx - rx * 0.34, sy = cy - ry * 0.40;
+    pxEll(px, sx, sy, Math.max(0.6, rx * 0.24), Math.max(0.6, ry * 0.20), px.pal.length ? cl : cl);
+    const ci = pxCI(px, '#ffffff');
+    pxPut(px, Math.round(sx - 0.5), Math.round(sy - 0.5), ci);
+  }
+}
+function pxLine(px, x1, y1, x2, y2, c, t) {
+  const ci = pxCI(px, c);
+  const th = Math.max(1, t || 1);
+  const dx = x2 - x1, dy = y2 - y1;
+  const n = Math.max(1, Math.ceil(Math.max(Math.abs(dx), Math.abs(dy)) * 2));
+  const half = (th - 1) / 2;
+  for (let i = 0; i <= n; i++) {
+    const x = x1 + dx * i / n, y = y1 + dy * i / n;
+    if (th <= 1) { pxPut(px, Math.round(x), Math.round(y), ci); continue; }
+    for (let oy = -half; oy <= half; oy += 1) {
+      for (let ox = -half; ox <= half; ox += 1) {
+        if (ox * ox + oy * oy <= half * half + 0.4) pxPut(px, Math.round(x + ox), Math.round(y + oy), ci);
+      }
+    }
+  }
+}
+/* 胶囊（四肢 / 尾巴）：粗线 + 圆头 */
+function pxCapsule(px, x1, y1, x2, y2, rad, c) {
+  pxLine(px, x1, y1, x2, y2, c, Math.max(1, rad * 2));
+  pxEll(px, x1, y1, rad, rad, c);
+  pxEll(px, x2, y2, rad, rad, c);
+}
+function pxPoly(px, pts, c) {
+  const ci = pxCI(px, c);
+  let minY = 1e9, maxY = -1e9;
+  for (const q of pts) { if (q[1] < minY) minY = q[1]; if (q[1] > maxY) maxY = q[1]; }
+  for (let y = Math.floor(minY); y <= Math.ceil(maxY); y++) {
+    const xs = [];
+    for (let i = 0; i < pts.length; i++) {
+      const a = pts[i], b = pts[(i + 1) % pts.length];
+      const ay = a[1], by = b[1];
+      if ((ay <= y && by > y) || (by <= y && ay > y)) {
+        xs.push(a[0] + (y - ay) / (by - ay) * (b[0] - a[0]));
+      }
+    }
+    xs.sort((m, n) => m - n);
+    for (let i = 0; i + 1 < xs.length; i += 2) {
+      for (let x = Math.ceil(xs[i] - 0.5); x <= Math.floor(xs[i + 1] - 0.5); x++) pxPut(px, x, y, ci);
+    }
+  }
+}
+/* 描边：把「贴着不透明像素」的透明像素涂成描边色（向外长 1px，靠 PX_PAD 预留的空间） */
+function pxOutline(px, c) {
+  const ci = pxCI(px, c);
+  const w = px.bw, h = px.bh;
+  const src = px.buf.slice();
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    if (src[y * w + x]) continue;
+    if ((x > 0 && src[y * w + x - 1]) || (x < w - 1 && src[y * w + x + 1]) ||
+        (y > 0 && src[(y - 1) * w + x]) || (y < h - 1 && src[(y + 1) * w + x])) px.buf[y * w + x] = ci;
+  }
+}
+
+/* ---------- 光栅化（每个 key 只做一次） ---------- */
+function pxRaster(px, key) {
+  const had = PX_CV[key];
+  if (had !== undefined) return had;
+  if (typeof document === 'undefined' || !document.createElement) { PX_CV[key] = null; return null; }
+  let c;
+  try { c = document.createElement('canvas'); } catch (e) { PX_CV[key] = null; return null; }
+  c.width = px.bw; c.height = px.bh;
+  const g = c.getContext && c.getContext('2d');
+  if (!g) { PX_CV[key] = null; return null; }
+  /* 按行把同色连续像素合并成 fillRect（20×24 的图只要几十次 fillRect） */
+  for (let y = 0; y < px.bh; y++) {
+    let x = 0;
+    while (x < px.bw) {
+      const ci = px.buf[y * px.bw + x];
+      if (!ci) { x++; continue; }
+      let x2 = x + 1;
+      while (x2 < px.bw && px.buf[y * px.bw + x2] === ci) x2++;
+      g.fillStyle = px.pal[ci];
+      g.fillRect(x, y, x2 - x, 1);
+      x = x2;
+    }
+  }
+  pxRasterN++;
+  PX_CV[key] = c;
+  return c;
+}
+/* ---------- 贴图（整数坐标 + 最近邻，绝不糊） ---------- */
+function pxBlit(cv, x, y, sc, alpha, rot, anchorY) {
+  if (!cv) return;
+  const s = sc || 1;
+  const w = cv.width * s, h = cv.height * s;
+  const sm = ctx.imageSmoothingEnabled;
+  if (sm) ctx.imageSmoothingEnabled = false;
+  const a = (alpha === undefined) ? 1 : Math.max(0, Math.min(1, alpha));
+  const dim = a < 1;
+  if (dim) ctx.globalAlpha = a;
+  if (rot) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rot);
+    ctx.drawImage(cv, -w / 2, -h / 2, w, h);
+    ctx.restore();
+  } else {
+    /* anchorY = 0 → 以「脚底」为锚点（角色站地上更自然）；默认居中 */
+    const oy = (anchorY === undefined) ? h / 2 : (h - h * anchorY);
+    ctx.drawImage(cv, Math.round(x - w / 2), Math.round(y - oy), w, h);
+  }
+  if (dim) ctx.globalAlpha = 1;
+  if (sm) ctx.imageSmoothingEnabled = true;
+  pxBlitN++;
+}
+/* 缓存里清掉太久没用的（重启场景 / 读档换配色时会堆一点，量很小，这里只做上限保护） */
+function pxCacheTrim(max) {
+  const keys = Object.keys(PX_CV);
+  if (keys.length <= max) return 0;
+  let n = 0;
+  for (const k of keys) { if (PX_CV[k]) { PX_CV[k] = undefined; n++; } if (Object.keys(PX_CV).length <= max) break; }
+  return n;
+}
+/* 🧪 测试钩子：像素引擎的读数（缓存条目 / 光栅化次数 / 贴图次数） */
+window.__musouPixelInfo = () => ({
+  cache: Object.keys(PX_CV).length,
+  raster: pxRasterN, blit: pxBlitN,
+  cacheBytes: (() => { let n = 0; for (const k in PX_CV) { const c = PX_CV[k]; if (c) n += c.width * c.height * 4; } return n; })()
+});
+
+/* ============================================================
+   🎨 敌人像素模型（20 种 + Boss）
+   ============================================================
+   每个模型都是 `{ w, h, sc, draw(px, f, mode, pal) }`：
+     · w/h = **画素网格**尺寸（art pixel），sc = 整数放大倍率
+     · f    = 帧号（0..3），mode = 'idle' | 'walk' | 'atk'
+     · pal  = pxPalOf() 生成的调色板（颜色全从 ETYPES 的 col/dark/acc 派生）
+   画完统一 `pxOutline(px, pal.k)` —— 那圈近黑轮廓就是「像素画」和「几何图形」的分水岭。
+   注册表同时带 `death`：敌人死亡动画的口径（每只都不一样，见 pxCorpse 注释）。
+   ============================================================ */
+const PX_MODEL = Object.create(null);
+
+/* 眼睛：眼白 2×2 + 瞳孔 1px + 高光（像素画的灵魂就在这三点） */
+function pxEye(px, x, y, pal, big) {
+  if (big) {
+    pxRect(px, x, y, 3, 3, pal.w);
+    pxRect(px, x + 1, y, 2, 2, pal.e);
+    pxPut(px, x + 1, y, pxCI(px, '#ffffff'));
+  } else {
+    pxRect(px, x, y, 2, 2, pal.w);
+    pxPut(px, x + 1, y + 1, pxCI(px, pal.e));
+  }
+}
+
+/* ---------- 参数化人形建模器 ----------
+   cfg: { headR, headDY, hipY, helm, weapon, shield, cape, horns, plume, bigEye, skinny } */
+function pxHumanoid(px, f, mode, cfg, pal) {
+  const c = cfg || {};
+  let legPh = 0, armPh = 0, bob = 0, wind = 0;
+  if (mode === 'walk') { legPh = [0, 1, 0, -1][f & 3]; armPh = -legPh; bob = (f & 1) ? -1 : 0; }
+  else if (mode === 'atk') { const k = f ? 1 : 0; wind = k; armPh = k ? -1.2 : 1.1; bob = k ? -1 : 0; }
+  else { bob = (f & 1) ? -1 : 0; legPh = (f & 1) ? 0.35 : -0.35; }
+
+  const cx = Math.round(px.w / 2);
+  const footY = px.h - 2 + bob;
+  const headR = c.headR || 3.7;
+  const headY = (c.headDY || 0) + 4.4 + bob * 0.6;
+  const shY = headY + headR + 1.2;
+  const hipY = c.hipY || (footY - 5.2);
+  const halfW = c.skinny ? 3.2 : 4.0;
+
+  /* —— 披风（画在最下层）—— */
+  if (c.cape) {
+    const swing = legPh * 1.2;
+    pxPoly(px, [
+      [cx - halfW - 0.6, shY - 0.6], [cx + halfW + 0.6, shY - 0.6],
+      [cx + halfW + 1.6 + swing, footY - 0.5], [cx - halfW - 1.6 + swing, footY - 0.5]
+    ], pxDeep(pal.a, 0.34));
+    pxPoly(px, [
+      [cx - halfW + 0.4, shY], [cx + halfW - 0.4, shY],
+      [cx + halfW + 0.2 + swing, footY - 1.2], [cx - halfW - 0.2 + swing, footY - 1.2]
+    ], pxDeep(pal.a, 0.14));
+  }
+
+  /* —— 腿（两条，交替摆动）—— */
+  const lx1 = cx - 1.8, lx2 = cx + 1.8;
+  const swing1 = legPh * 1.7, swing2 = -legPh * 1.7;
+  pxCapsule(px, lx1, hipY, lx1 + swing1, footY, 1.25, pal.d);
+  pxCapsule(px, lx2, hipY, lx2 + swing2, footY, 1.25, pal.d);
+  /* 靴子 */
+  pxRect(px, Math.round(lx1 + swing1) - 1, footY - 1, 3, 2, pal.dd);
+  pxRect(px, Math.round(lx2 + swing2) - 1, footY - 1, 3, 2, pal.dd);
+
+  /* —— 躯干：上宽下窄的胸甲 —— */
+  pxBall(px, cx, (shY + hipY) / 2, halfW, (hipY - shY) / 2 + 1.4, pal.l, pal.b, pal.d, pal.dd, false);
+  if (c.armor) {   // 胸甲：金属片 + 中缝
+    pxRect(px, cx - 1, shY + 1, 2, 4, pal.m);
+    pxRect(px, cx - 1, shY + 1, 1, 4, pal.ml);
+    pxRect(px, cx - halfW, hipY - 1, Math.round(halfW * 2), 1, pal.ad);   // 腰带
+  }
+  /* 肩甲 */
+  pxBall(px, cx - halfW - 0.2, shY + 0.2, 1.9, 1.7, pal.ml, pal.m, pal.md, null, false);
+  pxBall(px, cx + halfW + 0.2, shY + 0.2, 1.9, 1.7, pal.ml, pal.m, pal.md, null, false);
+
+  /* —— 手臂（前臂摆动 / 出手时抬起来）—— */
+  const ax = cx + halfW + 0.4, ay = shY + 1.4;
+  const bx = cx - halfW - 0.4;
+  const handX = ax + (mode === 'atk' && wind ? 1.6 : armPh * 0.9);
+  const handY = ay + 4.2 - (mode === 'atk' && wind ? 2.4 : Math.abs(armPh) * 0.6);
+  pxCapsule(px, ax, ay, handX, handY, 1.1, pal.b);
+  pxCapsule(px, bx, ay, bx - armPh * 1.0, ay + 4.0, 1.1, pal.d);
+  /* 手 */
+  pxBall(px, handX, handY, 1.1, 1.1, pal.sk, pal.sk, pal.skd, null, false);
+  pxBall(px, bx - armPh * 1.0, ay + 4.0, 1.1, 1.1, pal.sk, pal.sk, pal.skd, null, false);
+
+  /* —— 头 —— */
+  pxBall(px, cx, headY, headR, headR * 1.05, pal.sk, pal.sk, pal.skd, null, false);
+
+  /* —— 头盔 / 头饰 —— */
+  const hk = c.helm;
+  if (hk) {
+    if (hk === 'pot') {
+      pxBall(px, cx, headY - 1.2, headR + 0.5, headR * 0.82, pal.ml, pal.m, pal.md, null, false);
+      pxRect(px, cx - headR, headY + 0.6, Math.round(headR * 2), 1, pal.md);   // 帽檐
+    } else if (hk === 'horned') {
+      pxBall(px, cx, headY - 1.2, headR + 0.3, headR * 0.86, pal.ml, pal.m, pal.md, null, false);
+      pxRect(px, cx - headR, headY + 0.4, Math.round(headR * 2), 1, pal.md);
+      pxLine(px, cx - headR, headY - 2, cx - headR - 2.2, headY - 4.4, pal.ad, 1.4);   // 角
+      pxLine(px, cx + headR, headY - 2, cx + headR + 2.2, headY - 4.4, pal.ad, 1.4);
+    } else if (hk === 'plume') {
+      pxBall(px, cx, headY - 1.2, headR + 0.4, headR * 0.86, pal.ml, pal.m, pal.md, null, false);
+      pxRect(px, cx - headR, headY + 0.4, Math.round(headR * 2), 1, pal.md);
+      for (let i = 0; i < 4; i++) pxLine(px, cx - 1, headY - 3 - i * 0.6, cx - 1 - i * 0.9, headY - 6 - i * 1.1, pal.a, 1.2);   // 盔缨
+      pxLine(px, cx - 1, headY - 3, cx - 0.4, headY - 6.2, pal.al, 1);
+    } else if (hk === 'wizard') {
+      /* 尖顶法师帽：三层塔尖 + 帽檐 + 星点 */
+      pxPoly(px, [[cx - headR - 1.2, headY - 1.4], [cx + headR + 1.2, headY - 1.4], [cx + 0.4, headY - 7.6]], pal.a);
+      pxPoly(px, [[cx - headR - 1.2, headY - 1.4], [cx, headY - 1.4], [cx + 0.4, headY - 7.6]], pal.ad);
+      pxRect(px, cx - headR - 2, headY - 1.6, Math.round(headR * 2) + 4, 1.6, pal.ad);
+      pxPut(px, cx - 1, headY - 4, pxCI(px, pal.al));
+      pxPut(px, cx + 1, headY - 5, pxCI(px, pal.al));
+    } else if (hk === 'hood') {
+      pxBall(px, cx, headY - 0.4, headR + 1.1, headR * 1.15, pal.l, pal.b, pal.d, pal.dd, false);
+      pxRect(px, cx - 1, headY + 1.2, Math.round(headR * 2) - 1, 1, pal.dd);   // 兜帽阴影
+      pxEll(px, cx, headY + 1.0, headR - 0.6, headR * 0.5, pal.sk);            // 露出的脸
+    } else if (hk === 'knight') {
+      pxBall(px, cx, headY - 0.4, headR + 0.7, headR * 1.05, pal.ml, pal.m, pal.md, null, false);
+      pxRect(px, cx - headR, headY - 0.6, Math.round(headR * 2) + 1, 1, pal.e);   // 面甲缝
+      pxRect(px, cx - headR * 0.6, headY + 1.2, Math.round(headR * 1.2), 1, pal.md);
+    } else if (hk === 'crown') {
+      pxBall(px, cx, headY - 1.4, headR + 0.2, headR * 0.7, pal.ml, pal.a, pal.ad, null, false);
+      for (let i = 0; i < 3; i++) pxRect(px, cx - 3 + i * 3, headY - 5.4, 1, 2, pal.al);
+      pxPut(px, cx, headY - 1, pxCI(px, '#ff6a8a'));
+    }
+  }
+
+  /* —— 眼睛 ——
+     ⚠️⚠️ **必须画在头盔之后**：原来眼睛画在头之后、头盔之前 → 除了 hood（兜帽）以外
+     全被头盔盖掉了，角色看起来「没有眼睛」＝没有表情、不像生物（本轮踩过）。
+     现在：有头盔的往下让到「帽檐下方」一行，露出来；兜帽/无盔的照常画在脸中央。 */
+  const eyeY = (hk && hk !== 'hood' && hk !== 'wizard') ? headY + 0.6 : headY - 1;
+  pxEye(px, cx - 2, eyeY, pal, !!c.bigEye);
+  pxEye(px, cx + 1, eyeY, pal, !!c.bigEye);
+
+  /* —— 盾（左手）—— */
+  if (c.shield) {
+    pxEll(px, bx - 1.6, ay + 4.2, 2.6, 3.2, pal.md);
+    pxEll(px, bx - 1.8, ay + 4.0, 1.9, 2.5, pal.m);
+    pxRect(px, bx - 2, ay + 2.2, 1, 4, pal.al);
+  }
+
+  /* —— 武器（右手）—— */
+  const wq = c.weapon;
+  if (wq && wq !== 'none') {
+    const tipLift = (mode === 'atk') ? (f ? 3.2 : -1.6) : 0;
+    const hx = handX, hy = handY;
+    if (wq === 'sword' || wq === 'dagger') {
+      const len = wq === 'dagger' ? 4 : 7;
+      pxCapsule(px, hx, hy, hx + 1.0, hy - len + tipLift, 0.8, pal.ml);       // 刃
+      pxLine(px, hx, hy, hx + 1.0, hy - len + tipLift, pal.w, 1);             // 刃口高光
+      pxRect(px, hx - 1, hy, 3, 1, pal.ad);                                    // 护手
+      pxRect(px, hx, hy + 1, 1, 1, pal.ad);                                    // 柄
+    } else if (wq === 'spear' || wq === 'lance') {
+      const len = wq === 'lance' ? 11 : 9;
+      pxLine(px, hx - 1.2, hy + 1.6, hx + 1.4, hy - len + tipLift, pal.md, 1.2);   // 杆
+      pxLine(px, hx + 0.6, hy - len + tipLift, hx + 1.8, hy - len + 2.4 + tipLift, pal.ml, 2);  // 枪尖
+      pxLine(px, hx + 0.6, hy - len + tipLift, hx + 1.2, hy - len + 3 + tipLift, pal.w, 1);
+    } else if (wq === 'axe') {
+      pxLine(px, hx - 1, hy + 1.4, hx + 1.2, hy - 6 + tipLift, pal.md, 1.2);
+      pxPoly(px, [[hx + 1, hy - 6 + tipLift], [hx + 4.4, hy - 5 + tipLift], [hx + 3.6, hy - 1.4 + tipLift], [hx + 1, hy - 2.4 + tipLift]], pal.ml);
+      pxLine(px, hx + 1.4, hy - 5.4 + tipLift, hx + 4.0, hy - 4.4 + tipLift, pal.w, 1);
+    } else if (wq === 'scythe') {
+      pxLine(px, hx - 1, hy + 2, hx + 1.4, hy - 8 + tipLift, pxDeep(pal.b, 0.5), 1.2);
+      pxPoly(px, [[hx + 1.2, hy - 8 + tipLift], [hx + 7.0, hy - 7.2 + tipLift], [hx + 6.4, hy - 6.0 + tipLift], [hx + 1.4, hy - 6.2 + tipLift]], pal.ml);
+    } else if (wq === 'bow') {
+      pxLine(px, hx - 0.4, hy - 4.4, hx + 1.6, hy, pal.ad, 1.4);          // 弓臂
+      pxLine(px, hx + 1.6, hy, hx - 0.4, hy + 4.4, pal.ad, 1.4);
+      pxLine(px, hx - 0.4, hy - 4.4, hx - 0.4, hy + 4.4, pal.w, 1);       // 弦
+      if (mode === 'atk') pxLine(px, hx + 1.0, hy, hx + 5.4, hy - 0.4, pal.w, 1);   // 箭
+    } else if (wq === 'staff') {
+      pxLine(px, hx - 0.6, hy + 2, hx + 1.0, hy - 7 + tipLift, pxDeep(pal.a, 0.4), 1.3);
+      pxBall(px, hx + 1.0, hy - 7.6 + tipLift, 1.9, 1.9, pal.al, pal.a, pal.ad, null, false);   // 法球
+      pxPut(px, hx + 1, hy - 8, pxCI(px, '#ffffff'));
+    }
+  }
+  /* 角 / 光环等额外装饰 */
+  if (c.horns) {
+    pxLine(px, cx - headR + 0.6, headY - headR - 0.6, cx - headR - 0.6, headY - headR - 3.4, pal.ad, 1.2);
+    pxLine(px, cx + headR - 0.6, headY - headR - 0.6, cx + headR + 0.6, headY - headR - 3.4, pal.ad, 1.2);
+  }
+}
+
+/* ============================================================
+   📇 模型注册表（铁律：**同类型的东西写在一起**）
+   ────────────────────────────────────────────────────────────
+   w/h = 画素网格，sc = 整数放大，kind = 用哪个建模器，cfg = 该建模器的差异项。
+   `death` = 这一种的**死亡演出**（用户要求：每种敌人都要不一样，
+   统一是「渐渐倒下 + 变黑 + 消失」约 0.3 秒，但倒的方向 / 姿态 / 碎屑形态各不相同）。
+   ============================================================ */
+const PX_SPEC = {
+  /* —— 杂兵 —— */
+  grunt:   { w: 16, h: 20, sc: 2, kind: 'human', cfg: { helm: 'pot', weapon: 'sword', armor: 1 }, death: { mode: 'topple', dirt: 6 } },
+  runner:  { w: 14, h: 18, sc: 2, kind: 'human', cfg: { headR: 3.1, helm: 'hood', weapon: 'dagger', skinny: 1, cape: 1 }, death: { mode: 'spin', dust: 8 } },
+  archer:  { w: 16, h: 20, sc: 2, kind: 'human', cfg: { headR: 3.3, helm: 'hood', weapon: 'bow', cape: 1 }, death: { mode: 'topple', dirt: 5, drop: 'bow' } },
+  mage:    { w: 16, h: 22, sc: 2, kind: 'human', cfg: { headR: 3.5, helm: 'wizard', weapon: 'staff' }, death: { mode: 'dissolve', spark: 10 } },
+  brute:   { w: 22, h: 28, sc: 3, kind: 'human', cfg: { headR: 4.6, helm: 'horned', weapon: 'axe', armor: 1 }, death: { mode: 'slam', dust: 14 } },
+  /* —— 骑兵（马 + 骑手）—— */
+  cavalry: { w: 26, h: 22, sc: 2, kind: 'horse', death: { mode: 'topple', dust: 10 } },
+  /* —— Boss —— */
+  general:  { w: 28, h: 34, sc: 3, kind: 'general', death: { mode: 'kneel', dust: 20, spark: 8 } },
+  commander:{ w: 26, h: 32, sc: 3, kind: 'human2', cfg: { headR: 4.2, helm: 'plume', weapon: 'lance', armor: 1, cape: 1 }, death: { mode: 'kneel', dust: 16 } },
+  final3:   { w: 34, h: 30, sc: 3, kind: 'worm', death: { mode: 'ash', dust: 24 } },
+  final4:   { w: 34, h: 30, sc: 3, kind: 'plant', death: { mode: 'wilt', petals: 10 } },
+  final5:   { w: 28, h: 26, sc: 3, kind: 'twin', death: { mode: 'shatter', shards: 12 } },
+  final6:   { w: 26, h: 34, sc: 3, kind: 'voidBlade', death: { mode: 'dissolve', spark: 16 } },
+  final2:   { w: 34, h: 34, sc: 3, kind: 'gear', death: { mode: 'shatter', shards: 16 } },
+  final:    { w: 32, h: 34, sc: 3, kind: 'demon', death: { mode: 'ash', dust: 22, spark: 12 } },
+  slimeKing:{ w: 40, h: 32, sc: 3, kind: 'slime', crown: 1, death: { mode: 'melt', goo: 18 } },
+  slimeMini:{ w: 24, h: 20, sc: 2, kind: 'slime', death: { mode: 'melt', goo: 10 } },
+  plunder:  { w: 28, h: 34, sc: 3, kind: 'plunder', death: { mode: 'dissolve', spark: 14 } },
+  skull:    { w: 14, h: 14, sc: 2, kind: 'skull', death: { mode: 'shatter', shards: 7 } },
+  sprinter: { w: 22, h: 24, sc: 2, kind: 'sprinter', death: { mode: 'spin', dust: 12 } },
+  tentacle: { w: 20, h: 20, sc: 2, kind: 'tentacle', death: { mode: 'wilt', petals: 4 } }
+};
+
+/* 缓存 key：type + 帧 + 动作 + 配色 + 变体 */
+const PX_MODE_FRAMES = { idle: 2, walk: 4, atk: 2 };
+const PX_MODE_FPS = { idle: 3.2, walk: 8.0, atk: 11.0 };
+
+/* 取一张已光栅化的贴图（不存在就建）。
+   variant: 'flash' = 全白受击闪 · 'dark0..4' = 死亡渐黑 · '' = 原样 */
+function pxSpriteOf(type, frame, mode, col, dark, acc, variant) {
+  const spec = PX_SPEC[type];
+  if (!spec) return null;
+  const key = type + '|' + mode + '|' + frame + '|' + col + '|' + (dark || '') + '|' + (acc || '') + '|' + (variant || '');
+  const had = PX_CV[key];
+  if (had !== undefined) return had;
+  const pal = pxPalOf(col, dark, acc);
+  const px = PXC(spec.w, spec.h);
+  pxModelDraw(px, spec, frame, mode, pal);
+  if (spec.kind !== 'slime') pxOutline(px, pal.k);   // 果冻怪不描边（半透明更 Q）
+  let out = px;
+  if (variant === 'flash') {
+    /* 受击白闪：所有不透明像素 → 白（保留 alpha 形状） */
+    out = { w: px.w, h: px.h, bw: px.bw, bh: px.bh, buf: px.buf, idx: null, pal: [null].concat(px.pal.slice(1).map(() => '#ffffff')) };
+  } else if (variant && variant.indexOf('dark') === 0) {
+    const k = 0.16 * (Number(variant.slice(4)) || 0);   // 0 → 0.64 渐黑
+    out = { w: px.w, h: px.h, bw: px.bw, bh: px.bh, buf: px.buf, idx: null, pal: [null].concat(px.pal.slice(1).map(c2 => pxMixTo(c2, 0, 0, 0, k))) };
+  }
+  return pxRaster(out, key);
+}
+/* ============================================================
+   💀 死亡演出系统（用户 2026-10 要求）
+   ============================================================
+   要求原话：「敌人死亡后不会直接消失，而是有一个渐渐倒下并且变黑然后最终消失的动画效果，
+             整个效果可能持续 0.3 秒左右然后敌人完全消失。每个敌人都要有不同的效果。」
+   ------------------------------------------------------------
+   做法：死亡那一刻**不销毁外观数据**，而是往 `pxCorpses` 里塞一份「遗体记录」，
+   由它独立播放 0.3 秒（Boss 稍长）的演出，播完自己退出。
+   每种的差异走 `PX_SPEC[type].death.mode`：
+     · topple   向背对玩家的方向倒下去（兵卒 / 弓兵 / 铁骑）
+     · spin     边转边缩小（轻骑贼 / 超级跑者）
+     · slam     快速砸倒 + 大量尘土（战将）
+     · kneel    跪下 + 下沉（总大将 / 指挥官）
+     · melt     压扁融成一滩（史莱姆）
+     · wilt     花瓣枯萎下垂（世纪之花 / 触手）
+     · shatter  碎裂成渣（双子魔眼 / 骷髅 / 终焉齿轮）
+     · dissolve 化为光点消散（妖法师 / 虚空执剑者 / 光明掠夺者）
+     · ash      升腾成灰（世界吞噬者 / 灭世魔君）
+   共同点：**越倒越黑**（调色板按进度压暗，5 档量化）+ 末尾淡出。
+   ============================================================ */
+let pxCorpses = [];
+const PX_DEATH_DUR = 0.30;          // 用户指定
+const PX_DEATH_DUR_BOSS = 0.46;     // Boss 稍长一点才看得清压迫感
+function pxCorpseAdd(e) {
+  const spec = PX_SPEC[e.type];
+  if (!spec || !spec.death) return;
+  /* 遗体朝向：默认往「远离玩家」的方向倒（读起来像被打飞） */
+  const dx = e.x - p.x, dy = e.y - p.y;
+  const dir = (dx >= 0) ? 1 : -1;
+  const d = spec.death;
+  const dur = e.boss ? PX_DEATH_DUR_BOSS : PX_DEATH_DUR;
+  pxCorpses.push({
+    type: e.type, mode: d.mode, x: e.x, y: e.y, r: e.r, air: e.airH || 0,
+    col: e.col, dark: e.dark, acc: e.acc, shiny: !!e.shiny, boss: !!e.boss,
+    hpAff: !!(e.aff && e.aff.hp),
+    t: 0, dur: dur, dir: dir,
+    /* ⚠️ 同样用确定性相位（不用 Math.random，见 pxRand 的注释） */
+    seed: pxCorpses.length * 7.13 + Math.abs(e.x * 0.011) + Math.abs(e.y * 0.017),
+    hitAng: Math.atan2(dy, dx)
+  });
+  /* 遗体数量上限：尸横遍野时不能让绘制爆掉（最老的先消失） */
+  if (pxCorpses.length > 220) pxCorpses.splice(0, pxCorpses.length - 220);
+  /* 死亡瞬间的碎屑（按类型不同）——**确定性**，不吃全局随机流 */
+  const dc = (e.acc || e.col || '#ffffff');
+  const sd = Math.abs(e.x * 1.7) + Math.abs(e.y * 2.3) + pxCorpses.length;
+  if (d.mode === 'shatter') pxBurst(e.x, e.y, d.shards || 8, dc, 240, sd);
+  else if (d.mode === 'dissolve') pxBurst(e.x, e.y, d.spark || 10, dc, 170, sd);
+  else if (d.mode === 'melt') pxBurst(e.x, e.y, d.goo || 8, '#8ff0a8', 120, sd);
+  else if (d.mode === 'ash') { pxBurst(e.x, e.y, d.dust || 14, '#8a8a9a', 150, sd); pxBurst(e.x, e.y, d.spark || 8, dc, 200, sd + 41); }
+  else if (d.mode === 'wilt') pxBurst(e.x, e.y, d.petals || 8, dc, 140, sd);
+  else pxBurst(e.x, e.y, d.dust || d.dirt || 6, dc, 130, sd);
+}
+/* 确定性的碎屑爆发（渲染层专用，见 pxRand） */
+function pxBurst(x, y, n, color, spd, seed) {
+  if (!isFinite(x) || !isFinite(y)) return;
+  const base = Math.abs(seed || 0) | 0;
+  for (let i = 0; i < n; i++) {
+    const a = pxRand(base + i * 17) * TAU;
+    const s2 = spd * (0.35 + pxRand(base + i * 31) * 0.65);
+    addPart(x, y, Math.cos(a) * s2, Math.sin(a) * s2,
+      0.22 + pxRand(base + i * 53) * 0.30,
+      1.4 + pxRand(base + i * 71) * 2.2, color, 170);
+  }
+}
+function pxCorpseUpdate(dt) {
+  if (!pxCorpses.length) return;
+  for (let i = pxCorpses.length - 1; i >= 0; i--) {
+    const c = pxCorpses[i];
+    c.t += dt;
+    if (c.t >= c.dur) pxCorpses.splice(i, 1);
+  }
+}
+function pxCorpseDraw() {
+  if (!pxCorpses.length) return;
+  for (const c of pxCorpses) {
+    const spec = PX_SPEC[c.type];
+    if (!spec) continue;
+    const k = Math.min(1, c.t / c.dur);                 // 0 → 1 进度
+    /* 渐黑：5 档量化（每档一张缓存贴图，别每帧新建） */
+    const darkLv = Math.min(4, Math.floor(k * 5));
+    const body = c.col, drk = c.dark, acc = c.acc;
+    const cv = pxSpriteOf(c.type, 0, 'idle', body, drk, acc, 'dark' + darkLv);
+    if (!cv) continue;
+    /* 末段淡出：最后 45% 才开始透明 */
+    const alpha = k < 0.55 ? 1 : Math.max(0, 1 - (k - 0.55) / 0.45);
+    /* 各种死亡姿态 */
+    let rot = 0, scK = 1, sqY = 1, lift = 0, sway = 0;
+    const ease = k * k;                                  // 前期慢、后期快（倒下去越来越快）
+    if (c.mode === 'topple') { rot = c.dir * 1.45 * ease; lift = -c.r * 0.10 * ease; sqY = 1 - 0.10 * k; }
+    else if (c.mode === 'slam') { rot = c.dir * 1.62 * Math.min(1, k * 1.5); sqY = 1 - 0.22 * k; lift = c.r * 0.06 * k; }
+    else if (c.mode === 'spin') { rot = c.dir * TAU * 1.15 * ease; scK = 1 - 0.45 * k; lift = -c.r * 0.22 * Math.sin(k * Math.PI); }
+    else if (c.mode === 'kneel') { sqY = 1 - 0.34 * ease; lift = c.r * 0.26 * ease; rot = c.dir * 0.22 * ease; }
+    else if (c.mode === 'melt') { sqY = 1 - 0.72 * ease; scK = 1 + 0.30 * ease; lift = c.r * 0.30 * ease; }
+    else if (c.mode === 'wilt') { rot = c.dir * 0.85 * ease; sqY = 1 - 0.30 * ease; lift = c.r * 0.16 * ease; sway = Math.sin(c.t * 22 + c.seed) * 0.10 * (1 - k); }
+    else if (c.mode === 'shatter') { scK = 1 - 0.30 * k; sqY = 1 + 0.06 * Math.sin(k * 20); }
+    else if (c.mode === 'dissolve') { scK = 1 + 0.28 * ease; lift = -c.r * 0.42 * ease; }
+    else if (c.mode === 'ash') { lift = -c.r * 0.55 * ease; scK = 1 - 0.25 * ease; sway = Math.sin(c.t * 16 + c.seed) * 0.16 * ease; }
+    const s = spec.sc;
+    const w = cv.width * s * scK, h = cv.height * s * scK * sqY;
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.imageSmoothingEnabled = false;
+    ctx.translate(c.x + sway * 10, c.y - c.air + c.r * 0.86 + lift);
+    if (rot) ctx.rotate(rot);
+    ctx.drawImage(cv, -w / 2, -h, w, h);
+    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+}
+/* ============================================================
+   🧱 专属建模器（PX_BODY）
+   ============================================================
+   人形敌人走 pxHumanoid；剩下的（马 / Boss / 果冻 / 骷髅 …）各有自己的构造，
+   但**共用同一套图元和同一套调色板**，所以整体画风是统一的。
+   签名统一：(px, f, mode, pal, spec)
+   ============================================================ */
+function pxAnimPh(f, mode) {
+  let legPh = 0, bob = 0, wind = 0;
+  if (mode === 'walk') { legPh = [0, 1, 0, -1][f & 3]; bob = (f & 1) ? -1 : 0; }
+  else if (mode === 'atk') { wind = f ? 1 : 0; bob = f ? -1 : 0; }
+  else { bob = (f & 1) ? -1 : 0; legPh = (f & 1) ? 0.3 : -0.3; }
+  return { legPh: legPh, bob: bob, wind: wind };
+}
+
+const PX_BODY = {
+  human2: (px, f, mode, pal, spec) => pxHumanoid(px, f, mode, spec.cfg || {}, pal),
+
+  /* —— 🐎 铁骑：马 + 骑手（马腿四段交替，骑手持长枪前倾）—— */
+  horse(px, f, mode, pal) {
+    const A = pxAnimPh(f, mode);
+    const cx = Math.round(px.w / 2), footY = px.h - 2 + A.bob;
+    const bodyY = footY - 6.5;
+    /* 马腿（四条：前 2 后 2，相位错开） */
+    const lp = A.legPh;
+    for (const L2 of [[-6, 0.9], [-4.4, -0.6], [4.4, -0.9], [6, 0.6]]) {
+      const sx = cx + L2[0], ph = lp * L2[1] * 2.4;
+      pxCapsule(px, sx, bodyY + 2, sx + ph, footY, 1.2, pal.dd);
+      pxRect(px, Math.round(sx + ph) - 1, footY - 1, 3, 2, pxDeep(pal.dd, 0.35));
+    }
+    /* 马身 + 脖颈 + 头 */
+    pxBall(px, cx, bodyY, 7.4, 3.6, pal.l, pal.b, pal.d, pal.dd, false);
+    pxCapsule(px, cx + 4.6, bodyY - 2.6, cx + 6.6, bodyY - 5.6, 1.9, pal.b);
+    pxBall(px, cx + 7.4, bodyY - 6.2, 2.6, 2.0, pal.l, pal.b, pal.d, pal.dd, false);
+    pxPut(px, cx + 8, bodyY - 7, pxCI(px, pal.e));      // 马眼
+    pxRect(px, cx + 6, bodyY - 8, 1, 2, pal.dd);        // 耳
+    /* 马尾 */
+    pxCapsule(px, cx - 7.2, bodyY - 1.6, cx - 9.4 - A.legPh, bodyY + 1.4, 1.2, pal.dd);
+    /* 马铠（胸甲 + 鞍） */
+    pxRect(px, cx - 3, bodyY - 3, 6, 2, pal.m);
+    pxRect(px, cx - 3, bodyY - 3, 6, 1, pal.ml);
+    /* 骑手 */
+    const rx = cx - 1.6, ry = bodyY - 4.6;
+    pxBall(px, rx, ry, 3.6, 2.6, pal.l, pal.b, pal.d, pal.dd, false);     // 躯干
+    pxBall(px, rx + 0.4, ry - 4.2, 2.6, 2.6, pal.sk, pal.sk, pal.skd, null, false);   // 头
+    pxEye(px, rx + 1, ry - 5, pal);                                      // 眼
+    pxBall(px, rx + 0.2, ry - 5.4, 2.9, 2.0, pal.ml, pal.m, pal.md, null, false);     // 头盔
+    pxRect(px, rx - 2.6, ry - 4.6, 6, 1, pal.md);
+    pxLine(px, rx - 0.4, ry - 6.6, rx - 1.6, ry - 9.4, pal.a, 1.2);      // 盔缨
+    /* 长枪（前倾） */
+    const tipX = rx + 11 - (mode === 'atk' && A.wind ? 1.5 : 0);
+    const tipY = ry + (mode === 'atk' && A.wind ? -3 : 0.6);
+    pxLine(px, rx - 3, ry + 2.4, tipX, tipY, pal.md, 1.3);
+    pxLine(px, tipX - 1.4, tipY + 1.0, tipX + 1.4, tipY - 0.6, pal.ml, 2);
+    pxLine(px, tipX, tipY, tipX + 1.2, tipY + 0.6, pal.w, 1);
+    /* 圆盾 */
+    pxEll(px, rx - 3.4, ry + 0.4, 2.4, 2.8, pal.md);
+    pxEll(px, rx - 3.6, ry + 0.0, 1.7, 2.0, pal.m);
+    pxPut(px, rx - 4, ry, pxCI(px, pal.al));
+  },
+
+  /* —— 🎖️ 总大将：巨大重甲 + 大剑 + 披风（Boss 级压迫感）—— */
+  general(px, f, mode, pal) {
+    const A = pxAnimPh(f, mode);
+    const cx = Math.round(px.w / 2), footY = px.h - 2 + A.bob;
+    const headY = 6.4 + A.bob * 0.6, headR = 4.6;
+    const shY = headY + headR + 1.6, hipY = footY - 7;
+    /* 披风（巨大的扇形，边缘锯齿） */
+    pxPoly(px, [[cx - 7, shY - 1], [cx + 7, shY - 1], [cx + 10.5, footY - 0.5], [cx + 6, footY - 2], [cx + 2, footY - 0.5], [cx - 2, footY - 2], [cx - 6, footY - 0.5], [cx - 10.5, footY - 0.5]], pxDeep(pal.a, 0.42));
+    pxPoly(px, [[cx - 6, shY], [cx + 6, shY], [cx + 8.5, footY - 1.5], [cx - 8.5, footY - 1.5]], pxDeep(pal.a, 0.18));
+    /* 腿 */
+    pxCapsule(px, cx - 2.6, hipY, cx - 3.4 + A.legPh * 1.4, footY, 1.9, pal.dd);
+    pxCapsule(px, cx + 2.6, hipY, cx + 3.4 - A.legPh * 1.4, footY, 1.9, pal.dd);
+    pxRect(px, Math.round(cx - 3.4 + A.legPh * 1.4) - 2, footY - 2, 5, 2, pxDeep(pal.b, 0.5));
+    pxRect(px, Math.round(cx + 3.4 - A.legPh * 1.4) - 2, footY - 2, 5, 2, pxDeep(pal.b, 0.5));
+    /* 躯干（宽厚胸甲 + 中缝 + 腰甲） */
+    pxBall(px, cx, (shY + hipY) / 2, 6.2, (hipY - shY) / 2 + 2.2, pal.l, pal.b, pal.d, pal.dd, false);
+    pxRect(px, cx - 1, shY + 1.6, 2, 5, pal.md);
+    pxRect(px, cx - 1, shY + 1.6, 1, 5, pal.ml);
+    pxRect(px, cx - 5, hipY - 1.4, 10, 1.6, pal.ad);
+    /* 巨大肩甲（三层甲片） */
+    for (const sgn of [-1, 1]) {
+      const sx = cx + sgn * 6.6;
+      pxBall(px, sx, shY + 0.6, 3.4, 2.8, pal.ml, pal.m, pal.md, null, false);
+      pxBall(px, sx + sgn * 0.8, shY + 2.4, 2.6, 1.8, pal.m, pal.md, pxDeep(pal.md, 0.4), null, false);
+      pxLine(px, sx - 2, shY - 1.4, sx + 2, shY - 1.4, pal.al, 1);
+      /* 尖刺 */
+      pxLine(px, sx, shY - 2.2, sx + sgn * 1.4, shY - 5, pal.md, 1.4);
+    }
+    /* 手臂 + 拳 */
+    const hx = cx + 8.4, hy = shY + 5.4 - (mode === 'atk' && A.wind ? 2 : 0);
+    pxCapsule(px, cx + 6.6, shY + 1.6, hx, hy, 1.7, pal.b);
+    pxBall(px, hx, hy, 1.9, 1.9, pal.sk, pal.sk, pal.skd, null, false);
+    pxCapsule(px, cx - 6.6, shY + 1.6, cx - 8, shY + 5.4, 1.7, pal.d);
+    pxBall(px, cx - 8, shY + 5.4, 1.9, 1.9, pal.sk, pal.sk, pal.skd, null, false);
+    /* 头 + 角盔 + 发光眼 */
+    pxBall(px, cx, headY, headR, headR * 1.02, pal.sk, pal.sk, pal.skd, null, false);
+    pxBall(px, cx, headY - 1.4, headR + 0.6, headR * 0.86, pal.ml, pal.m, pal.md, null, false);
+    pxRect(px, cx - headR, headY + 0.6, Math.round(headR * 2), 1.2, pal.md);
+    /* 两根巨角 + 中间盔缨 */
+    pxLine(px, cx - headR, headY - 2.4, cx - headR - 3.6, headY - 6.6, pal.ml, 1.8);
+    pxLine(px, cx + headR, headY - 2.4, cx + headR + 3.6, headY - 6.6, pal.ml, 1.8);
+    pxLine(px, cx - headR - 1.6, headY - 4.4, cx - headR - 3.4, headY - 6.4, pal.w, 1);
+    for (let i = 0; i < 5; i++) pxLine(px, cx, headY - 4.6 - i * 0.5, cx - 1 + i * 0.4, headY - 7.4 - i * 1.1, pal.a, 1.2);
+    /* 眼睛（金色发光） */
+    pxRect(px, cx - 3, headY - 0.4, 2, 1.4, pal.a);
+    pxRect(px, cx + 1, headY - 0.4, 2, 1.4, pal.a);
+    pxPut(px, cx - 2, headY - 0.2, pxCI(px, '#fff8d0'));
+    pxPut(px, cx + 2, headY - 0.2, pxCI(px, '#fff8d0'));
+    /* 巨剑（右手，斜举）
+       ⚠️ 剑长要**按画布夹住**：原来从 handX+2 再往外 11 像素 → 直接画到画布外面被裁掉，
+       玩家看到的是「总大将手里只有半截剑」。现在按剩余空间算长度。 */
+    const ang = (mode === 'atk') ? (A.wind ? -1.15 : -0.15) : -0.86;
+    const bx = hx - 0.4, by = hy - 0.6;
+    const roomX = (px.w - 1) - bx, roomY = by - 1;
+    const wantLen = 9;
+    const cosA = Math.cos(ang), sinA = Math.sin(ang);
+    let len = wantLen;
+    if (cosA > 0.01) len = Math.min(len, roomX / cosA);
+    if (sinA < -0.01) len = Math.min(len, roomY / -sinA);
+    len = Math.max(4, len);
+    const tx2 = bx + cosA * len, ty2 = by + sinA * len;
+    pxLine(px, bx, by, tx2, ty2, pal.ml, 2.6);
+    pxLine(px, bx, by, tx2, ty2, pal.w, 1);
+    pxRect(px, Math.round(bx) - 2, Math.round(by) - 1, 5, 2, pal.ad);
+  },
+
+  /* —— 🪱 世界吞噬者：环形利齿大嘴 —— */
+  worm(px, f, mode, pal) {
+    const cx = px.w / 2, cy = px.h / 2;
+    const A = pxAnimPh(f, mode);
+    /* 外层身体（暗紫甲片） */
+    pxBall(px, cx, cy, 13, 11.5, pal.l, pal.b, pal.d, pal.dd, false);
+    /* 甲片环（沿外缘一圈高光弧） */
+    for (let i = 0; i < 7; i++) {
+      const a = -1.2 + i * 0.42 + A.bob * 0.05;
+      pxLine(px, cx + Math.cos(a) * 12.4, cy + Math.sin(a) * 10.8, cx + Math.cos(a) * 9.4, cy + Math.sin(a) * 8.2, pxLight(pal.b, 0.5), 1.6);
+    }
+    /* 张开的巨口：内圈黑 + 双排牙 */
+    pxBall(px, cx, cy, 8.6, 7.4, pxDeep(pal.b, 0.72), pxDeep(pal.b, 0.86), '#0a0410', '#050209', false);
+    /* 外排牙（朝内） */
+    for (let i = 0; i < 14; i++) {
+      const a = i / 14 * TAU + A.bob * 0.03;
+      const r0 = 8.2, r1 = 5.4;
+      const x0 = cx + Math.cos(a) * r0, y0 = cy + Math.sin(a) * r0 * 0.9;
+      const x1 = cx + Math.cos(a) * r1, y1 = cy + Math.sin(a) * r1 * 0.9;
+      pxLine(px, x0, y0, x1, y1, i % 2 ? '#efe6ff' : '#cfc0e8', 1.5);
+    }
+    /* 内排牙 */
+    for (let i = 0; i < 9; i++) {
+      const a = i / 9 * TAU + 0.3 - A.bob * 0.02;
+      pxLine(px, cx + Math.cos(a) * 5.2, cy + Math.sin(a) * 4.6, cx + Math.cos(a) * 3.2, cy + Math.sin(a) * 2.8, '#fff', 1.1);
+    }
+    /* 咽喉核心（紫色脉动） */
+    const pulse = mode === 'atk' ? 2.4 : 1.8;
+    pxBall(px, cx, cy, pulse, pulse * 0.9, pxLight(pal.a, 0.4), pal.a, pal.ad, null, false);
+    pxPut(px, cx, cy, pxCI(px, '#ffffff'));
+  },
+
+  /* —— 🌸 世纪之花：花瓣 + 花心 + 尖牙 —— */
+  plant(px, f, mode, pal) {
+    const cx = px.w / 2, cy = px.h / 2 + 1;
+    const A = pxAnimPh(f, mode);
+    /* 花瓣层（两圈，外层深、内层亮） */
+    for (let ring = 0; ring < 2; ring++) {
+      const n = ring ? 9 : 7, rr = ring ? 8.2 : 12.6, pr = ring ? 4.6 : 5.6;
+      for (let i = 0; i < n; i++) {
+        const a = i / n * TAU + ring * 0.35 + A.bob * 0.04;
+        const px2 = cx + Math.cos(a) * rr, py2 = cy + Math.sin(a) * rr * 0.86;
+        pxBall(px, px2, py2, pr, pr * 0.78, ring ? pal.al : pal.l, ring ? pal.a : pal.b, ring ? pal.ad : pal.d, null, false);
+      }
+    }
+    /* 花心 */
+    pxBall(px, cx, cy, 6.4, 5.6, pal.l, pal.b, pal.d, pal.dd, false);
+    pxBall(px, cx, cy, 4.2, 3.6, pxDeep(pal.b, 0.72), pxDeep(pal.b, 0.55), '#1a0410', null, false);
+    /* 尖牙一圈 */
+    for (let i = 0; i < 8; i++) {
+      const a = i / 8 * TAU;
+      pxLine(px, cx + Math.cos(a) * 3.6, cy + Math.sin(a) * 3.1, cx + Math.cos(a) * 1.6, cy + Math.sin(a) * 1.4, '#fff6fb', 1.2);
+    }
+    /* 花心之眼 */
+    pxEye(px, cx - 1, cy - 1, pal, true);
+    /* 藤蔓触须（底部两条） */
+    pxCapsule(px, cx - 5, cy + 5, cx - 9, cy + 10 + A.bob, 1.4, pal.dd);
+    pxCapsule(px, cx + 5, cy + 5, cx + 9, cy + 10 - A.bob, 1.4, pal.dd);
+  },
+
+  /* —— 🌙 双子魔眼：一颗燃烧的巨眼 —— */
+  twin(px, f, mode, pal) {
+    const cx = px.w / 2, cy = px.h / 2;
+    const A = pxAnimPh(f, mode);
+    /* 眼窝火焰（外圈） */
+    for (let i = 0; i < 10; i++) {
+      const a = i / 10 * TAU + A.bob * 0.06;
+      const r0 = 9.4 + (i % 2 ? 1.6 : 0.4), r1 = 12.6 + (i % 3 ? 0 : 1.2);
+      pxLine(px, cx + Math.cos(a) * r0, cy + Math.sin(a) * r0 * 0.9, cx + Math.cos(a) * r1, cy + Math.sin(a) * r1 * 0.9, i % 2 ? pal.al : pal.a, 2);
+    }
+    /* 眼白 */
+    pxBall(px, cx, cy, 9.2, 8.2, '#fffdf6', '#f2eae0', '#c8b8ae', null, false);
+    /* 血丝 */
+    pxLine(px, cx - 7, cy - 3, cx - 3, cy - 1, '#d8707a', 1);
+    pxLine(px, cx + 6, cy + 3, cx + 3, cy + 1, '#d8707a', 1);
+    /* 虹膜（红）+ 瞳孔（竖） */
+    pxBall(px, cx - 0.6, cy + 0.2, 4.6, 4.6, pal.al, pal.a, pal.ad, null, false);
+    pxRect(px, cx - 1, cy - 3, 2, 6, '#14060a');
+    pxRect(px, cx - 2, cy - 2, 4, 4, '#14060a');
+    pxPut(px, cx - 2, cy - 2, pxCI(px, '#ffffff'));
+    /* 高光 */
+    pxEll(px, cx - 3.4, cy - 3.6, 2.2, 1.6, 'rgba(255,255,255,0.85)');
+  },
+
+  /* —— 🗡️ 虚空执剑者：兜帽虚影 + 悬浮圣剑 —— */
+  voidBlade(px, f, mode, pal) {
+    const A = pxAnimPh(f, mode);
+    const cx = Math.round(px.w / 2) - 2, footY = px.h - 2 + A.bob;
+    const headY = 5.6, hipY = footY - 7;
+    /* 身体：外深内浅的虚影长袍 */
+    pxPoly(px, [[cx - 4.4, headY + 2], [cx + 4.4, headY + 2], [cx + 6.4, footY], [cx - 6.4, footY]], pal.dd);
+    pxPoly(px, [[cx - 3.4, headY + 3], [cx + 3.4, headY + 3], [cx + 4.4, footY - 1], [cx - 4.4, footY - 1]], pal.d);
+    /* 兜帽 + 虚空脸 */
+    pxBall(px, cx, headY, 4.6, 4.4, pal.l, pal.b, pal.d, pal.dd, false);
+    pxBall(px, cx, headY + 0.4, 3.2, 3.0, '#0b0f1c', '#060910', '#000', null, false);
+    /* 两点幽光眼 */
+    pxRect(px, cx - 2, headY, 1, 1, pal.a);
+    pxRect(px, cx + 1, headY, 1, 1, pal.a);
+    pxPut(px, cx - 2, headY, pxCI(px, '#eaffff'));
+    pxPut(px, cx + 1, headY, pxCI(px, '#eaffff'));
+    /* 悬浮巨剑（右侧，斜置，剑格华丽） */
+    const sx = cx + 8.6, sy = headY + 8 - (mode === 'atk' ? 3 : 0) + A.bob * 0.5;
+    pxLine(px, sx, sy + 7, sx, sy - 7, pal.ml, 2.4);
+    pxLine(px, sx - 0.4, sy + 6, sx - 0.4, sy - 6, pal.w, 1);
+    pxLine(px, sx - 3, sy, sx + 3, sy, pal.al, 1.6);          // 剑格
+    pxRect(px, sx - 0.6, sy + 7, 1.4, 3, pxDark(pal.ad, 0.3)); // 柄
+    pxBall(px, sx, sy + 10, 1.2, 1.2, pal.al, pal.a, pal.ad, null, false);   // 柄头宝珠
+    /* 剑身周围虚空裂纹 */
+    for (let i = 0; i < 4; i++) {
+      const a = A.bob * 0.3 + i * 1.6;
+      pxLine(px, sx + Math.cos(a) * 4, sy + Math.sin(a) * 5, sx + Math.cos(a) * 6, sy + Math.sin(a) * 8, 'rgba(150,215,255,0.75)', 1);
+    }
+  },
+
+  /* —— 🎡 终焉齿轮：巨齿轮 + 中央之眼 —— */
+  gear(px, f, mode, pal) {
+    const cx = px.w / 2, cy = px.h / 2;
+    const spin = (px.__gspin || 0) + f * 0.12;
+    /* 齿轮外圈（12 齿） */
+    for (let i = 0; i < 12; i++) {
+      const a = i / 12 * TAU + spin;
+      const x0 = cx + Math.cos(a) * 11.6, y0 = cy + Math.sin(a) * 11.6;
+      const x1 = cx + Math.cos(a) * 15.2, y1 = cy + Math.sin(a) * 15.2;
+      const na = a + 0.26;
+      pxPoly(px, [
+        [cx + Math.cos(a - 0.20) * 12.4, cy + Math.sin(a - 0.20) * 12.4],
+        [x1, y1],
+        [cx + Math.cos(na) * 12.4, cy + Math.sin(na) * 12.4]
+      ], pal.md);
+      pxLine(px, x0, y0, x1, y1, pal.ml, 1);
+    }
+    /* 齿轮本体 */
+    pxBall(px, cx, cy, 12, 12, pal.l, pal.b, pal.d, pal.dd, false);
+    /* 内圈金属环 */
+    for (let i = 0; i < 24; i++) {
+      const a = i / 24 * TAU - spin * 0.6;
+      pxPut(px, cx + Math.cos(a) * 8.4, cy + Math.sin(a) * 8.4, pxCI(px, pal.md));
+    }
+    /* 辐条 */
+    for (let i = 0; i < 6; i++) {
+      const a = i / 6 * TAU + spin * 0.4;
+      pxLine(px, cx + Math.cos(a) * 4, cy + Math.sin(a) * 4, cx + Math.cos(a) * 11, cy + Math.sin(a) * 11, pxDeep(pal.b, 0.42), 1.6);
+    }
+    /* 中央之眼（能量核心） */
+    pxBall(px, cx, cy, 4.6, 4.6, pxLight(pal.a, 0.45), pal.a, pal.ad, null, false);
+    pxBall(px, cx, cy, 2.6, 2.6, '#ffffff', '#dff4ff', pal.a, null, false);
+    pxRect(px, cx - 0.6, cy - 2.4, 1.4, 4.8, '#04121c');
+  },
+
+  /* —— 👹 灭世魔君：双翼 + 巨角 + 利爪 —— */
+  demon(px, f, mode, pal) {
+    const A = pxAnimPh(f, mode);
+    const cx = Math.round(px.w / 2), footY = px.h - 2 + A.bob;
+    const headY = 7.4, hipY = footY - 8;
+    /* 双翼（三层羽毛，边缘锯齿） */
+    for (const sgn of [-1, 1]) {
+      for (let i = 0; i < 3; i++) {
+        const k = i * 0.9;
+        pxPoly(px, [
+          [cx + sgn * 3, headY + 3 + k],
+          [cx + sgn * (12 - i * 1.4), headY - 1 + k * 1.6],
+          [cx + sgn * (13 - i * 1.2), headY + 4 + k * 1.8],
+          [cx + sgn * 4, headY + 7 + k]
+        ], pxDeep(pal.a, 0.30 + i * 0.14));
+      }
+      pxLine(px, cx + sgn * 3, headY + 3, cx + sgn * 12, headY - 1, pxDeep(pal.a, 0.6), 1);
+    }
+    /* 腿（兽足） */
+    pxCapsule(px, cx - 2.6, hipY, cx - 3.6 + A.legPh * 1.2, footY, 2.0, pal.dd);
+    pxCapsule(px, cx + 2.6, hipY, cx + 3.6 - A.legPh * 1.2, footY, 2.0, pal.dd);
+    pxRect(px, Math.round(cx - 3.6 + A.legPh * 1.2) - 2, footY - 1, 5, 2, '#1a0a10');
+    pxRect(px, Math.round(cx + 3.6 - A.legPh * 1.2) - 2, footY - 1, 5, 2, '#1a0a10');
+    /* 躯干 */
+    pxBall(px, cx, (headY + hipY) / 2 + 1, 5.8, (hipY - headY) / 2 + 2.4, pal.l, pal.b, pal.d, pal.dd, false);
+    /* 胸口裂纹（内部熔岩） */
+    pxLine(px, cx - 2, headY + 4, cx, headY + 7, pal.al, 1);
+    pxLine(px, cx, headY + 7, cx + 2.4, headY + 5, pal.a, 1);
+    pxPut(px, cx, headY + 6, pxCI(px, '#fff0c0'));
+    /* 手臂 + 利爪 */
+    const hx = cx + 7.6, hy = headY + 6.4 - (mode === 'atk' && A.wind ? 2.4 : 0);
+    pxCapsule(px, cx + 5.4, headY + 3, hx, hy, 1.8, pal.b);
+    pxBall(px, hx, hy, 1.9, 1.9, pal.sk, pal.sk, pal.skd, null, false);
+    for (let i = 0; i < 3; i++) pxLine(px, hx + 0.6, hy + 0.6, hx + 2.6 + i * 0.6, hy + 2.6 + i * 0.4, '#f2e6d0', 1);
+    pxCapsule(px, cx - 5.4, headY + 3, cx - 7.4, hy, 1.8, pal.d);
+    pxBall(px, cx - 7.4, hy, 1.9, 1.9, pal.sk, pal.sk, pal.skd, null, false);
+    for (let i = 0; i < 3; i++) pxLine(px, cx - 8, hy + 0.6, cx - 10 - i * 0.6, hy + 2.6 + i * 0.4, '#f2e6d0', 1);
+    /* 头（兽首 + 巨角 + 獠牙） */
+    pxBall(px, cx, headY, 5.0, 4.6, pal.l, pal.b, pal.d, pal.dd, false);
+    /* 巨角（向外上方弯） */
+    for (const sgn of [-1, 1]) {
+      for (let i = 0; i < 4; i++) {
+        const t2 = i / 3;
+        pxLine(px, cx + sgn * (4.4 + t2 * 0.6), headY - 2.4 - t2 * 1.2, cx + sgn * (4.4 + t2 * 2.2), headY - 2.4 - t2 * 5.6, i > 1 ? pal.al : pal.a, 1.8 - i * 0.25);
+      }
+    }
+    /* 眼（血红） */
+    pxRect(px, cx - 3, headY - 0.6, 2, 1.4, '#ff4a4a');
+    pxRect(px, cx + 1, headY - 0.6, 2, 1.4, '#ff4a4a');
+    pxPut(px, cx - 2, headY - 0.4, pxCI(px, '#fff0f0'));
+    pxPut(px, cx + 2, headY - 0.4, pxCI(px, '#fff0f0'));
+    /* 獠牙 */
+    pxLine(px, cx - 1.6, headY + 2.6, cx - 1.2, headY + 4.4, '#fff6e0', 1);
+    pxLine(px, cx + 1.6, headY + 2.6, cx + 1.2, headY + 4.4, '#fff6e0', 1);
+  },
+
+  /* —— 🟢 果冻（超级史莱姆 / 小史莱姆）：半透明 Q 弹 + 高光 + 王冠 —— */
+  slime(px, f, mode, pal, spec) {
+    const cx = px.w / 2, footY = px.h - 1;
+    const A = pxAnimPh(f, mode);
+    /* 挤压拉伸：idle 呼吸，atk 蓄力压扁 */
+    let sq = 1 + Math.sin((f + 0.5) * 1.6) * 0.06;
+    if (mode === 'atk') sq = A.wind ? 1.18 : 0.86;
+    const rx = px.w * 0.44 * (2 - sq) * 0.92, ry = (px.h - 3) * 0.46 * sq;
+    const cy = footY - ry;
+    /* 本体（下半更亮 = 果冻透光感）。spec=false：自己画更小的高光，避免整块发白 */
+    pxBall(px, cx, cy, rx, ry, pxLight(pal.b, 0.30), pal.b, pxDeep(pal.b, 0.28), pxDeep(pal.b, 0.5), false);
+    /* 内部透光斑 */
+    pxEll(px, cx - rx * 0.28, cy + ry * 0.36, rx * 0.34, ry * 0.26, pxLight(pal.b, 0.52));
+    /* 顶部高光块（像素画果冻的标志）：小而聚，别糊成一片白 */
+    pxEll(px, cx - rx * 0.34, cy - ry * 0.50, rx * 0.20, ry * 0.13, '#ffffff');
+    pxPut(px, Math.round(cx - rx * 0.40), Math.round(cy - ry * 0.56), pxCI(px, '#ffffff'));
+    /* 眼睛 + 嘴 */
+    pxEye(px, Math.round(cx - rx * 0.34), Math.round(cy - ry * 0.06), pal, !!0);
+    pxEye(px, Math.round(cx + rx * 0.16), Math.round(cy - ry * 0.06), pal, !!0);
+    pxLine(px, cx - 1, cy + ry * 0.30, cx + 1.4, cy + ry * 0.30, pxDeep(pal.b, 0.6), 1);
+    /* 王冠（超级史莱姆专属）：**必须完全落在画布内**（原来顶出上边界被裁成一根横杠） */
+    if (spec && spec.crown) {
+      const cy2 = Math.max(3, cy - ry + 3);
+      pxRect(px, cx - 6, cy2 - 2, 12, 2, pal.al);
+      pxRect(px, cx - 6, cy2 - 2, 12, 1, '#fffbe0');
+      for (let i = 0; i < 3; i++) {
+        pxRect(px, cx - 6 + i * 5, cy2 - 5, 2, 3, pal.al);
+        pxRect(px, cx - 6 + i * 5, cy2 - 5, 1, 3, '#fffbe0');
+      }
+      pxPut(px, cx, cy2 - 1, pxCI(px, '#ff5a7a'));
+    }
+  },
+
+  /* —— 💡 光明掠夺者：高瘦兜帽 + 提灯 + 悬浮符环 —— */
+  plunder(px, f, mode, pal) {
+    const A = pxAnimPh(f, mode);
+    const cx = Math.round(px.w / 2), footY = px.h - 2 + A.bob;
+    const headY = 6.6, hipY = footY - 9;
+    /* 长袍（下摆散开、边缘破损） */
+    pxPoly(px, [[cx - 5, headY + 3], [cx + 5, headY + 3], [cx + 8.6, footY], [cx + 5, footY - 1.5], [cx + 2, footY], [cx - 2, footY - 1.5], [cx - 5, footY], [cx - 8.6, footY]], pal.d);
+    pxPoly(px, [[cx - 4, headY + 4], [cx + 4, headY + 4], [cx + 6.6, footY - 1], [cx - 6.6, footY - 1]], pal.b);
+    /* 兜帽 + 面具 */
+    pxBall(px, cx, headY, 5.2, 5.0, '#ffffff', pal.b, pal.d, pal.dd, false);
+    pxEll(px, cx, headY + 0.6, 3.2, 3.0, '#0d0a16');
+    /* 面具（白底 + 两点紫光） */
+    pxEll(px, cx, headY + 0.4, 2.2, 2.0, '#f6f2ff');
+    pxRect(px, cx - 1.6, headY - 0.2, 1.2, 1.4, pal.a);
+    pxRect(px, cx + 0.4, headY - 0.2, 1.2, 1.4, pal.a);
+    /* 手臂 + 提灯 */
+    const hx = cx + 6.4, hy = headY + 8.4;
+    pxCapsule(px, cx + 4.6, headY + 4, hx, hy, 1.4, pal.b);
+    pxLine(px, hx, hy, hx, hy + 3, pxDeep(pal.a, 0.4), 1);
+    pxBall(px, hx, hy + 5.4, 2.4, 2.8, '#fffbe8', pal.al, pal.a, null, false);
+    pxPut(px, hx, hy + 5, pxCI(px, '#ffffff'));
+    /* 悬浮符环（头顶一圈小符） */
+    for (let i = 0; i < 5; i++) {
+      const a = -1.9 + i * 0.75 + A.bob * 0.1;
+      const rx2 = cx + Math.cos(a) * 8, ry2 = headY - 4 + Math.sin(a) * 2.6;
+      pxRect(px, Math.round(rx2), Math.round(ry2), 1, 2, pal.al);
+    }
+    /* 另一只手（垂着，指尖有一点点光） */
+    pxCapsule(px, cx - 4.6, headY + 4, cx - 6.4, headY + 9.4, 1.4, pal.d);
+    pxPut(px, Math.round(cx - 6.4), Math.round(headY + 10), pxCI(px, '#ffffff'));
+  },
+
+  /* —— 💀 骷髅头：骨白 + 紫焰眼窝 + 碎裂牙 —— */
+  skull(px, f, mode, pal) {
+    const cx = px.w / 2, cy = px.h / 2 + 0.5;
+    const A = pxAnimPh(f, mode);
+    /* 紫焰尾迹 */
+    for (let i = 0; i < 3; i++) {
+      pxLine(px, cx - 3 - i, cy + 3 + i, cx - 5 - i, cy + 5 + i, 'rgba(201,166,255,' + (0.5 - i * 0.13) + ')', 1.4);
+    }
+    /* 头骨主体 */
+    pxBall(px, cx, cy - 0.6, 4.6, 4.4, '#ffffff', '#f4efe2', '#cfc6b2', '#a89e88', false);
+    /* 下颌 */
+    pxRect(px, cx - 3, cy + 3, 6, 2, '#f4efe2');
+    pxRect(px, cx - 3, cy + 3, 6, 1, '#cfc6b2');
+    /* 牙缝 */
+    for (let i = 0; i < 4; i++) pxRect(px, cx - 3 + i * 2, cy + 3, 1, 1, '#6b6152');
+    /* 眼窝（深黑 + 紫焰） */
+    pxEll(px, cx - 2, cy - 1, 1.7, 1.6, '#1a1024');
+    pxEll(px, cx + 2, cy - 1, 1.7, 1.6, '#1a1024');
+    const gl = mode === 'atk' ? '#e8d0ff' : pal.a;
+    pxPut(px, cx - 2, cy - 1, pxCI(px, gl));
+    pxPut(px, cx + 2, cy - 1, pxCI(px, gl));
+    /* 鼻腔 */
+    pxPut(px, cx, cy + 1, pxCI(px, '#6b6152'));
+  },
+
+  /* —— 🏃 超级跑者：前倾冲刺 + 飘扬围巾 + 速度线 —— */
+  sprinter(px, f, mode, pal) {
+    const A = pxAnimPh(f, mode);
+    const cx = Math.round(px.w / 2) - 1, footY = px.h - 2 + A.bob;
+    const hipY = footY - 7, headY = 6.4;
+    /* 速度线（身后三道） */
+    for (let i = 0; i < 3; i++) {
+      pxLine(px, cx - 7 - i * 2, headY + 2 + i * 3, cx - 12 - i * 3, headY + 2 + i * 3, 'rgba(255,209,102,' + (0.55 - i * 0.15) + ')', 1.2);
+    }
+    /* 围巾（长长飘在身后） */
+    const sc = A.legPh;
+    pxPoly(px, [[cx - 1, headY + 2], [cx - 6, headY + 1 + sc], [cx - 12, headY + 4 + sc * 1.6], [cx - 11, headY + 6 + sc * 1.4], [cx - 5, headY + 4], [cx - 1, headY + 3.4]], pal.a);
+    /* 腿（大步幅） */
+    pxCapsule(px, cx - 1.4, hipY, cx - 4.4 + A.legPh * 2.6, footY, 1.3, pal.d);
+    pxCapsule(px, cx + 1.4, hipY, cx + 4.4 - A.legPh * 2.6, footY, 1.3, pal.d);
+    pxRect(px, Math.round(cx - 4.4 + A.legPh * 2.6) - 1, footY - 1, 4, 2, pxDeep(pal.b, 0.55));
+    pxRect(px, Math.round(cx + 4.4 - A.legPh * 2.6) - 1, footY - 1, 4, 2, pxDeep(pal.b, 0.55));
+    /* 躯干（前倾） */
+    pxBall(px, cx, (headY + hipY) / 2 + 1, 3.5, 3.8, pal.l, pal.b, pal.d, pal.dd, false);
+    /* 手臂前后摆 */
+    pxCapsule(px, cx + 3, headY + 4, cx + 5.6 + A.legPh * 1.6, headY + 7.4, 1.1, pal.b);
+    pxCapsule(px, cx - 3, headY + 4, cx - 5.4 - A.legPh * 1.6, headY + 7, 1.1, pal.d);
+    /* 头 + 护目镜 */
+    pxBall(px, cx + 0.6, headY, 3.0, 2.9, pal.sk, pal.sk, pal.skd, null, false);
+    pxRect(px, cx - 1, headY - 1, 5, 1.4, '#2a1a10');       // 护目镜带
+    pxRect(px, cx + 0.6, headY - 1.2, 2, 1.6, pal.al);      // 镜片
+    pxBall(px, cx + 0.8, headY - 2.4, 3.2, 1.6, pal.l, pal.b, pal.d, null, false);   // 头发/帽
+  },
+
+  /* —— 🐙 触手头（世纪之花的触手）：吸盘环 —— */
+  tentacle(px, f, mode, pal) {
+    const cx = px.w / 2, cy = px.h / 2;
+    const A = pxAnimPh(f, mode);
+    /* 头部球 */
+    pxBall(px, cx, cy, 7.4, 6.4, pal.l, pal.b, pal.d, pal.dd, false);
+    /* 吸盘（两圈，亮心） */
+    for (let ring = 0; ring < 2; ring++) {
+      const n = ring ? 4 : 6, rr = ring ? 3.4 : 6.0;
+      for (let i = 0; i < n; i++) {
+        const a = i / n * TAU + ring * 0.5 + A.bob * 0.05;
+        const x2 = cx + Math.cos(a) * rr, y2 = cy + Math.sin(a) * rr * 0.82;
+        pxEll(px, x2, y2, 1.5, 1.3, pxDeep(pal.b, 0.28));
+        pxPut(px, Math.round(x2), Math.round(y2), pxCI(px, pal.al));
+      }
+    }
+    /* 两根倒刺 */
+    pxLine(px, cx - 5, cy - 4.6, cx - 7.6, cy - 8, pxDeep(pal.b, 0.5), 1.4);
+    pxLine(px, cx + 5, cy - 4.6, cx + 7.6, cy - 8, pxDeep(pal.b, 0.5), 1.4);
+  }
+};
+
+/* 按 kind 分发到对应建模器（人形走 pxHumanoid，其余走 PX_BODY） */
+function pxModelDraw(px, spec, f, mode, pal) {
+  const kind = spec.kind;
+  if (kind === 'human') { pxHumanoid(px, f, mode, spec.cfg, pal); return; }
+  const fn = PX_BODY[kind];
+  if (fn) { fn(px, f, mode, pal, spec); return; }
+  pxHumanoid(px, f, mode, spec.cfg || {}, pal);
+}
+/* 确定性伪随机（0..1）：只给**渲染层**用。
+   ⚠️⚠️ 绝对不要在绘制里调 `Math.random()`：它会吃掉全局随机流 → 后面所有暴击/掉落/断言
+   都被推移（本轮踩过：新美术的 `Math.random()` 一加，seed 202 的「龙息每跳 28 点」当场变红）。
+   `tools\_audit.js` 也会把热路径里的 Math.random 报出来。 */
+function pxRand(n) {
+  let x = Math.imul((n | 0) ^ 0x9e3779b9, 0x85ebca6b);
+  x ^= x >>> 13; x = Math.imul(x, 0xc2b2ae35); x ^= x >>> 16;
+  return (x >>> 0) / 4294967296;
+}
+
 function addPart(x, y, vx, vy, life, size, color, grav) {
   /* 🛡️ **NaN 网（粒子层）**：坐标/速度不是有限数就**直接不生成** ——
      真机上 NaN 粒子会让 `ctx.fillRect/translate` 收到 NaN，画布状态被写坏 → 之后每帧都画不出东西
@@ -16593,6 +17663,10 @@ function killEnemy(e) {
   if (charmCanConvert(e) && Math.random() < charmChance()) { charmConvert(e); return; }
   if (e.dead) return 0;
   e.dead = true;
+  /* 💀 死亡演出（用户 2026-10 要求：不直接消失，而是渐渐倒下 + 变黑 + 0.3 秒后消失，每种都不一样）
+     ⚠️ 必须在 `e.dead = true` **之后**、敌人从 `enemies` 数组被压缩掉**之前**调用 ——
+        这里只拷走「外观需要的那几个字段」，所以遗体不依赖 e 后续是否被回收。 */
+  pxCorpseAdd(e);
   /* 🧢 训练家：**第 5 波的总大将倒下这一刻**才允许御三家三选一（用户要求「打完总大将之后再选」） */
   if (e.boss) petStarterBossDown();
   /* 💀 骷髅头：**被玩家提前打死也会在原地炸**（接触自爆与超时自爆走 skullBoom，爆炸由 skullBoomed 去重） */
@@ -21802,6 +22876,51 @@ function drawEnemy(e, col) {
     ctx.restore();
     return;
   }
+  /* ============================================================
+     🎨 像素模型主路径（新一轮美术重构）
+     ============================================================
+     除了上面几个特例（假人 / 丰缘神兽走宝可梦贴图 / 世界吞噬者躯体节），
+     **所有敌人与 Boss 都在这里用像素贴图绘制**，画完直接 return。
+     下面那一大段旧矢量绘制只作为「模型还没做完的类型」的兜底（本轮正在逐个替换）。
+     ------------------------------------------------------------
+     动作判定：出手（lunge / 法师蓄力）→ atk；在移动 → walk；否则 idle。
+     帧号用全局时钟推进（每个敌人带一个 `pxSeed` 偏移，避免全场同步抽动）。
+     ============================================================ */
+  if (!e.segPhantom && PX_SPEC[e.type] && !e.devDummy && !e.hoenn) {
+    const spec = PX_SPEC[e.type];
+    /* 隐身（光明掠夺者）→ 连本体都不画 */
+    if (e.type === 'plunder' && plunderHidden(e)) { ctx.restore(); return; }
+    const variant = col ? 'flash' : '';
+    const mode = (e.lunge || (e.castCd && e.castCd > 0.35)) ? 'atk' : (Math.hypot(e.vx || 0, e.vy || 0) > 6 ? 'walk' : 'idle');
+    const nf = PX_MODE_FRAMES[mode] || 2;
+    /* ⚠️ 帧偏移必须**确定性**（不能用 Math.random：会吃全局随机流）——
+       用敌人自己的坐标算一个稳定相位，全场不会同步抽动，也不影响任何判定。 */
+    const seed = (e.pxSeed === undefined)
+      ? (e.pxSeed = (Math.abs(e.x * 0.0137) + Math.abs(e.y * 0.0079)) % 10)
+      : e.pxSeed;
+    const fi = Math.floor((time + seed) * (PX_MODE_FPS[mode] || 6)) % nf;
+    const col2 = e.col || '#a23326';
+    const body = col || (hpAff ? '#3fae4a' : (e.shiny ? '#eecb4f' : col2));
+    const drk = col || (hpAff ? '#1b5c25' : (e.shiny ? '#7a5c10' : e.dark));
+    const acc = col || (hpAff ? '#a8f0a8' : (e.shiny ? '#fff6d0' : e.acc));
+    const cv = pxSpriteOf(e.type, fi, mode, body, drk, acc, variant);
+    /* 地面影 */
+    if (!e.airH) {
+      ctx.save();
+      ctx.globalAlpha = 0.30;
+      ctx.fillStyle = '#000';
+      ctx.beginPath(); ctx.ellipse(0, e.r * 0.86, e.r * 0.90, e.r * 0.34, 0, 0, TAU); ctx.fill();
+      ctx.restore();
+    }
+    if (cv) {
+      /* ⚠️ 这里在 `ctx.translate(e.x, e.y - air)` 之内 → 传**局部坐标**（0 = 脚底那条地面线），
+         别再传世界坐标，否则会平移两次（贴图飞到屏幕外）。anchorY=0 → y 就是脚底。 */
+      pxBlit(cv, 0, e.r * 0.86, spec.sc, 1, 0, 0);
+    }
+    ctx.restore();
+    return;
+  }
+
   /* ===== 测试沙盒·Boss：🪱 世界吞噬者的躯体各节（沿头部轨迹甩尾） ===== */
   if (e.segPhantom) {
     const under = !!e.segUnderground;
@@ -22106,8 +23225,14 @@ function drawEnemy(e, col) {
       ctx.stroke();
     }
     ctx.restore();
-    /* 冲刺时地面留下一道残影环 */
-    if (dash && Math.random() < 0.5) addPart(e.x, e.y + e.r * 0.6, rnd(-20, 20), -rnd(10, 40), 0.3, rnd(2, 4), '#ffb199', 0);
+    /* 冲刺时地面留下一道残影环
+       ⚠️⚠️ **渲染层绝对不能用 `Math.random()`**：它会吃掉全局随机流，导致后面所有暴击/掉落
+       全部推移（本轮踩过：像素化改造绕过了这一行 → seed 20250317 的「龙息每跳」断言当场变红）。
+       改用确定性 `pxRand`（只跟位置/时间有关，不参与任何判定）。 */
+    if (dash && pxRand(e.x * 3.1 + e.y * 7.7 + time * 11) < 0.5) {
+      const rr1 = pxRand(e.x * 1.7 + time * 13), rr2 = pxRand(e.y * 2.3 + time * 17), rr3 = pxRand(e.x + e.y + time * 19);
+      addPart(e.x, e.y + e.r * 0.6, (rr1 - 0.5) * 40, -10 - rr2 * 30, 0.3, 2 + rr3 * 2, '#ffb199', 0);
+    }
     ctx.restore();
     return;
   }
@@ -25212,6 +26337,7 @@ function updateGame(dt, rawDt) {
     return;   // 时间冻结：敌人与弹幕全部暂停
   }
   time += dt;
+  pxCorpseUpdate(dt);   // 💀 敌人遗体演出推进（死亡动画：倒下 + 变黑 + 0.3 秒消失）
   enemyFreezeT = Math.max(0, enemyFreezeT - dt);   // 猛虎震慑计时
   banner.age += rawDt;
   if (shake > 0) shake = Math.max(0, shake - 26 * rawDt);
@@ -27511,6 +28637,8 @@ function drawGame() {
      **Boss 一律不剔除**（它们的血条与预警线是屏幕级表演）。
      剔除只影响绘制，**逻辑/判定/小地图一点没变**。 */
   const cullL = camX - 260, cullR = camX + VW + 260, cullT = camY - 260, cullB = camY + VH + 260;
+  /* 💀 先画「遗体」（死亡演出）—— 画在活着的敌人**之前**，活人自然压在尸体上面 */
+  pxCorpseDraw();
   for (const e of enemies) {
     /* 🛡️ **绘制前的最后一道 NaN 网**：只要坐标不是有限数就地拉回场上。
        真机上 `ctx.translate/ellipse` 收到 NaN 会把画布状态写坏 → 之后每帧都画不出东西
