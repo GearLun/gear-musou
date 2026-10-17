@@ -2822,6 +2822,26 @@ function pxRing(x, y, r, color, thickness, alpha) {
   if (alpha !== undefined) ctx.globalAlpha = 1;
 }
 
+/* 像素**弧线段**（不是整圈）：沿 a0→a1 按栅格摆方块 —— 浪客螺旋斩 / 圆弧斩的刀光用它。
+   ⚠️ 和 pxRing 的区别：这个有起止角，用于「一刀扫过去」的弧；pxRing 用于冲击波整圈。 */
+function pxArcStroke(x, y, r, a0, a1, color, width, alpha) {
+  if (!isFinite(x) || !isFinite(y) || !isFinite(r) || r <= 0) return;
+  if (!isFinite(a0) || !isFinite(a1)) return;
+  const span = a1 - a0;
+  if (!isFinite(span) || Math.abs(span) < 1e-4) return;
+  const ss = pxSnapS(width || 2);
+  const arcLen = Math.abs(span) * r;
+  const n = Math.max(3, Math.min(48, Math.round(arcLen / Math.max(PX_FX_G, ss * 0.9))));
+  ctx.fillStyle = color;
+  if (alpha !== undefined) ctx.globalAlpha = alpha;
+  const ox = pxSnap(x), oy = pxSnap(y);
+  for (let i = 0; i <= n; i++) {
+    const a = a0 + span * (i / n);
+    ctx.fillRect(pxSnap(ox + Math.cos(a) * r) - ss / 2, pxSnap(oy + Math.sin(a) * r) - ss / 2, ss, ss);
+  }
+  if (alpha !== undefined) ctx.globalAlpha = 1;
+}
+
 /* 像素挥砍弧：三段色带（白芯 / 亮边 / 外晕），沿弧长按栅格铺方块
    a0→a1 弧度，r0→r1 半径区间，w = 弧厚 */
 function pxSlashArc(cx, cy, a0, a1, r0, r1, colCore, colEdge, colGlow, alpha) {
@@ -29111,18 +29131,14 @@ function drawGame() {
       const al = (1 - k) * s.alpha;
       ctx.save();
       ctx.translate(s.x, s.y);
-      /* 1) 最外缘淡弧：仅作打击范围提示（哈姆 480px 时也能读出边界） */
-      ctx.globalAlpha = al * 0.35;
-      ctx.strokeStyle = edge;
-      ctx.lineWidth = wide * 0.28;
-      ctx.lineCap = 'round';
-      ctx.beginPath(); ctx.arc(0, 0, rad, ang - 0.9, ang + 0.9); ctx.stroke();
-      /* 2) 螺旋刃：由中心向外卷出的螺旋（单剑旋转的轨迹化为螺旋臂，越往外越亮越粗 = 由内向外攻击感） */
+      /* 1) 最外缘淡弧：仅作打击范围提示（哈姆 480px 时也能读出边界）
+         🎨 像素化：ctx.arc 平滑弧 → pxArcStroke（沿弧摆栅格方块） */
+      pxArcStroke(0, 0, rad, ang - 0.9, ang + 0.9, edge, wide * 0.28, al * 0.35);
+      /* 2) 螺旋刃：由中心向外卷出的螺旋（单剑旋转的轨迹化为螺旋臂，越往外越亮越粗 = 由内向外攻击感）
+         🎨 像素化：原来 3×26 段圆头平滑描边 → 每段一个栅格方块（内小外大，读起来仍是同一把剑的拖影） */
       const turns = 1.75;                                  // 螺旋圈数
       const segs = 26;
       const r0 = Math.max(8, rNear * 0.12);                // 螺旋起点（角色中心附近）
-      ctx.shadowColor = core; ctx.shadowBlur = 18 * s.th;
-      ctx.lineCap = 'round';
       for (let g = 2; g >= 0; g--) {                       // 3 条同向渐隐螺旋臂（同一把剑的旋转拖影）
         const aOff = ang - dir * g * 0.26;
         for (let i = 0; i < segs; i++) {
@@ -29132,15 +29148,16 @@ function drawGame() {
           const aa0 = aOff + dir * t0 * TAU * turns;
           const aa1 = aOff + dir * t1 * TAU * turns;
           ctx.globalAlpha = al * (1 - g * 0.28) * (0.25 + 0.75 * t0);   // 内淡外亮
-          ctx.lineWidth = wide * (0.16 + 0.62 * t0) * (1 - g * 0.22);   // 内细外粗
-          ctx.strokeStyle = g === 0 && t0 > 0.72 ? '#ffffff' : edge;
-          ctx.beginPath();
-          ctx.moveTo(Math.cos(aa0) * rr0, Math.sin(aa0) * rr0);
-          ctx.lineTo(Math.cos(aa1) * rr1, Math.sin(aa1) * rr1);
-          ctx.stroke();
+          const lw = wide * (0.16 + 0.62 * t0) * (1 - g * 0.22);         // 内细外粗
+          ctx.fillStyle = g === 0 && t0 > 0.72 ? '#ffffff' : edge;
+          const ss2 = pxSnapS(Math.max(PX_FX_G, lw));
+          /* 每段取中点铺一个方块（段与段的间距由 segs 决定，够密、看不出断） */
+          const mx = Math.cos((aa0 + aa1) / 2) * ((rr0 + rr1) / 2);
+          const my = Math.sin((aa0 + aa1) / 2) * ((rr0 + rr1) / 2);
+          ctx.fillRect(pxSnap(mx) - ss2 / 2, pxSnap(my) - ss2 / 2, ss2, ss2);
         }
       }
-      ctx.shadowBlur = 0;
+      ctx.globalAlpha = 1;
       /* 3) 足下回旋虚线环：陀螺轴心即视感 */
       ctx.globalAlpha = al * 0.85;
       ctx.strokeStyle = core;
@@ -29170,25 +29187,13 @@ function drawGame() {
       ctx.translate(s.x, s.y);
       ctx.lineCap = 'round';
       if (s.vk === 0) {                       /* 外层蓝雾：扫掠面的体积感 */
-        ctx.globalAlpha = alv * 0.36;
-        ctx.strokeStyle = '#9ad8ff'; ctx.shadowColor = '#9ad8ff'; ctx.shadowBlur = 24;
-        ctx.lineWidth = widev * 1.5;
-        ctx.beginPath(); ctx.arc(0, 0, radv, av - s.arc / 2, av + s.arc / 2); ctx.stroke();
+        /* 🎨 像素化：平滑弧 → 像素弧（外雾更厚更淡） */
+        pxArcStroke(0, 0, radv, av - s.arc / 2, av + s.arc / 2, '#9ad8ff', widev * 1.5, alv * 0.36);
       } else if (s.vk === 2) {                /* 最外缘细白弧：把扇形边界画明确 */
-        ctx.globalAlpha = Math.min(1, alv * 1.8);
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = widev * 0.22;
-        ctx.beginPath(); ctx.arc(0, 0, radv * 1.02, av - s.arc / 2, av + s.arc / 2); ctx.stroke();
+        pxArcStroke(0, 0, radv * 1.02, av - s.arc / 2, av + s.arc / 2, '#ffffff', widev * 0.22, Math.min(1, alv * 1.8));
       } else {                                /* 主刃：蓝刃 + 白芯 + 刃口晶刺 + 中心闪光 */
-        ctx.globalAlpha = alv * 0.95;
-        ctx.strokeStyle = '#9ad8ff'; ctx.shadowColor = '#9ad8ff'; ctx.shadowBlur = 26;
-        ctx.lineWidth = widev;
-        ctx.beginPath(); ctx.arc(0, 0, radv, av - s.arc / 2, av + s.arc / 2); ctx.stroke();
-        ctx.shadowBlur = 0;
-        ctx.globalAlpha = Math.min(1, alv * 1.7);
-        ctx.strokeStyle = '#ffffff';
-        ctx.lineWidth = widev * 0.34;
-        ctx.beginPath(); ctx.arc(0, 0, radv * 0.95, av - s.arc / 2 + 0.05, av + s.arc / 2 - 0.05); ctx.stroke();
+        pxArcStroke(0, 0, radv, av - s.arc / 2, av + s.arc / 2, '#9ad8ff', widev, alv * 0.95);
+        pxArcStroke(0, 0, radv * 0.95, av - s.arc / 2 + 0.05, av + s.arc / 2 - 0.05, '#ffffff', widev * 0.34, Math.min(1, alv * 1.7));
         /* 刃口晶刺：沿弧均匀朝外放出的短亮线 */
         ctx.globalAlpha = alv * 0.85;
         ctx.strokeStyle = 'rgba(226,244,255,0.92)';
