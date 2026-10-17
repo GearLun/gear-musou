@@ -26383,25 +26383,31 @@ function drawWMThrusts() {
     const st = wmStatOf(c.inst);
     const prog = 1 - Math.max(0, c.t) / Math.max(0.01, c.max);
     ctx.save();
-    ctx.globalAlpha = 0.16 + 0.12 * prog;
-    ctx.fillStyle = '#ffd166';
-    ctx.beginPath(); ctx.moveTo(p.x, p.y);
-    ctx.arc(p.x, p.y, st.reach, p.face - Math.PI / 2, p.face + Math.PI / 2);
-    ctx.closePath(); ctx.fill();
-    ctx.globalAlpha = 0.75;
-    ctx.strokeStyle = '#ffe9a8'; ctx.lineWidth = 2.5;
-    ctx.beginPath(); ctx.arc(p.x, p.y, st.reach, p.face - Math.PI / 2, p.face + Math.PI / 2); ctx.stroke();
-    ctx.beginPath(); ctx.arc(p.x, p.y, st.reach * prog, p.face - Math.PI / 2, p.face + Math.PI / 2);   // 蓄力进度
-    ctx.strokeStyle = '#ff8a3c'; ctx.lineWidth = 5; ctx.stroke();
+    /* 🎨 像素化：蓄力扇形（渐变填充扇形 + 两条平滑弧）→ 抖动扇形 + 阶梯弧 */
+    {
+      const a0 = p.face - Math.PI / 2, a1 = p.face + Math.PI / 2;
+      const ST = 6;
+      ctx.fillStyle = '#ffd166';
+      ctx.globalAlpha = 0.16 + 0.12 * prog;
+      for (let rr = ST; rr <= st.reach; rr += ST) {
+        const n2 = Math.max(5, Math.round((a1 - a0) * rr / ST * 0.5));
+        for (let q2 = 0; q2 < n2; q2++) {
+          const aa = a0 + (a1 - a0) * (q2 / n2);
+          if (pxRand(q2 * 5 + rr) < 0.45) continue;
+          ctx.fillRect(pxSnap(p.x + Math.cos(aa) * rr), pxSnap(p.y + Math.sin(aa) * rr), PX_FX_G, PX_FX_G);
+        }
+      }
+      ctx.globalAlpha = 1;
+      pxArcStroke(p.x, p.y, st.reach, a0, a1, '#ffe9a8', 3, 0.75);
+      pxArcStroke(p.x, p.y, st.reach * prog, a0, a1, '#ff8a3c', 5, 0.9);   // 蓄力进度
+    }
     ctx.restore();
   }
   /* 🗡️ 匕首：排队中的闪避半圆斩（落地前的一点点预兆） */
   for (const s of wmDashSlashes) {
     const st = wmStatOf(s.inst);
     ctx.save();
-    ctx.globalAlpha = 0.18;
-    ctx.strokeStyle = '#ffe9a8'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(p.x, p.y, st.reach * 0.8, s.ang - Math.PI / 2, s.ang + Math.PI / 2); ctx.stroke();
+    pxArcStroke(p.x, p.y, st.reach * 0.8, s.ang - Math.PI / 2, s.ang + Math.PI / 2, '#ffe9a8', 2, 0.18);
     ctx.restore();
   }
   for (const t of wmThrusts) {
@@ -26411,13 +26417,10 @@ function drawWMThrusts() {
     ctx.translate(t.x, t.y);
     ctx.rotate(t.a);
     const col = t.mul < 1 ? '#8fd8ff' : '#ffe9a8';
-    ctx.strokeStyle = col; ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(t.reach * (0.5 + 0.5 * (1 - k)), 0); ctx.stroke();
-    ctx.globalAlpha = 0.3 * k;
-    ctx.fillStyle = col;
-    ctx.beginPath(); ctx.moveTo(6, 0);
-    ctx.arc(0, 0, t.reach, -t.arc / 2, t.arc / 2);
-    ctx.closePath(); ctx.fill();
+    /* 🎨 像素化：刺击（平滑粗线 + 扇形填充）→ 像素光束 + 阶梯弧 */
+    pxBeam(8, 0, t.reach * (0.5 + 0.5 * (1 - k)), 0, 4, col, '#ffffff', 0.75 * k, k);
+    pxArcStroke(0, 0, t.reach, -t.arc / 2, t.arc / 2, col, 3, 0.3 * k);
+    ctx.globalAlpha = 1;
     ctx.restore();
   }
 }
