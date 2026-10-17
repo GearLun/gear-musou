@@ -25404,481 +25404,527 @@ function wmWeaponCol(id) {
   return ({ stick: '#b98b52', sling: '#c9a76a', mallet: '#a9814a', plane: '#cfe6ff', pistol: '#8f9aad', sword: '#dfe7f2',
             dagger: '#cfe6ff', spear: '#c9a76a', hammer: '#9aa6b8', twin: '#e0e6f0' })[id] || '#c9a76a';
 }
+/* ============================================================
+   🗡️ 武器像素化：**烘焙法**
+   ============================================================
+   27 种武器是 475 行矢量画法（694 处绘制调用），逐个重写不现实。
+   但「矢量 → 像素」有一条捷径：**先画进一张降采样的小画布，再用最近邻放大**——
+   放大后每个原始像素变成规整的方块，视觉上就是像素画（和手绘像素画的栅格感一致）。
+   每把 (武器, 长度) 只烘焙一次，之后每帧就是 1 次 drawImage。
+   ============================================================ */
+const WM_SPR = Object.create(null);
+function wmWeaponSprite(id, len) {
+  const Lw = Math.max(8, len || 30);
+  const key = id + '|' + Lw;
+  if (WM_SPR[key] !== undefined) return WM_SPR[key];
+  if (typeof document === 'undefined' || !document.createElement) { WM_SPR[key] = null; return null; }
+  const DS = 0.5;                                  // 降采样倍率（越大越"细"，0.5 = 放大 2 倍）
+  const AW = 56, AH = 44;                          // 烘焙覆盖的 art 区域（原点是左侧中部）
+  const OX = 10, OY = 22;
+  let c;
+  try { c = document.createElement('canvas'); } catch (e) { WM_SPR[key] = null; return null; }
+  c.width = Math.max(1, Math.round(AW * DS));
+  c.height = Math.max(1, Math.round(AH * DS));
+  const g2 = c.getContext && c.getContext('2d');
+  if (!g2) { WM_SPR[key] = null; return null; }
+  try {
+    g2.scale(DS, DS);
+    g2.translate(OX, OY);
+    wmDrawWeapon(id, Lw, 1, g2);
+  } catch (e) { WM_SPR[key] = null; return null; }
+  const out = { cv: c, ox: -OX, oy: -OY, sc: 1 / DS };
+  WM_SPR[key] = out;
+  return out;
+}
+/* 贴一把武器（替代直接调 wmDrawWeapon）——建不出贴图时**退回矢量画**，保证不会消失 */
+function wmBlitWeapon(id, len, alpha) {
+  const s2 = wmWeaponSprite(id, len);
+  if (!s2) { wmDrawWeapon(id, len, alpha); return; }
+  const a = alpha === undefined ? 1 : alpha;
+  if (a < 1) ctx.globalAlpha = a;
+  const sm = ctx.imageSmoothingEnabled;
+  if (sm) ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(s2.cv, s2.ox, s2.oy, s2.cv.width * s2.sc, s2.cv.height * s2.sc);
+  if (sm) ctx.imageSmoothingEnabled = true;
+  if (a < 1) ctx.globalAlpha = 1;
+}
 /* 每把武器一个模型：len ≈ 模型的长度（默认 30），画在 (0,0) 沿 +X 伸出 */
-function wmDrawWeapon(id, len, alpha) {
+function wmDrawWeapon(id, len, alpha, gg) {
+  /* 🎨 烘焙支持：传第四个参数就能画到任意 context（见 tools\_pixelize-wm-weapon.js 的说明） */
+  const g = gg || ctx;
   const L = Math.max(8, len || 30), k = L / 30;   // k = 统一缩放（比例不随 len 变形）
-  ctx.save();
-  ctx.globalAlpha = alpha === undefined ? 1 : alpha;
-  ctx.lineCap = 'round';
+  g.save();
+  g.globalAlpha = alpha === undefined ? 1 : alpha;
+  g.lineCap = 'round';
   if (id === 'stick') {                       /* 🪵 木棍：一根带节疤的木棍 */
-    ctx.strokeStyle = '#7a5732'; ctx.lineWidth = 5.6 * k;
-    ctx.beginPath(); ctx.moveTo(-3 * k, 0); ctx.lineTo(L * 0.98, 0); ctx.stroke();
-    ctx.strokeStyle = '#b98b52'; ctx.lineWidth = 3.4 * k;
-    ctx.beginPath(); ctx.moveTo(-2 * k, -1.2 * k); ctx.lineTo(L * 0.94, -1.2 * k); ctx.stroke();
-    ctx.strokeStyle = 'rgba(96,64,32,0.85)'; ctx.lineWidth = 1.1 * k;
+    g.strokeStyle = '#7a5732'; g.lineWidth = 5.6 * k;
+    g.beginPath(); g.moveTo(-3 * k, 0); g.lineTo(L * 0.98, 0); g.stroke();
+    g.strokeStyle = '#b98b52'; g.lineWidth = 3.4 * k;
+    g.beginPath(); g.moveTo(-2 * k, -1.2 * k); g.lineTo(L * 0.94, -1.2 * k); g.stroke();
+    g.strokeStyle = 'rgba(96,64,32,0.85)'; g.lineWidth = 1.1 * k;
     for (let i = 1; i <= 3; i++) {            // 木纹 / 节疤
-      ctx.beginPath();
-      ctx.moveTo(L * 0.22 * i, -2.3 * k);
-      ctx.lineTo(L * 0.22 * i + 2.4 * k, 2.3 * k);
-      ctx.stroke();
+      g.beginPath();
+      g.moveTo(L * 0.22 * i, -2.3 * k);
+      g.lineTo(L * 0.22 * i + 2.4 * k, 2.3 * k);
+      g.stroke();
     }
-    ctx.fillStyle = '#8a6236';
-    ctx.beginPath(); ctx.arc(L * 0.99, 0, 2.6 * k, 0, TAU); ctx.fill();
+    g.fillStyle = '#8a6236';
+    g.beginPath(); g.arc(L * 0.99, 0, 2.6 * k, 0, TAU); g.fill();
   } else if (id === 'sling') {                /* 🪃 弹弓：Y 形叉 + 皮筋 + 皮兜（+X = 发射方向） */
-    ctx.strokeStyle = '#8a6236'; ctx.lineWidth = 4.6 * k;
-    ctx.beginPath(); ctx.moveTo(-2 * k, 0); ctx.lineTo(L * 0.5, 0); ctx.stroke();          // 握把
-    ctx.beginPath(); ctx.moveTo(L * 0.5, 0); ctx.lineTo(L * 0.96, -8 * k); ctx.stroke();   // 上叉
-    ctx.beginPath(); ctx.moveTo(L * 0.5, 0); ctx.lineTo(L * 0.96, 8 * k); ctx.stroke();    // 下叉
-    ctx.strokeStyle = '#6b4a2a'; ctx.lineWidth = 2.2 * k;
-    ctx.beginPath(); ctx.moveTo(L * 0.96, -8 * k); ctx.lineTo(L * 0.36, -1.6 * k); ctx.stroke();   // 皮筋
-    ctx.beginPath(); ctx.moveTo(L * 0.96, 8 * k); ctx.lineTo(L * 0.36, 1.6 * k); ctx.stroke();
-    ctx.fillStyle = '#c9a76a';
-    ctx.beginPath(); ctx.ellipse(L * 0.34, 0, 3.6 * k, 5.2 * k, 0, 0, TAU); ctx.fill();    // 皮兜
-    ctx.fillStyle = '#5b6b7c';
-    ctx.beginPath(); ctx.arc(L * 0.62, 0, 2.2 * k, 0, TAU); ctx.fill();                    // 待发的石子
+    g.strokeStyle = '#8a6236'; g.lineWidth = 4.6 * k;
+    g.beginPath(); g.moveTo(-2 * k, 0); g.lineTo(L * 0.5, 0); g.stroke();          // 握把
+    g.beginPath(); g.moveTo(L * 0.5, 0); g.lineTo(L * 0.96, -8 * k); g.stroke();   // 上叉
+    g.beginPath(); g.moveTo(L * 0.5, 0); g.lineTo(L * 0.96, 8 * k); g.stroke();    // 下叉
+    g.strokeStyle = '#6b4a2a'; g.lineWidth = 2.2 * k;
+    g.beginPath(); g.moveTo(L * 0.96, -8 * k); g.lineTo(L * 0.36, -1.6 * k); g.stroke();   // 皮筋
+    g.beginPath(); g.moveTo(L * 0.96, 8 * k); g.lineTo(L * 0.36, 1.6 * k); g.stroke();
+    g.fillStyle = '#c9a76a';
+    g.beginPath(); g.ellipse(L * 0.34, 0, 3.6 * k, 5.2 * k, 0, 0, TAU); g.fill();    // 皮兜
+    g.fillStyle = '#5b6b7c';
+    g.beginPath(); g.arc(L * 0.62, 0, 2.2 * k, 0, TAU); g.fill();                    // 待发的石子
   } else if (id === 'mallet') {               /* 🔨 木槌：木柄 + 桶形槌头（头横着，+X = 砸的方向） */
-    ctx.strokeStyle = '#8a6236'; ctx.lineWidth = 4.4 * k;
-    ctx.beginPath(); ctx.moveTo(-2 * k, 0); ctx.lineTo(L * 0.66, 0); ctx.stroke();
-    ctx.fillStyle = '#a9814a';
-    ctx.beginPath();
-    ctx.moveTo(L * 0.62, -8.6 * k); ctx.lineTo(L * 0.98, -7.4 * k);
-    ctx.lineTo(L * 0.98, 7.4 * k); ctx.lineTo(L * 0.62, 8.6 * k);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#6f5230';
-    ctx.fillRect(L * 0.66, -8.6 * k, 2.2 * k, 17.2 * k);                                    // 铁箍
-    ctx.fillRect(L * 0.9, -8.6 * k, 2.2 * k, 17.2 * k);
-    ctx.fillStyle = '#d8c39a';
-    ctx.fillRect(L * 0.72, -5.6 * k, L * 0.16, 11.2 * k);                                   // 高光面
+    g.strokeStyle = '#8a6236'; g.lineWidth = 4.4 * k;
+    g.beginPath(); g.moveTo(-2 * k, 0); g.lineTo(L * 0.66, 0); g.stroke();
+    g.fillStyle = '#a9814a';
+    g.beginPath();
+    g.moveTo(L * 0.62, -8.6 * k); g.lineTo(L * 0.98, -7.4 * k);
+    g.lineTo(L * 0.98, 7.4 * k); g.lineTo(L * 0.62, 8.6 * k);
+    g.closePath(); g.fill();
+    g.fillStyle = '#6f5230';
+    g.fillRect(L * 0.66, -8.6 * k, 2.2 * k, 17.2 * k);                                    // 铁箍
+    g.fillRect(L * 0.9, -8.6 * k, 2.2 * k, 17.2 * k);
+    g.fillStyle = '#d8c39a';
+    g.fillRect(L * 0.72, -5.6 * k, L * 0.16, 11.2 * k);                                   // 高光面
   } else if (id === 'plane') {                /* ✈️ 玩具飞机：机身 + 后掠翼 + 尾翼 + 螺旋桨（+X = 机头） */
-    ctx.fillStyle = '#8fd8ff';                                        // 主翼（后掠，横着机身）
-    ctx.beginPath();
-    ctx.moveTo(2 * k, -13 * k); ctx.lineTo(9 * k, -2.4 * k);
-    ctx.lineTo(9 * k, 2.4 * k); ctx.lineTo(2 * k, 13 * k);
-    ctx.lineTo(-4 * k, 13 * k); ctx.lineTo(-1 * k, 2.4 * k);
-    ctx.lineTo(-1 * k, -2.4 * k); ctx.lineTo(-4 * k, -13 * k);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#cfe6ff';                                        // 机身
-    ctx.beginPath(); ctx.ellipse(0, 0, L * 0.46, 4.6 * k, 0, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#7fc4ff';                                        // 尾翼
-    ctx.beginPath();
-    ctx.moveTo(-L * 0.44, -6.4 * k); ctx.lineTo(-L * 0.2, -1.6 * k);
-    ctx.lineTo(-L * 0.2, 1.6 * k); ctx.lineTo(-L * 0.44, 6.4 * k);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#ff8a6a';                                        // 机头罩
-    ctx.beginPath(); ctx.arc(L * 0.42, 0, 3.2 * k, 0, TAU); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 1.6 * k;   // 螺旋桨（转起来）
+    g.fillStyle = '#8fd8ff';                                        // 主翼（后掠，横着机身）
+    g.beginPath();
+    g.moveTo(2 * k, -13 * k); g.lineTo(9 * k, -2.4 * k);
+    g.lineTo(9 * k, 2.4 * k); g.lineTo(2 * k, 13 * k);
+    g.lineTo(-4 * k, 13 * k); g.lineTo(-1 * k, 2.4 * k);
+    g.lineTo(-1 * k, -2.4 * k); g.lineTo(-4 * k, -13 * k);
+    g.closePath(); g.fill();
+    g.fillStyle = '#cfe6ff';                                        // 机身
+    g.beginPath(); g.ellipse(0, 0, L * 0.46, 4.6 * k, 0, 0, TAU); g.fill();
+    g.fillStyle = '#7fc4ff';                                        // 尾翼
+    g.beginPath();
+    g.moveTo(-L * 0.44, -6.4 * k); g.lineTo(-L * 0.2, -1.6 * k);
+    g.lineTo(-L * 0.2, 1.6 * k); g.lineTo(-L * 0.44, 6.4 * k);
+    g.closePath(); g.fill();
+    g.fillStyle = '#ff8a6a';                                        // 机头罩
+    g.beginPath(); g.arc(L * 0.42, 0, 3.2 * k, 0, TAU); g.fill();
+    g.strokeStyle = 'rgba(255,255,255,0.85)'; g.lineWidth = 1.6 * k;   // 螺旋桨（转起来）
     const bl = time * 40;
     for (let i = 0; i < 4; i++) {
       const a = bl + i * Math.PI / 2;
-      ctx.beginPath();
-      ctx.moveTo(L * 0.5, 0);
-      ctx.lineTo(L * 0.5 + Math.cos(a) * 8 * k, Math.sin(a) * 8 * k);
-      ctx.stroke();
+      g.beginPath();
+      g.moveTo(L * 0.5, 0);
+      g.lineTo(L * 0.5 + Math.cos(a) * 8 * k, Math.sin(a) * 8 * k);
+      g.stroke();
     }
-    ctx.fillStyle = '#2f4a63';
-    ctx.beginPath(); ctx.arc(L * 0.12, -1.2 * k, 1.7 * k, 0, TAU); ctx.fill();   // 座舱
+    g.fillStyle = '#2f4a63';
+    g.beginPath(); g.arc(L * 0.12, -1.2 * k, 1.7 * k, 0, TAU); g.fill();   // 座舱
   } else if (id === 'pistol') {               /* 🔫 手枪：套筒 + 枪管 + 握把 + 扳机护圈（+X = 枪口） */
-    ctx.fillStyle = '#5d6675';
-    ctx.beginPath();                                                  // 握把（朝斜后下）
-    ctx.moveTo(L * 0.2, 1 * k); ctx.lineTo(L * 0.42, 1 * k);
-    ctx.lineTo(L * 0.3, 15 * k); ctx.lineTo(L * 0.08, 15 * k);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#3d4450'; ctx.fillRect(L * 0.24, 6 * k, L * 0.12, 8 * k);   // 握把纹
-    ctx.fillStyle = '#8f9aad';                                        // 套筒
-    ctx.fillRect(L * 0.02, -5.4 * k, L * 0.98, 9 * k);
-    ctx.fillStyle = '#b9c4d4';
-    ctx.fillRect(L * 0.02, -5.4 * k, L * 0.98, 3 * k);                // 套筒高光
-    ctx.fillStyle = '#4a5260'; ctx.fillRect(L * 0.06, -2.2 * k, L * 0.3, 2.6 * k);   // 抛壳口
-    ctx.strokeStyle = '#8f9aad'; ctx.lineWidth = 2.4 * k;             // 扳机护圈
-    ctx.beginPath(); ctx.arc(L * 0.4, 6.4 * k, 5.2 * k, Math.PI * 0.1, Math.PI * 1.1); ctx.stroke();
-    ctx.fillStyle = '#23272e';
-    ctx.beginPath(); ctx.arc(L * 0.99, 0, 3 * k, 0, TAU); ctx.fill();  // 枪口
-    ctx.fillStyle = '#ffd166';
-    ctx.fillRect(L * 0.9, -6.6 * k, 5 * k, 2 * k);                    // 准星
+    g.fillStyle = '#5d6675';
+    g.beginPath();                                                  // 握把（朝斜后下）
+    g.moveTo(L * 0.2, 1 * k); g.lineTo(L * 0.42, 1 * k);
+    g.lineTo(L * 0.3, 15 * k); g.lineTo(L * 0.08, 15 * k);
+    g.closePath(); g.fill();
+    g.fillStyle = '#3d4450'; g.fillRect(L * 0.24, 6 * k, L * 0.12, 8 * k);   // 握把纹
+    g.fillStyle = '#8f9aad';                                        // 套筒
+    g.fillRect(L * 0.02, -5.4 * k, L * 0.98, 9 * k);
+    g.fillStyle = '#b9c4d4';
+    g.fillRect(L * 0.02, -5.4 * k, L * 0.98, 3 * k);                // 套筒高光
+    g.fillStyle = '#4a5260'; g.fillRect(L * 0.06, -2.2 * k, L * 0.3, 2.6 * k);   // 抛壳口
+    g.strokeStyle = '#8f9aad'; g.lineWidth = 2.4 * k;             // 扳机护圈
+    g.beginPath(); g.arc(L * 0.4, 6.4 * k, 5.2 * k, Math.PI * 0.1, Math.PI * 1.1); g.stroke();
+    g.fillStyle = '#23272e';
+    g.beginPath(); g.arc(L * 0.99, 0, 3 * k, 0, TAU); g.fill();  // 枪口
+    g.fillStyle = '#ffd166';
+    g.fillRect(L * 0.9, -6.6 * k, 5 * k, 2 * k);                    // 准星
   } else if (id === 'sword') {                /* ⚔️ 铁剑：剑身 + 护手 + 握柄 + 剑首（+X = 剑尖） */
-    ctx.fillStyle = '#8a6236';                                        // 握柄
-    ctx.fillRect(0, -2.6 * k, L * 0.28, 5.2 * k);
-    ctx.fillStyle = '#4a3423';
-    for (let i = 0; i < 3; i++) ctx.fillRect(L * (0.05 + i * 0.07), -3 * k, 1.4 * k, 6 * k);
-    ctx.fillStyle = '#d8b24a';                                        // 护手
-    ctx.fillRect(L * 0.28, -8.4 * k, 4.4 * k, 16.8 * k);
-    ctx.fillStyle = '#dfe7f2';                                        // 剑身
-    ctx.beginPath();
-    ctx.moveTo(L * 0.32, -3.6 * k); ctx.lineTo(L * 0.94, -2.2 * k);
-    ctx.lineTo(L, 0);
-    ctx.lineTo(L * 0.94, 2.2 * k); ctx.lineTo(L * 0.32, 3.6 * k);
-    ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1.1 * k;   // 血槽高光
-    ctx.beginPath(); ctx.moveTo(L * 0.36, -0.9 * k); ctx.lineTo(L * 0.93, -0.6 * k); ctx.stroke();
-    ctx.fillStyle = '#d8b24a';                                        // 剑首
-    ctx.beginPath(); ctx.arc(0, 0, 3.2 * k, 0, TAU); ctx.fill();
+    g.fillStyle = '#8a6236';                                        // 握柄
+    g.fillRect(0, -2.6 * k, L * 0.28, 5.2 * k);
+    g.fillStyle = '#4a3423';
+    for (let i = 0; i < 3; i++) g.fillRect(L * (0.05 + i * 0.07), -3 * k, 1.4 * k, 6 * k);
+    g.fillStyle = '#d8b24a';                                        // 护手
+    g.fillRect(L * 0.28, -8.4 * k, 4.4 * k, 16.8 * k);
+    g.fillStyle = '#dfe7f2';                                        // 剑身
+    g.beginPath();
+    g.moveTo(L * 0.32, -3.6 * k); g.lineTo(L * 0.94, -2.2 * k);
+    g.lineTo(L, 0);
+    g.lineTo(L * 0.94, 2.2 * k); g.lineTo(L * 0.32, 3.6 * k);
+    g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = 1.1 * k;   // 血槽高光
+    g.beginPath(); g.moveTo(L * 0.36, -0.9 * k); g.lineTo(L * 0.93, -0.6 * k); g.stroke();
+    g.fillStyle = '#d8b24a';                                        // 剑首
+    g.beginPath(); g.arc(0, 0, 3.2 * k, 0, TAU); g.fill();
   } else if (id === 'dagger') {              /* 🔪 匕首：短刃 + 小护手 + 缠柄（+X = 刀尖） */
-    ctx.fillStyle = '#4a3423';
-    ctx.fillRect(0, -2.4 * k, L * 0.3, 4.8 * k);
-    ctx.fillStyle = '#6b4a2a';
-    for (let i = 0; i < 2; i++) ctx.fillRect(L * (0.07 + i * 0.08), -2.6 * k, 1.6 * k, 5.2 * k);
-    ctx.fillStyle = '#b9c4d4';                                        // 护手（小）
-    ctx.fillRect(L * 0.3, -6 * k, 3.4 * k, 12 * k);
-    ctx.fillStyle = '#e6eefc';                                        // 短刃
-    ctx.beginPath();
-    ctx.moveTo(L * 0.34, -3 * k); ctx.lineTo(L * 0.86, -1.6 * k);
-    ctx.lineTo(L, 0);
-    ctx.lineTo(L * 0.86, 1.6 * k); ctx.lineTo(L * 0.34, 3 * k);
-    ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 1 * k;
-    ctx.beginPath(); ctx.moveTo(L * 0.4, -0.7 * k); ctx.lineTo(L * 0.88, -0.4 * k); ctx.stroke();
+    g.fillStyle = '#4a3423';
+    g.fillRect(0, -2.4 * k, L * 0.3, 4.8 * k);
+    g.fillStyle = '#6b4a2a';
+    for (let i = 0; i < 2; i++) g.fillRect(L * (0.07 + i * 0.08), -2.6 * k, 1.6 * k, 5.2 * k);
+    g.fillStyle = '#b9c4d4';                                        // 护手（小）
+    g.fillRect(L * 0.3, -6 * k, 3.4 * k, 12 * k);
+    g.fillStyle = '#e6eefc';                                        // 短刃
+    g.beginPath();
+    g.moveTo(L * 0.34, -3 * k); g.lineTo(L * 0.86, -1.6 * k);
+    g.lineTo(L, 0);
+    g.lineTo(L * 0.86, 1.6 * k); g.lineTo(L * 0.34, 3 * k);
+    g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(255,255,255,0.85)'; g.lineWidth = 1 * k;
+    g.beginPath(); g.moveTo(L * 0.4, -0.7 * k); g.lineTo(L * 0.88, -0.4 * k); g.stroke();
   } else if (id === 'kunai') {               /* 🗡 小苦无：菱形刀身 + 圆环尾（+X = 尖） */
-    ctx.fillStyle = '#8f9aad';                                        // 短柄
-    ctx.fillRect(0, -2 * k, L * 0.34, 4 * k);
-    ctx.strokeStyle = '#b9c4d4'; ctx.lineWidth = 2.4 * k;             // 尾环
-    ctx.beginPath(); ctx.arc(-1 * k, 0, 4 * k, 0, TAU); ctx.stroke();
-    ctx.fillStyle = '#dfe7f2';                                        // 菱形刀身
-    ctx.beginPath();
-    ctx.moveTo(L * 0.3, 0); ctx.lineTo(L * 0.62, -5 * k);
-    ctx.lineTo(L, 0);
-    ctx.lineTo(L * 0.62, 5 * k);
-    ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = 'rgba(120,160,200,0.9)'; ctx.lineWidth = 1.1 * k;
-    ctx.beginPath(); ctx.moveTo(L * 0.36, 0); ctx.lineTo(L * 0.96, 0); ctx.stroke();
+    g.fillStyle = '#8f9aad';                                        // 短柄
+    g.fillRect(0, -2 * k, L * 0.34, 4 * k);
+    g.strokeStyle = '#b9c4d4'; g.lineWidth = 2.4 * k;             // 尾环
+    g.beginPath(); g.arc(-1 * k, 0, 4 * k, 0, TAU); g.stroke();
+    g.fillStyle = '#dfe7f2';                                        // 菱形刀身
+    g.beginPath();
+    g.moveTo(L * 0.3, 0); g.lineTo(L * 0.62, -5 * k);
+    g.lineTo(L, 0);
+    g.lineTo(L * 0.62, 5 * k);
+    g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(120,160,200,0.9)'; g.lineWidth = 1.1 * k;
+    g.beginPath(); g.moveTo(L * 0.36, 0); g.lineTo(L * 0.96, 0); g.stroke();
   } else if (id === 'firebottle' || id === 'thunderbottle') {   /* 🔥⚡ 玻璃瓶 + 布条火/电（+X = 瓶口） */
     const fire = id === 'firebottle';
-    ctx.fillStyle = fire ? '#a8562a' : '#2f5a7a';                     // 瓶身（斜着拿）
-    ctx.beginPath();
-    ctx.moveTo(L * 0.1, -8 * k); ctx.lineTo(L * 0.42, -8 * k);
-    ctx.lineTo(L * 0.44, 8 * k); ctx.lineTo(L * 0.08, 8 * k);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle = fire ? '#e08a4a' : '#5aa8d8';                     // 玻璃高光
-    ctx.fillRect(L * 0.14, -6 * k, 2.6 * k, 12 * k);
-    ctx.fillStyle = fire ? '#7a3a1c' : '#1d3c52';                     // 瓶颈
-    ctx.fillRect(L * 0.2, -3.4 * k, L * 0.2, 6.8 * k);
-    ctx.fillStyle = '#c9a76a';                                        // 木塞/布条
-    ctx.fillRect(L * 0.38, -2.6 * k, 4 * k, 5.2 * k);
+    g.fillStyle = fire ? '#a8562a' : '#2f5a7a';                     // 瓶身（斜着拿）
+    g.beginPath();
+    g.moveTo(L * 0.1, -8 * k); g.lineTo(L * 0.42, -8 * k);
+    g.lineTo(L * 0.44, 8 * k); g.lineTo(L * 0.08, 8 * k);
+    g.closePath(); g.fill();
+    g.fillStyle = fire ? '#e08a4a' : '#5aa8d8';                     // 玻璃高光
+    g.fillRect(L * 0.14, -6 * k, 2.6 * k, 12 * k);
+    g.fillStyle = fire ? '#7a3a1c' : '#1d3c52';                     // 瓶颈
+    g.fillRect(L * 0.2, -3.4 * k, L * 0.2, 6.8 * k);
+    g.fillStyle = '#c9a76a';                                        // 木塞/布条
+    g.fillRect(L * 0.38, -2.6 * k, 4 * k, 5.2 * k);
     if (fire) {                                                       // 火苗（会跳）
       const fh = (6 + Math.sin(time * 18 + L) * 2.4) * k;
-      ctx.fillStyle = '#ff8a3c';
-      ctx.beginPath(); ctx.moveTo(L * 0.46, 0); ctx.lineTo(L * 0.42, -fh * 0.5); ctx.lineTo(L * 0.5, -fh); ctx.lineTo(L * 0.56, -fh * 0.5); ctx.lineTo(L * 0.54, 0); ctx.closePath(); ctx.fill();
-      ctx.fillStyle = '#ffd166';
-      ctx.beginPath(); ctx.arc(L * 0.48, -fh * 0.35, 2.2 * k, 0, TAU); ctx.fill();
+      g.fillStyle = '#ff8a3c';
+      g.beginPath(); g.moveTo(L * 0.46, 0); g.lineTo(L * 0.42, -fh * 0.5); g.lineTo(L * 0.5, -fh); g.lineTo(L * 0.56, -fh * 0.5); g.lineTo(L * 0.54, 0); g.closePath(); g.fill();
+      g.fillStyle = '#ffd166';
+      g.beginPath(); g.arc(L * 0.48, -fh * 0.35, 2.2 * k, 0, TAU); g.fill();
     } else {                                                          // 电弧
-      ctx.strokeStyle = '#9adcff'; ctx.lineWidth = 1.6 * k;
-      ctx.beginPath();
-      ctx.moveTo(L * 0.46, -6 * k); ctx.lineTo(L * 0.54, -2 * k); ctx.lineTo(L * 0.44, 0); ctx.lineTo(L * 0.54, 3 * k); ctx.lineTo(L * 0.46, 6 * k);
-      ctx.stroke();
+      g.strokeStyle = '#9adcff'; g.lineWidth = 1.6 * k;
+      g.beginPath();
+      g.moveTo(L * 0.46, -6 * k); g.lineTo(L * 0.54, -2 * k); g.lineTo(L * 0.44, 0); g.lineTo(L * 0.54, 3 * k); g.lineTo(L * 0.46, 6 * k);
+      g.stroke();
     }
   } else if (id === 'watercharm') {          /* 🌊 水波护符：符纸 + 波纹（+X = 符头） */
-    ctx.fillStyle = '#e8e3cf';
-    ctx.save();
-    ctx.rotate(-0.18);
-    ctx.fillRect(-L * 0.1, -6 * k, L * 0.66, 12 * k);
-    ctx.fillStyle = '#7fc4ff';
-    ctx.beginPath(); ctx.arc(L * 0.28, 0, 6.4 * k, 0, TAU); ctx.fill();
-    ctx.strokeStyle = '#e8f6ff'; ctx.lineWidth = 1.4 * k;             // 三道波纹
+    g.fillStyle = '#e8e3cf';
+    g.save();
+    g.rotate(-0.18);
+    g.fillRect(-L * 0.1, -6 * k, L * 0.66, 12 * k);
+    g.fillStyle = '#7fc4ff';
+    g.beginPath(); g.arc(L * 0.28, 0, 6.4 * k, 0, TAU); g.fill();
+    g.strokeStyle = '#e8f6ff'; g.lineWidth = 1.4 * k;             // 三道波纹
     for (let i = 0; i < 3; i++) {
-      ctx.beginPath();
-      ctx.arc(L * 0.28, 0, (2 + i * 2) * k, -2.4, 2.4);
-      ctx.stroke();
+      g.beginPath();
+      g.arc(L * 0.28, 0, (2 + i * 2) * k, -2.4, 2.4);
+      g.stroke();
     }
-    ctx.fillStyle = '#2f5a7a';
-    ctx.fillRect(-L * 0.08, -5 * k, 1.6 * k, 10 * k);
-    ctx.restore();
+    g.fillStyle = '#2f5a7a';
+    g.fillRect(-L * 0.08, -5 * k, 1.6 * k, 10 * k);
+    g.restore();
   } else if (id === 'shieldmaker') {         /* 🛡 护盾打造器：小盾牌 + 扳手（+X = 盾面） */
-    ctx.fillStyle = '#7fc4ff';
-    ctx.beginPath();
-    ctx.moveTo(L * 0.24, -8 * k); ctx.lineTo(L * 0.82, -6 * k);
-    ctx.lineTo(L * 0.82, 3 * k); ctx.lineTo(L * 0.53, 9 * k); ctx.lineTo(L * 0.24, 3 * k);
-    ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = '#e8f6ff'; ctx.lineWidth = 1.6 * k;
-    ctx.beginPath(); ctx.moveTo(L * 0.53, -6 * k); ctx.lineTo(L * 0.53, 7 * k); ctx.stroke();
-    ctx.strokeStyle = '#8f9aad'; ctx.lineWidth = 3 * k;               // 扳手
-    ctx.beginPath(); ctx.moveTo(-2 * k, 0); ctx.lineTo(L * 0.34, 0); ctx.stroke();
-    ctx.fillStyle = '#b9c4d4';
-    ctx.beginPath(); ctx.arc(-3 * k, 0, 4.4 * k, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#20303c';
-    ctx.beginPath(); ctx.arc(-3 * k, 0, 1.8 * k, 0, TAU); ctx.fill();
+    g.fillStyle = '#7fc4ff';
+    g.beginPath();
+    g.moveTo(L * 0.24, -8 * k); g.lineTo(L * 0.82, -6 * k);
+    g.lineTo(L * 0.82, 3 * k); g.lineTo(L * 0.53, 9 * k); g.lineTo(L * 0.24, 3 * k);
+    g.closePath(); g.fill();
+    g.strokeStyle = '#e8f6ff'; g.lineWidth = 1.6 * k;
+    g.beginPath(); g.moveTo(L * 0.53, -6 * k); g.lineTo(L * 0.53, 7 * k); g.stroke();
+    g.strokeStyle = '#8f9aad'; g.lineWidth = 3 * k;               // 扳手
+    g.beginPath(); g.moveTo(-2 * k, 0); g.lineTo(L * 0.34, 0); g.stroke();
+    g.fillStyle = '#b9c4d4';
+    g.beginPath(); g.arc(-3 * k, 0, 4.4 * k, 0, TAU); g.fill();
+    g.fillStyle = '#20303c';
+    g.beginPath(); g.arc(-3 * k, 0, 1.8 * k, 0, TAU); g.fill();
   } else if (id === 'revolver') {            /* 🤠 西部左轮：转轮 + 长枪管 + 木柄（+X = 枪口） */
-    ctx.fillStyle = '#7a4a26';                                        // 木柄
-    ctx.beginPath();
-    ctx.moveTo(L * 0.14, 1 * k); ctx.lineTo(L * 0.38, 1 * k);
-    ctx.lineTo(L * 0.26, 15 * k); ctx.lineTo(L * 0.04, 15 * k);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#a9b2c0';                                        // 枪身
-    ctx.fillRect(L * 0.02, -4.6 * k, L * 0.5, 7.6 * k);
-    ctx.fillStyle = '#c6cedb';                                        // 转轮（带弹巢）
-    ctx.beginPath(); ctx.arc(L * 0.34, 0, 6 * k, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#4a5260';
+    g.fillStyle = '#7a4a26';                                        // 木柄
+    g.beginPath();
+    g.moveTo(L * 0.14, 1 * k); g.lineTo(L * 0.38, 1 * k);
+    g.lineTo(L * 0.26, 15 * k); g.lineTo(L * 0.04, 15 * k);
+    g.closePath(); g.fill();
+    g.fillStyle = '#a9b2c0';                                        // 枪身
+    g.fillRect(L * 0.02, -4.6 * k, L * 0.5, 7.6 * k);
+    g.fillStyle = '#c6cedb';                                        // 转轮（带弹巢）
+    g.beginPath(); g.arc(L * 0.34, 0, 6 * k, 0, TAU); g.fill();
+    g.fillStyle = '#4a5260';
     for (let i = 0; i < 6; i++) {
       const a = (TAU * i) / 6 + time * 0.6;
-      ctx.beginPath(); ctx.arc(L * 0.34 + Math.cos(a) * 3.4 * k, Math.sin(a) * 3.4 * k, 1.2 * k, 0, TAU); ctx.fill();
+      g.beginPath(); g.arc(L * 0.34 + Math.cos(a) * 3.4 * k, Math.sin(a) * 3.4 * k, 1.2 * k, 0, TAU); g.fill();
     }
-    ctx.fillStyle = '#b9c4d4';                                        // 长枪管
-    ctx.fillRect(L * 0.5, -3.4 * k, L * 0.5, 5.4 * k);
-    ctx.fillStyle = '#6f7787';
-    ctx.fillRect(L * 0.5, -3.4 * k, L * 0.5, 1.8 * k);
-    ctx.fillStyle = '#23272e';
-    ctx.beginPath(); ctx.arc(L, 0, 2.8 * k, 0, TAU); ctx.fill();       // 枪口
-    ctx.strokeStyle = '#a9b2c0'; ctx.lineWidth = 2 * k;                // 扳机护圈
-    ctx.beginPath(); ctx.arc(L * 0.36, 6.4 * k, 4.6 * k, Math.PI * 0.1, Math.PI * 1.1); ctx.stroke();
-    ctx.fillStyle = '#d8b24a';                                        // 准星
-    ctx.fillRect(L * 0.94, -5.4 * k, 3 * k, 2 * k);
+    g.fillStyle = '#b9c4d4';                                        // 长枪管
+    g.fillRect(L * 0.5, -3.4 * k, L * 0.5, 5.4 * k);
+    g.fillStyle = '#6f7787';
+    g.fillRect(L * 0.5, -3.4 * k, L * 0.5, 1.8 * k);
+    g.fillStyle = '#23272e';
+    g.beginPath(); g.arc(L, 0, 2.8 * k, 0, TAU); g.fill();       // 枪口
+    g.strokeStyle = '#a9b2c0'; g.lineWidth = 2 * k;                // 扳机护圈
+    g.beginPath(); g.arc(L * 0.36, 6.4 * k, 4.6 * k, Math.PI * 0.1, Math.PI * 1.1); g.stroke();
+    g.fillStyle = '#d8b24a';                                        // 准星
+    g.fillRect(L * 0.94, -5.4 * k, 3 * k, 2 * k);
   } else if (id === 'greatsword') {          /* 🗡️ 大斩刀：宽刀身 + 长柄（+X = 刀尖） */
-    ctx.fillStyle = '#6b4a2a';                                        // 长柄
-    ctx.fillRect(-L * 0.08, -2.8 * k, L * 0.42, 5.6 * k);
-    ctx.fillStyle = '#d8b24a';
-    ctx.fillRect(L * 0.3, -5 * k, 4 * k, 10 * k);                     // 护手
-    ctx.fillStyle = '#e6eefc';                                        // 宽刀身
-    ctx.beginPath();
-    ctx.moveTo(L * 0.32, -6.4 * k); ctx.lineTo(L * 0.86, -8.6 * k);
-    ctx.lineTo(L, -4 * k); ctx.lineTo(L, 4 * k);
-    ctx.lineTo(L * 0.86, 8.6 * k); ctx.lineTo(L * 0.32, 6.4 * k);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#b9c4d4';                                        // 刀背
-    ctx.beginPath();
-    ctx.moveTo(L * 0.32, -6.4 * k); ctx.lineTo(L * 0.86, -8.6 * k); ctx.lineTo(L, -4 * k);
-    ctx.lineTo(L * 0.9, -4.4 * k); ctx.lineTo(L * 0.36, -4.6 * k);
-    ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.85)'; ctx.lineWidth = 1.2 * k;
-    ctx.beginPath(); ctx.moveTo(L * 0.4, 0); ctx.lineTo(L * 0.95, 0); ctx.stroke();
+    g.fillStyle = '#6b4a2a';                                        // 长柄
+    g.fillRect(-L * 0.08, -2.8 * k, L * 0.42, 5.6 * k);
+    g.fillStyle = '#d8b24a';
+    g.fillRect(L * 0.3, -5 * k, 4 * k, 10 * k);                     // 护手
+    g.fillStyle = '#e6eefc';                                        // 宽刀身
+    g.beginPath();
+    g.moveTo(L * 0.32, -6.4 * k); g.lineTo(L * 0.86, -8.6 * k);
+    g.lineTo(L, -4 * k); g.lineTo(L, 4 * k);
+    g.lineTo(L * 0.86, 8.6 * k); g.lineTo(L * 0.32, 6.4 * k);
+    g.closePath(); g.fill();
+    g.fillStyle = '#b9c4d4';                                        // 刀背
+    g.beginPath();
+    g.moveTo(L * 0.32, -6.4 * k); g.lineTo(L * 0.86, -8.6 * k); g.lineTo(L, -4 * k);
+    g.lineTo(L * 0.9, -4.4 * k); g.lineTo(L * 0.36, -4.6 * k);
+    g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(255,255,255,0.85)'; g.lineWidth = 1.2 * k;
+    g.beginPath(); g.moveTo(L * 0.4, 0); g.lineTo(L * 0.95, 0); g.stroke();
   } else if (id === 'drone') {               /* 🛸 无人机：四旋翼 + 机身 + 镜头（+X = 机头） */
-    ctx.strokeStyle = '#8f9aad'; ctx.lineWidth = 2.4 * k;              // X 形机架
-    ctx.beginPath();
-    ctx.moveTo(-9 * k, -9 * k); ctx.lineTo(9 * k, 9 * k);
-    ctx.moveTo(9 * k, -9 * k); ctx.lineTo(-9 * k, 9 * k);
-    ctx.stroke();
+    g.strokeStyle = '#8f9aad'; g.lineWidth = 2.4 * k;              // X 形机架
+    g.beginPath();
+    g.moveTo(-9 * k, -9 * k); g.lineTo(9 * k, 9 * k);
+    g.moveTo(9 * k, -9 * k); g.lineTo(-9 * k, 9 * k);
+    g.stroke();
     for (const [rx, ry] of [[-9, -9], [9, -9], [-9, 9], [9, 9]]) {      // 四个旋翼（转起来）
-      ctx.strokeStyle = 'rgba(207,230,255,0.85)'; ctx.lineWidth = 1.6 * k;
-      ctx.beginPath(); ctx.arc(rx * k, ry * k, 5 * k, time * 22, time * 22 + 4.6); ctx.stroke();
-      ctx.fillStyle = '#4a5260';
-      ctx.beginPath(); ctx.arc(rx * k, ry * k, 1.8 * k, 0, TAU); ctx.fill();
+      g.strokeStyle = 'rgba(207,230,255,0.85)'; g.lineWidth = 1.6 * k;
+      g.beginPath(); g.arc(rx * k, ry * k, 5 * k, time * 22, time * 22 + 4.6); g.stroke();
+      g.fillStyle = '#4a5260';
+      g.beginPath(); g.arc(rx * k, ry * k, 1.8 * k, 0, TAU); g.fill();
     }
-    ctx.fillStyle = '#cfe6ff';                                        // 机身
-    ctx.beginPath(); ctx.ellipse(0, 0, L * 0.24, 6 * k, 0, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#8fd8ff';
-    ctx.beginPath(); ctx.arc(L * 0.16, 0, 3.4 * k, 0, TAU); ctx.fill();  // 镜头（朝前）
-    ctx.fillStyle = '#2f4a63';
-    ctx.beginPath(); ctx.arc(L * 0.18, 0, 1.6 * k, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#ff8a6a';                                        // 航灯
-    ctx.beginPath(); ctx.arc(-L * 0.2, 0, 1.8 * k, 0, TAU); ctx.fill();
+    g.fillStyle = '#cfe6ff';                                        // 机身
+    g.beginPath(); g.ellipse(0, 0, L * 0.24, 6 * k, 0, 0, TAU); g.fill();
+    g.fillStyle = '#8fd8ff';
+    g.beginPath(); g.arc(L * 0.16, 0, 3.4 * k, 0, TAU); g.fill();  // 镜头（朝前）
+    g.fillStyle = '#2f4a63';
+    g.beginPath(); g.arc(L * 0.18, 0, 1.6 * k, 0, TAU); g.fill();
+    g.fillStyle = '#ff8a6a';                                        // 航灯
+    g.beginPath(); g.arc(-L * 0.2, 0, 1.8 * k, 0, TAU); g.fill();
   } else if (id === 'rocket') {              /* 🚀 火箭筒：粗管 + 握把 + 瞄具（+X = 炮口） */
-    ctx.fillStyle = '#4a5260';
-    ctx.beginPath();                                  // 发射管
-    ctx.moveTo(-L * 0.16, -8 * k); ctx.lineTo(L, -7 * k);
-    ctx.lineTo(L, 7 * k); ctx.lineTo(-L * 0.16, 8 * k);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#7a8494'; ctx.fillRect(-L * 0.14, -5 * k, L * 1.1, 3.4 * k);   // 管身高光
-    ctx.fillStyle = '#2f3a46'; ctx.fillRect(L * 0.9, -7 * k, L * 0.1, 14 * k);       // 炮口加强环
-    ctx.fillStyle = '#23272e';
-    ctx.beginPath(); ctx.arc(L, 0, 6 * k, 0, TAU); ctx.fill();                       // 炮口
-    ctx.fillStyle = '#8a6236';                                                        // 握把
-    ctx.beginPath();
-    ctx.moveTo(L * 0.1, 6 * k); ctx.lineTo(L * 0.3, 6 * k);
-    ctx.lineTo(L * 0.22, 17 * k); ctx.lineTo(L * 0.02, 17 * k);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#9aa6b8'; ctx.fillRect(-L * 0.1, -12 * k, L * 0.3, 5 * k);       // 瞄具
-    ctx.fillStyle = '#ff8a6a'; ctx.fillRect(-L * 0.2, -3 * k, 4 * k, 6 * k);          // 待发弹尾
+    g.fillStyle = '#4a5260';
+    g.beginPath();                                  // 发射管
+    g.moveTo(-L * 0.16, -8 * k); g.lineTo(L, -7 * k);
+    g.lineTo(L, 7 * k); g.lineTo(-L * 0.16, 8 * k);
+    g.closePath(); g.fill();
+    g.fillStyle = '#7a8494'; g.fillRect(-L * 0.14, -5 * k, L * 1.1, 3.4 * k);   // 管身高光
+    g.fillStyle = '#2f3a46'; g.fillRect(L * 0.9, -7 * k, L * 0.1, 14 * k);       // 炮口加强环
+    g.fillStyle = '#23272e';
+    g.beginPath(); g.arc(L, 0, 6 * k, 0, TAU); g.fill();                       // 炮口
+    g.fillStyle = '#8a6236';                                                        // 握把
+    g.beginPath();
+    g.moveTo(L * 0.1, 6 * k); g.lineTo(L * 0.3, 6 * k);
+    g.lineTo(L * 0.22, 17 * k); g.lineTo(L * 0.02, 17 * k);
+    g.closePath(); g.fill();
+    g.fillStyle = '#9aa6b8'; g.fillRect(-L * 0.1, -12 * k, L * 0.3, 5 * k);       // 瞄具
+    g.fillStyle = '#ff8a6a'; g.fillRect(-L * 0.2, -3 * k, 4 * k, 6 * k);          // 待发弹尾
   } else if (id === 'shuriken') {            /* 🌀 螺旋手里剑：四叶风车（+X = 主刃） */
-    ctx.save();
-    ctx.rotate(time * 14);
+    g.save();
+    g.rotate(time * 14);
     for (let i = 0; i < 4; i++) {
-      ctx.save();
-      ctx.rotate((TAU * i) / 4);
-      ctx.fillStyle = i % 2 ? '#b9c4d4' : '#dfe7f2';
-      ctx.beginPath();
-      ctx.moveTo(2 * k, 0);
-      ctx.lineTo(L * 0.42, -6 * k);
-      ctx.lineTo(L, -1.6 * k);
-      ctx.lineTo(L * 0.42, 2.6 * k);
-      ctx.closePath(); ctx.fill();
-      ctx.restore();
+      g.save();
+      g.rotate((TAU * i) / 4);
+      g.fillStyle = i % 2 ? '#b9c4d4' : '#dfe7f2';
+      g.beginPath();
+      g.moveTo(2 * k, 0);
+      g.lineTo(L * 0.42, -6 * k);
+      g.lineTo(L, -1.6 * k);
+      g.lineTo(L * 0.42, 2.6 * k);
+      g.closePath(); g.fill();
+      g.restore();
     }
-    ctx.fillStyle = '#8fd8ff';
-    ctx.beginPath(); ctx.arc(0, 0, 5.4 * k, 0, TAU); ctx.fill();     // 中心轮
-    ctx.fillStyle = '#2f4a63';
-    ctx.beginPath(); ctx.arc(0, 0, 2.4 * k, 0, TAU); ctx.fill();
-    ctx.restore();
+    g.fillStyle = '#8fd8ff';
+    g.beginPath(); g.arc(0, 0, 5.4 * k, 0, TAU); g.fill();     // 中心轮
+    g.fillStyle = '#2f4a63';
+    g.beginPath(); g.arc(0, 0, 2.4 * k, 0, TAU); g.fill();
+    g.restore();
   } else if (id === 'gearset') {             /* ⚙️ 齿轮组：带齿的齿轮（自己会转） */
     const teeth = 8, R0 = L * 0.42;
-    ctx.save();
-    ctx.rotate(time * 5);
-    ctx.fillStyle = '#8f9aad';    for (let i = 0; i < teeth; i++) {                 // 齿
+    g.save();
+    g.rotate(time * 5);
+    g.fillStyle = '#8f9aad';    for (let i = 0; i < teeth; i++) {                 // 齿
       const a = (TAU * i) / teeth;
-      ctx.save();
-      ctx.rotate(a);
-      ctx.fillRect(R0 * 0.86, -3.2 * k, R0 * 0.4, 6.4 * k);
-      ctx.restore();
+      g.save();
+      g.rotate(a);
+      g.fillRect(R0 * 0.86, -3.2 * k, R0 * 0.4, 6.4 * k);
+      g.restore();
     }
-    ctx.fillStyle = '#b9c4d4';
-    ctx.beginPath(); ctx.arc(0, 0, R0, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#5d6675';
-    ctx.beginPath(); ctx.arc(0, 0, R0 * 0.42, 0, TAU); ctx.fill();   // 轴孔
-    ctx.fillStyle = '#2f3a46';
-    ctx.beginPath(); ctx.arc(0, 0, R0 * 0.2, 0, TAU); ctx.fill();
-    ctx.strokeStyle = '#7a8494'; ctx.lineWidth = 2 * k;              // 辐条
+    g.fillStyle = '#b9c4d4';
+    g.beginPath(); g.arc(0, 0, R0, 0, TAU); g.fill();
+    g.fillStyle = '#5d6675';
+    g.beginPath(); g.arc(0, 0, R0 * 0.42, 0, TAU); g.fill();   // 轴孔
+    g.fillStyle = '#2f3a46';
+    g.beginPath(); g.arc(0, 0, R0 * 0.2, 0, TAU); g.fill();
+    g.strokeStyle = '#7a8494'; g.lineWidth = 2 * k;              // 辐条
     for (let i = 0; i < 3; i++) {
       const a = (TAU * i) / 3 + time * 5;
-      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * R0 * 0.8, Math.sin(a) * R0 * 0.8); ctx.stroke();
+      g.beginPath(); g.moveTo(0, 0); g.lineTo(Math.cos(a) * R0 * 0.8, Math.sin(a) * R0 * 0.8); g.stroke();
     }
-    ctx.restore();
+    g.restore();
   } else if (id === 'gearfield') {           /* 🛞 齿轮领域：金色巨齿轮（比齿轮组更大更亮） */
     const teeth = 10, R0 = L * 0.44;
-    ctx.save();
-    ctx.rotate(time * 4);
-    ctx.fillStyle = '#c9a227';
+    g.save();
+    g.rotate(time * 4);
+    g.fillStyle = '#c9a227';
     for (let i = 0; i < teeth; i++) {
       const a = (TAU * i) / teeth;
-      ctx.save(); ctx.rotate(a);
-      ctx.fillRect(R0 * 0.84, -4 * k, R0 * 0.44, 8 * k);
-      ctx.restore();
+      g.save(); g.rotate(a);
+      g.fillRect(R0 * 0.84, -4 * k, R0 * 0.44, 8 * k);
+      g.restore();
     }
-    ctx.fillStyle = '#ffd166';
-    ctx.beginPath(); ctx.arc(0, 0, R0, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#8a6a1a';
-    ctx.beginPath(); ctx.arc(0, 0, R0 * 0.44, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#fff3c4';
-    ctx.beginPath(); ctx.arc(0, 0, R0 * 0.22, 0, TAU); ctx.fill();
-    ctx.strokeStyle = '#ffe9a8'; ctx.lineWidth = 2.6 * k;
+    g.fillStyle = '#ffd166';
+    g.beginPath(); g.arc(0, 0, R0, 0, TAU); g.fill();
+    g.fillStyle = '#8a6a1a';
+    g.beginPath(); g.arc(0, 0, R0 * 0.44, 0, TAU); g.fill();
+    g.fillStyle = '#fff3c4';
+    g.beginPath(); g.arc(0, 0, R0 * 0.22, 0, TAU); g.fill();
+    g.strokeStyle = '#ffe9a8'; g.lineWidth = 2.6 * k;
     for (let i = 0; i < 4; i++) {
       const a = (TAU * i) / 4 + time * 4;
-      ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(Math.cos(a) * R0 * 0.82, Math.sin(a) * R0 * 0.82); ctx.stroke();
+      g.beginPath(); g.moveTo(0, 0); g.lineTo(Math.cos(a) * R0 * 0.82, Math.sin(a) * R0 * 0.82); g.stroke();
     }
-    ctx.restore();
+    g.restore();
   } else if (id === 'gatling') {             /* 🧨 加特林机枪：六根转管 + 弹鼓（+X = 枪口） */
-    ctx.save();
-    ctx.rotate(time * 22);                            // 转管
+    g.save();
+    g.rotate(time * 22);                            // 转管
     for (let i = 0; i < 6; i++) {
-      ctx.save();
-      ctx.rotate((TAU * i) / 6);
-      ctx.fillStyle = i % 2 ? '#6f7787' : '#8f9aad';
-      ctx.fillRect(L * 0.2, -2.4 * k, L * 0.82, 4.8 * k);
-      ctx.restore();
+      g.save();
+      g.rotate((TAU * i) / 6);
+      g.fillStyle = i % 2 ? '#6f7787' : '#8f9aad';
+      g.fillRect(L * 0.2, -2.4 * k, L * 0.82, 4.8 * k);
+      g.restore();
     }
-    ctx.restore();
-    ctx.fillStyle = '#3d4450';                        // 机匣
-    ctx.fillRect(-L * 0.1, -8 * k, L * 0.36, 16 * k);
-    ctx.fillStyle = '#4a5260';
-    ctx.beginPath(); ctx.arc(L * 0.06, 0, 9 * k, 0, TAU); ctx.fill();   // 弹鼓
-    ctx.fillStyle = '#b9c4d4';
-    ctx.beginPath(); ctx.arc(L * 0.06, 0, 5 * k, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#8a6236';                        // 握把
-    ctx.beginPath();
-    ctx.moveTo(-L * 0.06, 7 * k); ctx.lineTo(L * 0.1, 7 * k);
-    ctx.lineTo(L * 0.04, 17 * k); ctx.lineTo(-L * 0.12, 17 * k);
-    ctx.closePath(); ctx.fill();
+    g.restore();
+    g.fillStyle = '#3d4450';                        // 机匣
+    g.fillRect(-L * 0.1, -8 * k, L * 0.36, 16 * k);
+    g.fillStyle = '#4a5260';
+    g.beginPath(); g.arc(L * 0.06, 0, 9 * k, 0, TAU); g.fill();   // 弹鼓
+    g.fillStyle = '#b9c4d4';
+    g.beginPath(); g.arc(L * 0.06, 0, 5 * k, 0, TAU); g.fill();
+    g.fillStyle = '#8a6236';                        // 握把
+    g.beginPath();
+    g.moveTo(-L * 0.06, 7 * k); g.lineTo(L * 0.1, 7 * k);
+    g.lineTo(L * 0.04, 17 * k); g.lineTo(-L * 0.12, 17 * k);
+    g.closePath(); g.fill();
   } else if (id === 'katana') {              /* 🌙 浪人武士刀：弯刀身 + 圆镡 + 缠柄（+X = 刀尖） */
-    ctx.save();
-    ctx.beginPath();                                  // 弧线刀身
-    ctx.moveTo(L * 0.3, 3.4 * k);
-    ctx.quadraticCurveTo(L * 0.7, -2.4 * k, L, -7 * k);
-    ctx.quadraticCurveTo(L * 0.7, -0.4 * k, L * 0.3, 5.4 * k);
-    ctx.closePath();
-    ctx.fillStyle = '#e6eefc'; ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.9)'; ctx.lineWidth = 1.2 * k;
-    ctx.beginPath(); ctx.moveTo(L * 0.36, 3.4 * k); ctx.quadraticCurveTo(L * 0.7, -1.4 * k, L * 0.96, -6 * k); ctx.stroke();
-    ctx.restore();
-    ctx.fillStyle = '#2f3a46';                        // 圆镡
-    ctx.beginPath(); ctx.ellipse(L * 0.28, 2.4 * k, 3.2 * k, 7 * k, 0, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#3a3f52';                        // 缠柄
-    ctx.fillRect(-L * 0.08, 0.6 * k, L * 0.36, 5 * k);
-    ctx.strokeStyle = '#d8d8d8'; ctx.lineWidth = 1 * k;
+    g.save();
+    g.beginPath();                                  // 弧线刀身
+    g.moveTo(L * 0.3, 3.4 * k);
+    g.quadraticCurveTo(L * 0.7, -2.4 * k, L, -7 * k);
+    g.quadraticCurveTo(L * 0.7, -0.4 * k, L * 0.3, 5.4 * k);
+    g.closePath();
+    g.fillStyle = '#e6eefc'; g.fill();
+    g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = 1.2 * k;
+    g.beginPath(); g.moveTo(L * 0.36, 3.4 * k); g.quadraticCurveTo(L * 0.7, -1.4 * k, L * 0.96, -6 * k); g.stroke();
+    g.restore();
+    g.fillStyle = '#2f3a46';                        // 圆镡
+    g.beginPath(); g.ellipse(L * 0.28, 2.4 * k, 3.2 * k, 7 * k, 0, 0, TAU); g.fill();
+    g.fillStyle = '#3a3f52';                        // 缠柄
+    g.fillRect(-L * 0.08, 0.6 * k, L * 0.36, 5 * k);
+    g.strokeStyle = '#d8d8d8'; g.lineWidth = 1 * k;
     for (let i = 0; i < 4; i++) {
       const x = -L * 0.05 + i * L * 0.1;
-      ctx.beginPath(); ctx.moveTo(x, 0.6 * k); ctx.lineTo(x + L * 0.06, 5.6 * k); ctx.stroke();
+      g.beginPath(); g.moveTo(x, 0.6 * k); g.lineTo(x + L * 0.06, 5.6 * k); g.stroke();
     }
   } else if (id === 'regen') {               /* 💉 生命再生器：针筒 + 十字 + 药液（+X = 针头） */
-    ctx.fillStyle = '#dfe7f2';                        // 筒身
-    ctx.fillRect(-L * 0.16, -6 * k, L * 0.7, 12 * k);
-    ctx.fillStyle = '#7fe08a';                        // 药液
-    ctx.fillRect(-L * 0.14, -4.4 * k, L * 0.4, 8.8 * k);
-    ctx.fillStyle = '#b9c4d4';
-    ctx.fillRect(L * 0.54, -2 * k, L * 0.26, 4 * k);  // 筒口
-    ctx.fillRect(-L * 0.34, -2 * k, L * 0.18, 4 * k); // 推杆
-    ctx.fillStyle = '#8f9aad'; ctx.fillRect(-L * 0.4, -6 * k, 3 * k, 12 * k);
-    ctx.strokeStyle = '#e8eefc'; ctx.lineWidth = 2 * k;
-    ctx.beginPath(); ctx.moveTo(L * 0.8, 0); ctx.lineTo(L, 0); ctx.stroke();   // 针头
-    ctx.fillStyle = '#ffffff';                        // 红十字
-    ctx.fillRect(-L * 0.02, -8.6 * k, 3 * k, 9 * k);
-    ctx.fillRect(-L * 0.12, -6.6 * k, 12 * k, 3 * k);
+    g.fillStyle = '#dfe7f2';                        // 筒身
+    g.fillRect(-L * 0.16, -6 * k, L * 0.7, 12 * k);
+    g.fillStyle = '#7fe08a';                        // 药液
+    g.fillRect(-L * 0.14, -4.4 * k, L * 0.4, 8.8 * k);
+    g.fillStyle = '#b9c4d4';
+    g.fillRect(L * 0.54, -2 * k, L * 0.26, 4 * k);  // 筒口
+    g.fillRect(-L * 0.34, -2 * k, L * 0.18, 4 * k); // 推杆
+    g.fillStyle = '#8f9aad'; g.fillRect(-L * 0.4, -6 * k, 3 * k, 12 * k);
+    g.strokeStyle = '#e8eefc'; g.lineWidth = 2 * k;
+    g.beginPath(); g.moveTo(L * 0.8, 0); g.lineTo(L, 0); g.stroke();   // 针头
+    g.fillStyle = '#ffffff';                        // 红十字
+    g.fillRect(-L * 0.02, -8.6 * k, 3 * k, 9 * k);
+    g.fillRect(-L * 0.12, -6.6 * k, 12 * k, 3 * k);
   } else if (id === 'prism') {               /* 🔷 泰拉棱镜：悬浮水晶（会转） */
-    ctx.save();
-    ctx.rotate(time * 1.6);
-    ctx.fillStyle = '#9adcff';
-    ctx.beginPath();
-    ctx.moveTo(L * 0.44, 0); ctx.lineTo(0, -9 * k); ctx.lineTo(-L * 0.34, 0); ctx.lineTo(0, 9 * k);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.75)';
-    ctx.beginPath();
-    ctx.moveTo(L * 0.44, 0); ctx.lineTo(0, -9 * k); ctx.lineTo(-L * 0.02, 0);
-    ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 1 * k;
-    ctx.beginPath(); ctx.moveTo(-L * 0.34, 0); ctx.lineTo(L * 0.44, 0); ctx.stroke();
-    ctx.restore();
+    g.save();
+    g.rotate(time * 1.6);
+    g.fillStyle = '#9adcff';
+    g.beginPath();
+    g.moveTo(L * 0.44, 0); g.lineTo(0, -9 * k); g.lineTo(-L * 0.34, 0); g.lineTo(0, 9 * k);
+    g.closePath(); g.fill();
+    g.fillStyle = 'rgba(255,255,255,0.75)';
+    g.beginPath();
+    g.moveTo(L * 0.44, 0); g.lineTo(0, -9 * k); g.lineTo(-L * 0.02, 0);
+    g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(255,255,255,0.8)'; g.lineWidth = 1 * k;
+    g.beginPath(); g.moveTo(-L * 0.34, 0); g.lineTo(L * 0.44, 0); g.stroke();
+    g.restore();
   } else if (id === 'prismblade') {          /* 🔷 飞剑（棱镜召唤的）：水晶刃 + 光核 */
-    ctx.fillStyle = '#cfe6ff';
-    ctx.beginPath();
-    ctx.moveTo(L, 0); ctx.lineTo(L * 0.24, -4.4 * k); ctx.lineTo(-L * 0.12, -2.4 * k);
-    ctx.lineTo(-L * 0.12, 2.4 * k); ctx.lineTo(L * 0.24, 4.4 * k);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#6f7787'; ctx.fillRect(-L * 0.24, -2 * k, L * 0.14, 4 * k);
-    ctx.fillStyle = '#9adcff';
-    ctx.beginPath(); ctx.arc(L * 0.16, 0, 2.6 * k, 0, TAU); ctx.fill();
+    g.fillStyle = '#cfe6ff';
+    g.beginPath();
+    g.moveTo(L, 0); g.lineTo(L * 0.24, -4.4 * k); g.lineTo(-L * 0.12, -2.4 * k);
+    g.lineTo(-L * 0.12, 2.4 * k); g.lineTo(L * 0.24, 4.4 * k);
+    g.closePath(); g.fill();
+    g.fillStyle = '#6f7787'; g.fillRect(-L * 0.24, -2 * k, L * 0.14, 4 * k);
+    g.fillStyle = '#9adcff';
+    g.beginPath(); g.arc(L * 0.16, 0, 2.6 * k, 0, TAU); g.fill();
   } else if (id === 'banner') {              /* 🚩 领袖旗帜：旗杆 + 飘动的旗面（+X = 旗顶） */
-    ctx.strokeStyle = '#8a6236'; ctx.lineWidth = 3 * k;
-    ctx.beginPath(); ctx.moveTo(-L * 0.1, 12 * k); ctx.lineTo(-L * 0.1, -12 * k); ctx.stroke();
-    ctx.fillStyle = '#d94f4f';
-    ctx.beginPath();
-    ctx.moveTo(-L * 0.06, -11 * k);
-    ctx.quadraticCurveTo(L * 0.4, -8 * k + Math.sin(time * 4) * 2 * k, L * 0.9, -6 * k);
-    ctx.lineTo(L * 0.9, 4 * k);
-    ctx.quadraticCurveTo(L * 0.4, 2 * k + Math.sin(time * 4 + 1) * 2 * k, -L * 0.06, -1 * k);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#ffd166';                        // 金色齿轮徽记
-    ctx.beginPath(); ctx.arc(L * 0.42, -1.4 * k, 3.6 * k, 0, TAU); ctx.fill();
-    ctx.fillStyle = '#d94f4f';
-    ctx.beginPath(); ctx.arc(L * 0.42, -1.4 * k, 1.6 * k, 0, TAU); ctx.fill();
+    g.strokeStyle = '#8a6236'; g.lineWidth = 3 * k;
+    g.beginPath(); g.moveTo(-L * 0.1, 12 * k); g.lineTo(-L * 0.1, -12 * k); g.stroke();
+    g.fillStyle = '#d94f4f';
+    g.beginPath();
+    g.moveTo(-L * 0.06, -11 * k);
+    g.quadraticCurveTo(L * 0.4, -8 * k + Math.sin(time * 4) * 2 * k, L * 0.9, -6 * k);
+    g.lineTo(L * 0.9, 4 * k);
+    g.quadraticCurveTo(L * 0.4, 2 * k + Math.sin(time * 4 + 1) * 2 * k, -L * 0.06, -1 * k);
+    g.closePath(); g.fill();
+    g.fillStyle = '#ffd166';                        // 金色齿轮徽记
+    g.beginPath(); g.arc(L * 0.42, -1.4 * k, 3.6 * k, 0, TAU); g.fill();
+    g.fillStyle = '#d94f4f';
+    g.beginPath(); g.arc(L * 0.42, -1.4 * k, 1.6 * k, 0, TAU); g.fill();
   } else if (id === 'gauntlet') {            /* 🧤 无限手套：金手套 + 六颗宝石（+X = 指向前方） */
-    ctx.fillStyle = '#c9a227';
-    ctx.beginPath();
-    ctx.moveTo(-L * 0.3, -9 * k); ctx.lineTo(L * 0.24, -8 * k);
-    ctx.lineTo(L * 0.42, 0); ctx.lineTo(L * 0.24, 8 * k); ctx.lineTo(-L * 0.3, 9 * k);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#ffd166'; ctx.fillRect(-L * 0.28, -6 * k, L * 0.5, 12 * k);
+    g.fillStyle = '#c9a227';
+    g.beginPath();
+    g.moveTo(-L * 0.3, -9 * k); g.lineTo(L * 0.24, -8 * k);
+    g.lineTo(L * 0.42, 0); g.lineTo(L * 0.24, 8 * k); g.lineTo(-L * 0.3, 9 * k);
+    g.closePath(); g.fill();
+    g.fillStyle = '#ffd166'; g.fillRect(-L * 0.28, -6 * k, L * 0.5, 12 * k);
     const gems = ['#7fd4ff', '#c79bff', '#ff6a5a', '#ffb24a', '#7fe08a', '#ffd166'];
     for (let i = 0; i < 6; i++) {
-      ctx.fillStyle = gems[i];
-      ctx.beginPath();
-      ctx.arc(-L * 0.2 + (i % 3) * L * 0.22, (i < 3 ? -3.4 : 3.4) * k, 2.8 * k, 0, TAU);
-      ctx.fill();
+      g.fillStyle = gems[i];
+      g.beginPath();
+      g.arc(-L * 0.2 + (i % 3) * L * 0.22, (i < 3 ? -3.4 : 3.4) * k, 2.8 * k, 0, TAU);
+      g.fill();
     }
-    ctx.fillStyle = '#8a6a1a';                        // 手套口
-    ctx.fillRect(-L * 0.42, -10 * k, L * 0.14, 20 * k);
+    g.fillStyle = '#8a6a1a';                        // 手套口
+    g.fillRect(-L * 0.42, -10 * k, L * 0.14, 20 * k);
   } else if (id === 'holy') {                /* ⚜️ 圣剑：白金剑身 + 十字护手 + 圣光（+X = 剑尖） */
-    ctx.fillStyle = '#d8b24a';                        // 长柄
-    ctx.fillRect(-L * 0.14, -2.6 * k, L * 0.4, 5.2 * k);
-    ctx.fillStyle = '#fff3c4';                        // 十字护手
-    ctx.fillRect(L * 0.24, -9 * k, 5 * k, 18 * k);
-    ctx.fillRect(L * 0.26, -3 * k, 10 * k, 3 * k);
-    ctx.fillStyle = '#f4f8ff';                        // 剑身
-    ctx.beginPath();
-    ctx.moveTo(L * 0.26, -4.4 * k); ctx.lineTo(L * 0.86, -2.6 * k);
-    ctx.lineTo(L, 0);
-    ctx.lineTo(L * 0.86, 2.6 * k); ctx.lineTo(L * 0.26, 4.4 * k);
-    ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,209,102,0.9)'; ctx.lineWidth = 1.4 * k;
-    ctx.beginPath(); ctx.moveTo(L * 0.32, 0); ctx.lineTo(L * 0.96, 0); ctx.stroke();
-    ctx.globalAlpha = 0.35; ctx.fillStyle = '#ffe9a8';
-    ctx.beginPath(); ctx.ellipse(L * 0.6, 0, L * 0.4, 8 * k, 0, 0, TAU); ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = '#d8b24a';
-    ctx.beginPath(); ctx.arc(-L * 0.14, 0, 3.4 * k, 0, TAU); ctx.fill();
+    g.fillStyle = '#d8b24a';                        // 长柄
+    g.fillRect(-L * 0.14, -2.6 * k, L * 0.4, 5.2 * k);
+    g.fillStyle = '#fff3c4';                        // 十字护手
+    g.fillRect(L * 0.24, -9 * k, 5 * k, 18 * k);
+    g.fillRect(L * 0.26, -3 * k, 10 * k, 3 * k);
+    g.fillStyle = '#f4f8ff';                        // 剑身
+    g.beginPath();
+    g.moveTo(L * 0.26, -4.4 * k); g.lineTo(L * 0.86, -2.6 * k);
+    g.lineTo(L, 0);
+    g.lineTo(L * 0.86, 2.6 * k); g.lineTo(L * 0.26, 4.4 * k);
+    g.closePath(); g.fill();
+    g.strokeStyle = 'rgba(255,209,102,0.9)'; g.lineWidth = 1.4 * k;
+    g.beginPath(); g.moveTo(L * 0.32, 0); g.lineTo(L * 0.96, 0); g.stroke();
+    g.globalAlpha = 0.35; g.fillStyle = '#ffe9a8';
+    g.beginPath(); g.ellipse(L * 0.6, 0, L * 0.4, 8 * k, 0, 0, TAU); g.fill();
+    g.globalAlpha = 1;
+    g.fillStyle = '#d8b24a';
+    g.beginPath(); g.arc(-L * 0.14, 0, 3.4 * k, 0, TAU); g.fill();
   } else {                                    /* 旧武器（短匕/长枪/战锤/双刀）：保留简笔画兼容 */
-    ctx.strokeStyle = '#6b4a2a'; ctx.lineWidth = 3.2 * k;
-    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(L * 0.34, 0); ctx.stroke();
-    ctx.strokeStyle = wmWeaponCol(id); ctx.lineWidth = id === 'hammer' ? 5 * k : 3 * k;
-    ctx.beginPath(); ctx.moveTo(L * 0.3, 0); ctx.lineTo(L, 0); ctx.stroke();
-    if (id === 'hammer') { ctx.fillStyle = wmWeaponCol(id); ctx.fillRect(L - 4 * k, -7 * k, 9 * k, 14 * k); }
-    else if (id === 'spear') { ctx.fillStyle = '#e8eefc'; ctx.beginPath(); ctx.moveTo(L + 8 * k, 0); ctx.lineTo(L - 3 * k, -4.5 * k); ctx.lineTo(L - 3 * k, 4.5 * k); ctx.closePath(); ctx.fill(); }
-    else if (id === 'dagger') { ctx.fillStyle = '#e8eefc'; ctx.beginPath(); ctx.moveTo(L + 4 * k, 0); ctx.lineTo(L - 4 * k, -4 * k); ctx.lineTo(L - 4 * k, 4 * k); ctx.closePath(); ctx.fill(); }
+    g.strokeStyle = '#6b4a2a'; g.lineWidth = 3.2 * k;
+    g.beginPath(); g.moveTo(0, 0); g.lineTo(L * 0.34, 0); g.stroke();
+    g.strokeStyle = wmWeaponCol(id); g.lineWidth = id === 'hammer' ? 5 * k : 3 * k;
+    g.beginPath(); g.moveTo(L * 0.3, 0); g.lineTo(L, 0); g.stroke();
+    if (id === 'hammer') { g.fillStyle = wmWeaponCol(id); g.fillRect(L - 4 * k, -7 * k, 9 * k, 14 * k); }
+    else if (id === 'spear') { g.fillStyle = '#e8eefc'; g.beginPath(); g.moveTo(L + 8 * k, 0); g.lineTo(L - 3 * k, -4.5 * k); g.lineTo(L - 3 * k, 4.5 * k); g.closePath(); g.fill(); }
+    else if (id === 'dagger') { g.fillStyle = '#e8eefc'; g.beginPath(); g.moveTo(L + 4 * k, 0); g.lineTo(L - 4 * k, -4 * k); g.lineTo(L - 4 * k, 4 * k); g.closePath(); g.fill(); }
   }
-  ctx.restore();
+  g.restore();
 }
 function drawWMPlayer() {
   dbgWMCornerDrawN = 0;                       // 本帧真正画出来的四角武器数（闪烁帧整体不画 = 0）
@@ -25906,7 +25952,7 @@ function drawWMPlayer() {
       ctx.save();
       ctx.translate(-12 + i * 12, 6);
       ctx.rotate(0.5 + i * 0.18);
-      wmDrawWeapon(bag[i].id, 22, 0.9);
+      wmBlitWeapon(bag[i].id, 22, 0.9);
       ctx.restore();
     }
   }
@@ -25927,7 +25973,7 @@ function drawWMPlayer() {
     ctx.globalAlpha = 1;
     ctx.rotate(wmDrawAim(aim, dbgWMCornerAims));  // ← 朝向跟着鼠标改变（远程直接指向指针；记录的就是这里用的角）
     ctx.translate(((an.sw || 0) / WM_SWING_T) * 9 - ((an.rc || 0) / WM_RECOIL_T) * 6, 0);
-    wmDrawWeapon(eqAll[i].id, 30, 1);
+    wmBlitWeapon(eqAll[i].id, 30, 1);
     ctx.restore();
     dbgWMCornerDrawN++;
   }
@@ -25948,7 +25994,7 @@ function drawWMPlayer() {
       ctx.globalAlpha = 0.95;
       ctx.rotate(wmDrawAim(aim, dbgWMMusouAims));   // ← 和四角武器同款：朝向跟着指针（记录的就是这里用的角）
       ctx.translate(((an.sw || 0) / WM_SWING_T) * 8 - ((an.rc || 0) / WM_RECOIL_T) * 5, 0);
-      wmDrawWeapon(bag[i].id, 26, 0.95);
+      wmBlitWeapon(bag[i].id, 26, 0.95);
       ctx.restore();
       dbgWMMusouHeadDrawN++;
       dbgWMMusouHeadFace = +p.face.toFixed(3);
