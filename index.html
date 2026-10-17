@@ -1817,15 +1817,18 @@ window.__musouPixelInfo = () => ({
    ============================================================ */
 const PX_MODEL = Object.create(null);
 
-/* 眼睛：眼白 2×2 + 瞳孔 1px + 高光（像素画的灵魂就在这三点） */
+/* 眼睛：**1px 竖瞳**（7px 宽的头里，2×2 眼白会把脸压满，看着像外星人 —— 用户明确说丑）。
+   像素画里小角色就是「一竖点」最传神；只有巨眼生物（史莱姆 / 独眼）才走 big 版。
+   ⚠️ 别再加眼白：`headR` 3.3~3.7 时头只有 7px 宽，两眼 + 眼白会占掉 4/7。 */
 function pxEye(px, x, y, pal, big) {
   if (big) {
-    pxRect(px, x, y, 3, 3, pal.w);
-    pxRect(px, x + 1, y, 2, 2, pal.e);
-    pxPut(px, x + 1, y, pxCI(px, '#ffffff'));
-  } else {
+    /* 巨眼（史莱姆 / 眼球怪）：2×2 眼白 + 1px 深瞳 + 左上高光 */
     pxRect(px, x, y, 2, 2, pal.w);
     pxPut(px, x + 1, y + 1, pxCI(px, pal.e));
+    pxPut(px, x, y, pxCI(px, '#ffffff'));
+  } else {
+    /* 普通角色：1 宽 × 2 高 的深色竖瞳（不画眼白） */
+    pxRect(px, x, y, 1, 2, pal.e);
   }
 }
 
@@ -1868,11 +1871,24 @@ function pxHumanoid(px, f, mode, cfg, pal) {
   /* —— 腿（两条，交替摆动）—— */
   const lx1 = cx - 1.8, lx2 = cx + 1.8;
   const swing1 = legPh * 1.7, swing2 = -legPh * 1.7;
-  pxCapsule(px, lx1, hipY, lx1 + swing1, footY, 1.25, pal.d);
-  pxCapsule(px, lx2, hipY, lx2 + swing2, footY, 1.25, pal.d);
-  /* 靴子 */
-  pxRect(px, Math.round(lx1 + swing1) - 1, footY - 1, 3, 2, pal.dd);
-  pxRect(px, Math.round(lx2 + swing2) - 1, footY - 1, 3, 2, pal.dd);
+  if (c.hakama) {
+    /* 👘 **袴**（和服宽裤裙）：梯形裤裙 + 两侧襞（褶线）+ 草鞋 —— 浪客的武士辨识度主要靠它
+       （原来的两条细腿完全看不出是武士，用户说「不如原版、看不见武士元素」）。 */
+    pxPoly(px, [[cx - 2.6, hipY - 0.4], [cx + 2.6, hipY - 0.4],
+                [cx + 4.6 + swing2 * 0.5, footY - 1.2], [cx - 4.6 + swing1 * 0.5, footY - 1.2]], pal.d);
+    /* 襞（褶）：两条竖向暗线 */
+    pxLine(px, cx - 1.4, hipY + 0.6, cx - 2.6 + swing1 * 0.5, footY - 1.6, pal.dd, 1);
+    pxLine(px, cx + 1.4, hipY + 0.6, cx + 2.6 + swing2 * 0.5, footY - 1.6, pal.dd, 1);
+    /* 草鞋 */
+    pxRect(px, Math.round(cx - 5.4 + swing1 * 0.5), footY - 1, 4, 2, '#2a2418');
+    pxRect(px, Math.round(cx + 1.4 + swing2 * 0.5), footY - 1, 4, 2, '#2a2418');
+  } else {
+    pxCapsule(px, lx1, hipY, lx1 + swing1, footY, 1.25, pal.d);
+    pxCapsule(px, lx2, hipY, lx2 + swing2, footY, 1.25, pal.d);
+    /* 靴子 */
+    pxRect(px, Math.round(lx1 + swing1) - 1, footY - 1, 3, 2, pal.dd);
+    pxRect(px, Math.round(lx2 + swing2) - 1, footY - 1, 3, 2, pal.dd);
+  }
 
   /* —— 躯干：上宽下窄的胸甲 —— */
   pxBall(px, cx, (shY + hipY) / 2, halfW, (hipY - shY) / 2 + 1.4, pal.l, pal.b, pal.d, pal.dd, false);
@@ -1880,6 +1896,23 @@ function pxHumanoid(px, f, mode, cfg, pal) {
     pxRect(px, cx - 1, shY + 1, 2, 4, pal.m);
     pxRect(px, cx - 1, shY + 1, 1, 4, pal.ml);
     pxRect(px, cx - halfW, hipY - 1, Math.round(halfW * 2), 1, pal.ad);   // 腰带
+  }
+  if (c.kimono) {
+    /* 👘 **着物交领 + 羽织前襟 + 白帯 + 家纹**（浪客）：
+       这些细节才是"武士"读感，比腿部更能一眼认出来。 */
+    /* 交领（白色 V 领） */
+    pxLine(px, cx - 2.2, shY + 0.6, cx, hipY - 1, '#e8e4d8', 1.2);
+    pxLine(px, cx + 2.2, shY + 0.6, cx, hipY - 1, '#e8e4d8', 1.2);
+    /* 羽织前襟（两侧深色竖条） */
+    pxRect(px, cx - Math.round(halfW), shY + 0.8, 1, Math.round(hipY - shY) - 1, pal.dd);
+    pxRect(px, cx + Math.round(halfW) - 1, shY + 0.8, 1, Math.round(hipY - shY) - 1, pal.dd);
+    /* 白帯（腰带）+ 结 */
+    pxRect(px, cx - Math.round(halfW), hipY - 2, Math.round(halfW * 2) + 1, 2, '#e8e4d8');
+    pxRect(px, cx - Math.round(halfW), hipY - 2, Math.round(halfW * 2) + 1, 1, '#fffdf4');
+    pxPut(px, cx - 1, hipY - 1, pxCI(px, '#c9c2a8'));
+    /* 家纹（胸前小圆 = 圆 + 月牙） */
+    pxEll(px, cx - 2, shY + 3, 1.9, 1.9, '#e8e4d8');
+    pxEll(px, cx - 1.4, shY + 2.6, 1.3, 1.3, pal.dd);
   }
   /* 肩甲 */
   pxBall(px, cx - halfW - 0.2, shY + 0.2, 1.9, 1.7, pal.ml, pal.m, pal.md, null, false);
@@ -1958,6 +1991,24 @@ function pxHumanoid(px, f, mode, cfg, pal) {
       pxPut(px, Math.round(cx - headR - 2.6), Math.round(headY - 7), pxCI(px, '#ffe9a8'));
       pxPut(px, Math.round(cx + headR + 2.6), Math.round(headY - 7), pxCI(px, '#fff6d0'));
     }
+    /* 👘 **丁髷（武士发髻）**：月代（头顶剃光）+ 两侧鬓发 + 头顶小辫 + 发髻。
+       浪客没有头盔，靠这个 + 袴 + 家纹才认得出是武士（用户原话「看不见武士的元素在哪里」）。
+       ⚠️ 画在头盔**之后**、眼睛**之前**（发髻在头顶，不遮脸）。 */
+    if (c.topknot) {
+      const hairC = '#151827', hairD = '#0b0d15';
+      /* 两侧鬓发（贴着头的下半圈） */
+      pxRect(px, Math.round(cx - headR - 0.6), Math.round(headY - 1), 1, Math.round(headR * 1.3), hairC);
+      pxRect(px, Math.round(cx + headR - 0.4), Math.round(headY - 1), 1, Math.round(headR * 1.3), hairC);
+      /* 后脑发（上半圈暗色） */
+      pxEll(px, cx, headY - headR * 0.42, headR * 0.98, headR * 0.62, hairC);
+      pxEll(px, cx, headY - headR * 0.62, headR * 0.9, headR * 0.4, hairD);
+      /* 小辫（竖）+ 发髻（顶端圆球） */
+      pxRect(px, cx - 1, Math.round(headY - headR - 2.4), 2, 3, hairC);
+      pxEll(px, cx, headY - headR - 3.4, 1.9, 1.6, hairC);
+      pxEll(px, cx - 0.6, headY - headR - 3.8, 1.0, 0.8, '#2b3040');   // 发髻高光
+      /* 系发绳 */
+      pxRect(px, cx - 2, Math.round(headY - headR - 1.6), 4, 1, '#c9b8ff');
+    }
   }
 
   /* —— 眼睛 ——
@@ -1965,8 +2016,10 @@ function pxHumanoid(px, f, mode, cfg, pal) {
      全被头盔盖掉了，角色看起来「没有眼睛」＝没有表情、不像生物（本轮踩过）。
      现在：有头盔的往下让到「帽檐下方」一行，露出来；兜帽/无盔的照常画在脸中央。 */
   const eyeY = (hk && hk !== 'hood' && hk !== 'wizard') ? headY + 0.6 : headY - 1;
-  pxEye(px, cx - 2, eyeY, pal, !!c.bigEye);
-  pxEye(px, cx + 1, eyeY, pal, !!c.bigEye);
+  /* 两眼间距：巨眼版留 1px 缝（2 宽），普通版留 2px 缝（1 宽） */
+  const eyeDx = c.bigEye ? 2 : 2;
+  pxEye(px, cx - eyeDx, eyeY, pal, !!c.bigEye);
+  pxEye(px, cx + (c.bigEye ? 1 : 1), eyeY, pal, !!c.bigEye);
 
   /* —— 盾（左手）—— */
   if (c.shield) {
@@ -2083,7 +2136,10 @@ const PX_MODE_FPS = { idle: 3.2, walk: 8.0, atk: 11.0 };
    ============================================================ */
 const PX_PSPEC = {
   warrior: { w: 20, h: 24, sc: 2, col: '#c9d2dc', dark: '#5a6572', acc: '#c0392b', cfg: { headR: 4.0, helm: 'band', weapon: 'sword', armor: 1 } },
-  ronin:   { w: 20, h: 24, sc: 2, col: '#2f3a4a', dark: '#141a24', acc: '#5b8fd8', cfg: { headR: 3.9, helm: 'none', weapon: 'katana', cape: 1 } },
+  /* 👘 浪客：和服配色（深绀）+ 袴 + 着物交领 + 家纹 + 丁髷发髻（武士辨识度全靠这几样）
+     ⚠️ 发髻在头顶要占 5px，所以画布加高到 30、头往下让 headDY:4.5（否则发髻被画布裁掉）。 */
+  ronin:   { w: 22, h: 30, sc: 2, col: '#2b3550', dark: '#10151f', acc: '#5b8fd8',
+             cfg: { headR: 3.9, headDY: 4.5, helm: 'none', weapon: 'katana', cape: 1, hakama: 1, kimono: 1, topknot: 1 } },
   knight:  { w: 22, h: 24, sc: 2, col: '#8f9aa8', dark: '#3a4450', acc: '#e2b93f', cfg: { headR: 4.0, helm: 'knight', weapon: 'lance', shield: 1, armor: 1 } },
   wm:      { w: 20, h: 24, sc: 2, col: '#8a6a4a', dark: '#3a2a1c', acc: '#c9a227', cfg: { headR: 3.9, helm: 'none', weapon: 'sword', armor: 1 } },
   archer:  { w: 22, h: 24, sc: 2, col: '#3f6f4f', dark: '#1f3a2b', acc: '#c8b070', cfg: { headR: 3.8, helm: 'hood', weapon: 'bow', cape: 1 } },
@@ -2103,12 +2159,24 @@ function pxPlayerClass() {
   return 'warrior';
 }
 /* 取玩家贴图（同样走缓存）。variant：'' / 'flash'（受伤白闪） */
+/* 法师**四元素配色**（火 / 水 / 雷 / 光）—— 旧矢量版就是按元素换袍色的，像素版必须跟上。
+   ⚠️ 踩过的坑：像素化时把法师写成一个固定配色，导致「四个法师颜色全一样」（用户明确骂过）。
+   配色表直接对齐 `drawMagePlayer` 里那份 `C`（同一套色值，别在这里另调一套）。 */
+function pxMageTint() {
+  if (isWater()) return { col: '#2b4a8e', dark: '#16305c', acc: '#8fd8ff', key: 'wat' };
+  if (isThunder()) return { col: '#c8a020', dark: '#6b5208', acc: '#ffe066', key: 'thu' };
+  if (isLight()) return { col: '#e8e2c8', dark: '#a89a6a', acc: '#fff3c4', key: 'lig' };
+  return { col: '#8e2b2b', dark: '#4d1210', acc: '#ff9d7a', key: 'fir' };
+}
 function pxPlayerSpriteOf(cls, frame, mode, variant) {
   const spec = PX_PSPEC[cls] || PX_PSPEC.warrior;
-  const key = 'P:' + cls + '|' + mode + '|' + frame + '|' + (variant || '');
+  /* 法师按元素分贴图（key 里带元素，避免互相命中缓存） */
+  const isMage = cls === 'mage';
+  const tint = isMage ? pxMageTint() : null;
+  const key = 'P:' + cls + (isMage ? ':' + tint.key : '') + '|' + mode + '|' + frame + '|' + (variant || '');
   const had = PX_CV[key];
   if (had !== undefined) return had;
-  const pal = pxPalOf(spec.col, spec.dark, spec.acc);
+  const pal = pxPalOf(tint ? tint.col : spec.col, tint ? tint.dark : spec.dark, tint ? tint.acc : spec.acc);
   const px = PXC(spec.w, spec.h);
   pxHumanoid(px, frame, mode, spec.cfg, pal);
   pxOutline(px, pal.k);
@@ -23232,73 +23300,50 @@ function buildGround() {
     const grad = g.createLinearGradient(0, 0, 0, H);
     grad.addColorStop(0, '#3a4a35'); grad.addColorStop(0.5, '#33412f'); grad.addColorStop(1, '#2b3828');
     g.fillStyle = grad; g.fillRect(0, 0, W, H);
-    /* 🎨 像素化地表（草原）：
-       ① 先铺一层 2px 棋盘抖动贴图（像素画的「草地颗粒」，用 createPattern 平铺，性能极好）
-       ② 再撒几千个 2px 方块当草丛（吸附 2px 栅格，边缘硬）
-       ③ 少量野花 / 碎石亮点，避免地表死板 */
-    {
-      const T = 24;
-      const c2 = document.createElement('canvas');
-      c2.width = T; c2.height = T;
-      const pg = c2.getContext && c2.getContext('2d');
-      if (pg) {
-        const cols = ['#3a4a35', '#33412f', '#2f3d2b', '#3e5138', '#2a3626'];
-        let sd = 1337;
-        const nr = () => { sd = (sd * 1103515245 + 12345) & 0x7fffffff; return sd / 0x7fffffff; };
-        for (let y = 0; y < T; y += 2) {
-          for (let x = 0; x < T; x += 2) {
-            pg.fillStyle = cols[(nr() * cols.length) | 0];
-            pg.fillRect(x, y, 2, 2);
-          }
-        }
-        const pat = g.createPattern(c2, 'repeat');
-        if (pat) {
-          const sm0 = g.imageSmoothingEnabled;
-          g.imageSmoothingEnabled = false;
-          g.save();
-          g.scale(4, 4);
-          g.fillStyle = pat;
-          g.fillRect(0, 0, W / 4, H / 4);
-          g.restore();
-          g.imageSmoothingEnabled = sm0;
-        }
-      }
-      /* 像素草丛 */
-      for (let i = 0; i < 5200; i++) {
-        const x = Math.floor(gr() * W / 2) * 2, y = Math.floor(gr() * H / 2) * 2;
-        g.fillStyle = 'rgba(' + (gr() < 0.5 ? '130,150,105' : '84,104,70') + ',' + grR(0.10, 0.26).toFixed(2) + ')';
-        g.fillRect(x, y, 2, 2);
-        if (gr() < 0.35) g.fillRect(x, y - 2, 2, 2);
-      }
-      /* 野花 / 碎石点缀 */
-      const dots = ['rgba(214,205,140,0.55)', 'rgba(160,190,225,0.40)', 'rgba(200,150,170,0.40)'];
-      for (let i = 0; i < 260; i++) {
-        const x = Math.floor(gr() * W / 2) * 2, y = Math.floor(gr() * H / 2) * 2;
-        g.fillStyle = dots[(gr() * 3) | 0];
-        g.fillRect(x, y, 2, 2);
-      }
+    /* —— 草原地表：**平滑细腻**（原来的 8px 马赛克贴图已被用户否掉：「像一群马赛克糊在脸上」）——
+       ① 底色渐变（三层绿）
+       ② 3400 根细草线（1px、极低透明度、长短不一）—— 这是"草原"的质感来源
+       ③ 90 个柔和暗斑（椭圆，模拟地形起伏 / 云影）
+       ④ 少量小石头（2~3px，**不是**满屏方块） */
+    for (let i = 0; i < 3400; i++) {
+      const x = gr() * W, y = gr() * H;
+      g.strokeStyle = 'rgba(' + (gr() < 0.5 ? '130,150,105' : '90,110,75') + ',' + grR(0.05, 0.16).toFixed(2) + ')';
+      g.lineWidth = 1;
+      g.beginPath();
+      g.moveTo(x, y);
+      g.lineTo(x + grR(-3, 3), y - grR(3, 8));
+      g.stroke();
     }
-    /* 泥土暗斑（🎨 像素化：原来 90 个平滑椭圆 → 抖动方块片，边缘硬） */
-    for (let i = 0; i < 70; i++) {
-      const cx2 = gr() * W, cy2 = gr() * H;
-      const rx2 = grR(14, 46), ry2 = grR(8, 24);
-      const al = grR(0.05, 0.13);
-      g.fillStyle = 'rgba(0,0,0,' + al.toFixed(2) + ')';
-      for (let yy = -ry2; yy <= ry2; yy += 2) {
-        const kk2 = 1 - (yy / ry2) * (yy / ry2);
-        if (kk2 <= 0) continue;
-        const half = rx2 * Math.sqrt(kk2);
-        for (let xx = -half; xx <= half; xx += 2) {
-          if (gr() < 0.72) g.fillRect((Math.round(cx2 + xx) & ~1), (Math.round(cy2 + yy) & ~1), 2, 2);
-        }
-      }
+    for (let i = 0; i < 90; i++) {
+      const x = gr() * W, y = gr() * H;
+      g.fillStyle = 'rgba(0,0,0,' + grR(0.05, 0.14).toFixed(2) + ')';
+      g.beginPath();
+      g.ellipse(x, y, grR(14, 50), grR(8, 26), grR(0, 3), 0, TAU);
+      g.fill();
     }
-    /* 🪨 地图装饰物：岩石 / 灌木 / 断柱 / 草丛（让地图像"野外路线"而不是一块布） */
-    for (let i = 0; i < 260; i++) {
-      const x = grR(60, W - 60), y = grR(60, H - 60);
+    /* 小石头 / 碎石（少量点缀，别铺满） */
+    for (let i = 0; i < 220; i++) {
+      const x = grR(30, W - 30), y = grR(30, H - 30);
       const r0 = gr();
-      const kind = r0 < 0.34 ? 'tuft' : (r0 < 0.68 ? 'rock' : (r0 < 0.90 ? 'bush' : 'ruin'));
-      pxDecor(g, kind, x, y, kind === 'ruin' ? 8 : grR(6, 12), gr, grR);
+      if (r0 < 0.55) {
+        g.fillStyle = 'rgba(108,116,100,' + grR(0.35, 0.6).toFixed(2) + ')';
+        g.fillRect(Math.round(x), Math.round(y), 2 + ((gr() * 2) | 0), 2);
+        g.fillStyle = 'rgba(150,158,140,0.45)';
+        g.fillRect(Math.round(x), Math.round(y), 2, 1);
+      } else if (r0 < 0.85) {
+        g.strokeStyle = 'rgba(96,116,86,0.4)'; g.lineWidth = 1;
+        g.beginPath(); g.moveTo(x, y); g.lineTo(x + grR(-2, 2), y - grR(2, 5)); g.stroke();
+      } else {
+        g.fillStyle = 'rgba(196,188,140,0.5)';
+        g.fillRect(Math.round(x), Math.round(y), 1, 1);
+      }
+    }
+    /* 🪨 少量大件装饰（岩石 / 断柱 / 灌木）：数量少、只当"参照物"，不让它们抢戏 */
+    for (let i = 0; i < 34; i++) {
+      const x = grR(80, W - 80), y = grR(80, H - 80);
+      const r0 = gr();
+      const kind = r0 < 0.45 ? 'rock' : (r0 < 0.75 ? 'bush' : 'ruin');
+      pxDecor(g, kind, x, y, kind === 'ruin' ? 8 : grR(7, 11), gr, grR);
     }
     const vig = g.createRadialGradient(W / 2, H / 2, 200, W / 2, H / 2, 780);
     vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(10,14,8,0.5)');
@@ -23333,54 +23378,38 @@ function buildGround() {
         px = nx2; py = ny2;
       }
     }
-    /* 🎨 像素化地表（黑暗战场）：同款 2px 抖动贴图 + 焦土颗粒 + 零星余烬亮点 */
-    {
-      const T = 24;
-      const c2 = document.createElement('canvas');
-      c2.width = T; c2.height = T;
-      const pg = c2.getContext && c2.getContext('2d');
-      if (pg) {
-        const cols = ['#151318', '#1b191f', '#0e0d11', '#201d26', '#0a090d'];
-        let sd = 424242;
-        const nr = () => { sd = (sd * 1103515245 + 12345) & 0x7fffffff; return sd / 0x7fffffff; };
-        for (let y = 0; y < T; y += 2) {
-          for (let x = 0; x < T; x += 2) {
-            pg.fillStyle = cols[(nr() * cols.length) | 0];
-            pg.fillRect(x, y, 2, 2);
-          }
-        }
-        const pat = g.createPattern(c2, 'repeat');
-        if (pat) {
-          const sm0 = g.imageSmoothingEnabled;
-          g.imageSmoothingEnabled = false;
-          g.save();
-          g.scale(4, 4);
-          g.fillStyle = pat;
-          g.fillRect(0, 0, W / 4, H / 4);
-          g.restore();
-          g.imageSmoothingEnabled = sm0;
-        }
-      }
-      /* 灰烬残草（像素方块） */
-      for (let i = 0; i < 4200; i++) {
-        const x = Math.floor(gr() * W / 2) * 2, y = Math.floor(gr() * H / 2) * 2;
-        g.fillStyle = 'rgba(' + (gr() < 0.5 ? '120,110,130' : '70,66,80') + ',' + grR(0.08, 0.20).toFixed(2) + ')';
-        g.fillRect(x, y, 2, 2);
-        if (gr() < 0.3) g.fillRect(x, y - 2, 2, 2);
-      }
-      /* 零星余烬（暖色亮点，只有很少一点） */
-      for (let i = 0; i < 150; i++) {
-        const x = Math.floor(gr() * W / 2) * 2, y = Math.floor(gr() * H / 2) * 2;
-        g.fillStyle = 'rgba(' + (gr() < 0.5 ? '255,120,60' : '255,80,40') + ',' + grR(0.20, 0.45).toFixed(2) + ')';
-        g.fillRect(x, y, 2, 2);
-      }
-      /* 🦴 黑暗战场的装饰物：断柱 / 碎石 / 白骨（焦土上的一地残骸） */
-      for (let i = 0; i < 200; i++) {
-        const x = grR(60, W - 60), y = grR(60, H - 60);
-        const r0 = gr();
-        const kind = r0 < 0.30 ? 'bone' : (r0 < 0.66 ? 'rock' : (r0 < 0.86 ? 'ruin' : 'tuft'));
-        pxDecor(g, kind, x, y, kind === 'ruin' ? 8 : grR(6, 12), gr, grR);
-      }
+    /* —— 黑暗战场：**平滑细腻**（同款 8px 马赛克贴图已撤掉，理由见草原那段）——
+       ① 深色渐变底
+       ② 140 个暗色焦土斑（椭圆，柔和起伏）
+       ③ 2600 根灰烬残草（1px 细线）
+       ④ 少量余烬暖点 + 白骨/断柱点缀 */
+    for (let i = 0; i < 140; i++) {
+      const x = gr() * W, y = gr() * H;
+      g.fillStyle = 'rgba(0,0,0,' + grR(0.12, 0.30).toFixed(2) + ')';
+      g.beginPath();
+      g.ellipse(x, y, grR(18, 60), grR(10, 32), grR(0, 3), 0, TAU);
+      g.fill();
+    }
+    for (let i = 0; i < 2600; i++) {
+      const x = gr() * W, y = gr() * H;
+      g.strokeStyle = 'rgba(' + (gr() < 0.5 ? '120,110,130' : '70,66,80') + ',' + grR(0.04, 0.13).toFixed(2) + ')';
+      g.lineWidth = 1;
+      g.beginPath();
+      g.moveTo(x, y);
+      g.lineTo(x + grR(-3, 3), y - grR(3, 7));
+      g.stroke();
+    }
+    for (let i = 0; i < 150; i++) {
+      const x = grR(20, W - 20), y = grR(20, H - 20);
+      g.fillStyle = 'rgba(' + (gr() < 0.5 ? '255,120,60' : '255,80,40') + ',' + grR(0.16, 0.40).toFixed(2) + ')';
+      g.fillRect(Math.round(x), Math.round(y), 1, 1);
+    }
+    /* 🦴 少量残骸（白骨 / 断柱 / 碎石），只当点缀 */
+    for (let i = 0; i < 34; i++) {
+      const x = grR(80, W - 80), y = grR(80, H - 80);
+      const r0 = gr();
+      const kind = r0 < 0.40 ? 'bone' : (r0 < 0.72 ? 'rock' : 'ruin');
+      pxDecor(g, kind, x, y, kind === 'ruin' ? 8 : grR(7, 11), gr, grR);
     }
     /* 中央惨淡幽光 + 重暗角 */
     const vig = g.createRadialGradient(W / 2, H / 2, 90, W / 2, H / 2, 700);
@@ -24661,8 +24690,6 @@ function drawPokeball(x, y, r) {
    ⚠️⚠️ 立绘里**一个 `p.face` 都不许出现**：用户报过两次「帽子和头发跟着鼠标指针转/变样」。
    帽子（帽檐・帽身・白带・帽徽）、鬓角、背包全是**死位置**，指针指哪都一样 —— 加东西时别再加旋转。 */
 function drawTrainerPlayer() {
-  const m = Math.hypot(p.vx, p.vy);
-  const leg = Math.sin(p.walk * 0.35) * Math.min(m / 240, 1) * 4;
   /* 🧢 骑乘：进化到最高阶段的宝可梦会驮着训练家 —— 立绘改画在它背上（原地的腿收起来换成跨坐）
      ⚠️ 画在**训练家自己的坐标**上（`p.x/p.y`），不是坐骑的坐标：坐骑每帧被钉在 p 上（updatePetAlly），
      这里再用它的坐标就会多一层滞后/分离 —— 用户报过「骑上去人和宝可梦分家」 */
@@ -24672,16 +24699,20 @@ function drawTrainerPlayer() {
   ctx.translate(p.x, p.y);
   /* 🧢 骑乘：整体抬高到坐骑背上（宝可梦贴图由 drawPet 画） */
   if (riding) ctx.translate(0, -PET_RIDE_LIFT);
-  /* 背包（小智的背包：固定挂在背后偏左）—— 先画，被身体压住一半 */
+  /* 背包（小智的背包）：**贴住像素身体的左后侧**。
+     ⚠️ 原来是旧矢量身体的坐标 `rr(-20, -7, 10, 16)` —— 像素身体只有 22px 宽（半宽 11），
+     那个位置完全脱离身体，看起来像"背后飘着一块蓝板"（用户报的模型 bug 就是这个）。 */
   ctx.fillStyle = '#2f6fc4';
-  rr(-20, -7, 10, 16, 3.6); ctx.fill();
+  rr(-13, -9, 8, 13, 2.6); ctx.fill();
   ctx.strokeStyle = '#1d4f8f'; ctx.lineWidth = 1.2; ctx.stroke();
   ctx.fillStyle = '#e0a03a';
-  rr(-20, -0.6, 10, 3.6, 1.4); ctx.fill();
-  /* 🎨 本体：像素模型（训练家）—— 旧的圆角矩形拼人已替换 */
+  rr(-13, -3.4, 8, 2.8, 1.2); ctx.fill();
+  ctx.fillStyle = '#255da6';                   // 背包盖
+  rr(-13, -9, 8, 3.2, 1.8); ctx.fill();
+  /* 🎨 本体：像素模型（训练家） */
   pxPlayerBody('trainer');
-  /* 腰间的精灵球（辨识度很高的细节，保留） */
-  drawPokeball(-8.5, 9.4, 3.6);
+  /* 腰间的精灵球：挂在**腰侧**（原来画在 (-8.5, 9.4) = 脚外侧，看起来像贴在地上） */
+  drawPokeball(-8.6, 2.2, 3.1);
   ctx.restore();
 }
 /* 现代枪械：全身军用迷彩的士兵 + AK（射击后坐与枪口火焰沿用放箭计时 p.bowT） */
