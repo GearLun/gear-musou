@@ -2882,6 +2882,51 @@ function pxRingStroke(x, y, r) {
   ctx.globalAlpha = 1;
 }
 
+/* 🃏 牌皇甩出的纸牌（像素贴图 + 缓存）：6×9 art px，2x 放大 = 12×18 世界像素。
+   白底 + 花色边框 + 角标，比原来的平滑圆角矩形更有"像素卡牌"味道。 */
+function pxCardSprite() {
+  return pxMakeSprite('SPR:card', 6, 9, (px) => {
+    pxRect(px, 0, 0, 6, 9, '#2a1f3a');            // 描边底
+    pxRect(px, 1, 1, 4, 7, '#fdfaf0');            // 白底
+    pxRect(px, 1, 1, 4, 1, '#ffffff');            // 顶部高光
+    pxRect(px, 1, 1, 1, 2, '#e8dcc0');            // 左上暗角
+    pxPut(px, 2, 3, pxCI(px, '#d84a8a'));          // 花色角标
+    pxPut(px, 3, 4, pxCI(px, '#d84a8a'));
+    pxPut(px, 2, 5, pxCI(px, '#b83a72'));
+    pxRect(px, 1, 7, 4, 1, '#cbb894');            // 底部花纹
+  });
+}
+
+/* 🗡️ 骑士长枪（像素贴图 + 缓存）：原来是一条 3.2px 粗的平滑横线 + 三角枪头。
+   现在按 art 像素（1 art px = 2 世界 px）画成方块，再用 2x 最近邻放大贴出。
+   原点在 art (12, 8) → 贴图时偏移 (-24, -16)。`gold` = 无双时的金色版。 */
+function pxLanceSprite(gold) {
+  const key = gold ? 'SPR:lanceG' : 'SPR:lance';
+  return pxMakeSprite(key, 46, 18, (px) => {
+    const shaft = gold ? '#ffe9a8' : '#c9a76a';
+    const shaftD = gold ? '#c9a249' : '#8a6d3c';
+    const head = gold ? '#fff8d8' : '#e8eefc';
+    const headD = gold ? '#e8cf8a' : '#a8b4c8';
+    const k = '#1b2130';
+    /* 枪杆（2 art px = 4 世界 px 粗；下沿暗一档） */
+    pxRect(px, 3, 8, 33, 2, shaft);
+    pxRect(px, 3, 9, 33, 1, shaftD);
+    /* 枪头：菱形 */
+    pxPoly(px, [[35, 6], [44, 8], [44, 10], [35, 12]], head);
+    pxLine(px, 36, 7, 43, 8, headD, 1);
+    /* 护手 */
+    pxRect(px, 27, 6, 2, 6, '#d8a441');
+    pxRect(px, 27, 6, 1, 6, '#ffe9a8');
+    /* 尾配重 */
+    pxRect(px, 1, 7, 3, 4, '#8a6d3c');
+    pxRect(px, 1, 7, 3, 1, '#c9a76a');
+    /* 握枪的手 */
+    pxEll(px, 9, 9, 1.8, 1.8, '#e8b98a');
+    pxPut(px, 8, 8, pxCI(px, '#f6d3ab'));
+    pxOutline(px, k);
+  });
+}
+
 /* 通用「临时像素贴图」缓存：给**固定形状的道具**（骑士盾、图标、道具）用。
    和 PX_SPEC / PX_PSPEC 那两套的区别：那两套是「会动的角色」，这套是「一个形状 + 几个配色变体」。
    build(px) 里按 art 坐标画，函数返回已光栅化的 canvas（同样只建一次）。 */
@@ -24658,20 +24703,30 @@ function drawCardPlayer() {
     ctx.translate(Math.cos(p.face) * (22 + (1 - rec) * 14), Math.sin(p.face) * (22 + (1 - rec) * 14) - 4);
     ctx.rotate(p.face + rec * 1.2);
     ctx.globalAlpha = Math.min(1, rec * 1.6);
-    ctx.shadowColor = '#ffd6ff'; ctx.shadowBlur = 12;
-    ctx.fillStyle = '#fdfaf0';
-    rr(-5.5, -8, 11, 16, 2); ctx.fill();
-    ctx.shadowBlur = 0;
-    ctx.strokeStyle = TRIM; ctx.lineWidth = 1.6;
-    rr(-5.5, -8, 11, 16, 2); ctx.stroke();
-    ctx.fillStyle = TRIM;
-    rr(-4.4, -6.9, 2.6, 1.9, 0.9); ctx.fill();
+    /* 🎨 像素卡牌贴图（缓存），不再画平滑圆角矩形 */
+    {
+      const ccv = pxCardSprite();
+      if (ccv) {
+        const sm = ctx.imageSmoothingEnabled;
+        if (sm) ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(ccv, -8, -11, 16, 22);       // art 6×9 @2x + 描边余量
+        if (sm) ctx.imageSmoothingEnabled = true;
+      } else {
+        ctx.fillStyle = '#fdfaf0';
+        rr(-5.5, -8, 11, 16, 2); ctx.fill();
+        ctx.strokeStyle = TRIM; ctx.lineWidth = 1.6;
+        rr(-5.5, -8, 11, 16, 2); ctx.stroke();
+      }
+    }
     ctx.globalAlpha = 1;
     ctx.restore();
+    /* ⚠️ 星火原来用 `rnd()` —— **绘制期吃全局随机数会推移后面所有判定**（AGENTS.md 6.5）。
+       改成按时间取确定性伪随机。 */
     for (let i = 0; i < 3; i++) {
-      const a2 = p.face + rnd(-0.9, 0.9);
+      const a2 = p.face + (pxRand(time * 91 + i * 13) - 0.5) * 1.8;
+      const sp1 = 30 + pxRand(time * 71 + i * 29) * 60;
       addPart(p.x + Math.cos(p.face) * 22, p.y + Math.sin(p.face) * 22 - 4,
-        Math.cos(a2) * rnd(30, 90), Math.sin(a2) * rnd(30, 90), 0.3, 2.2, 'rgba(255,214,255,0.9)', 0);
+        Math.cos(a2) * sp1, Math.sin(a2) * sp1, 0.3, 2.2, 'rgba(255,214,255,0.9)', 0);
     }
   }
   ctx.restore();
@@ -25361,38 +25416,64 @@ function drawKnightPlayer() {
     ctx.globalAlpha = 1;
   }
   ctx.restore();
-  /* ---------- 右手长枪：平时前指，无双期间高速旋转（画环形残影） ---------- */
+  /* ---------- 右手长枪：平时前指，无双期间高速旋转（画环形残影） ----------
+     🎨 像素化：整把枪（杆/头/护手/配重/手）做成**缓存像素贴图**，旋转贴出。
+     残影也用它（低透明度 + 角度错开），比原来 3 条平滑粗线更有像素味。 */
   if (musou) {
     const spinA = time * 18;
+    const lcvG = pxLanceSprite(true);
     for (let i = 0; i < 3; i++) {
       ctx.save();
       ctx.rotate(spinA - i * 0.5);
-      ctx.globalAlpha = 0.30 - i * 0.08;
-      ctx.strokeStyle = '#ffe9a8'; ctx.lineWidth = 5;
-      ctx.beginPath(); ctx.moveTo(-14, 0); ctx.lineTo(52, 0); ctx.stroke();
+      if (lcvG) {
+        ctx.globalAlpha = 0.30 - i * 0.08;
+        const sm = ctx.imageSmoothingEnabled;
+        if (sm) ctx.imageSmoothingEnabled = false;
+        ctx.drawImage(lcvG, -24, -16, 92, 36);
+        if (sm) ctx.imageSmoothingEnabled = true;
+      } else {
+        ctx.globalAlpha = 0.30 - i * 0.08;
+        ctx.strokeStyle = '#ffe9a8'; ctx.lineWidth = 5;
+        ctx.beginPath(); ctx.moveTo(-14, 0); ctx.lineTo(52, 0); ctx.stroke();
+      }
       ctx.restore();
     }
     ctx.save();
     ctx.rotate(spinA);
-    ctx.strokeStyle = '#e8eefc'; ctx.lineWidth = 3.4; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(-16, 0); ctx.lineTo(56, 0); ctx.stroke();
-    ctx.fillStyle = '#fff3c4';
-    ctx.beginPath(); ctx.moveTo(56, 0); ctx.lineTo(46, -5); ctx.lineTo(46, 5); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = GOLD; ctx.fillRect(-4, -3, 4, 6);
+    if (lcvG) {
+      const sm = ctx.imageSmoothingEnabled;
+      if (sm) ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(lcvG, -24, -16, 92, 36);
+      if (sm) ctx.imageSmoothingEnabled = true;
+    } else {
+      ctx.strokeStyle = '#e8eefc'; ctx.lineWidth = 3.4; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(-16, 0); ctx.lineTo(56, 0); ctx.stroke();
+      ctx.fillStyle = '#fff3c4';
+      ctx.beginPath(); ctx.moveTo(56, 0); ctx.lineTo(46, -5); ctx.lineTo(46, 5); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = GOLD; ctx.fillRect(-4, -3, 4, 6);
+    }
     ctx.restore();
     rings.push({ x: p.x, y: p.y, r: 14, vr: 420, life: 0.12, max: 0.12, color: '#ffe9a8', width: 3 });
   } else {
     ctx.save();
     ctx.rotate(f + (p.knightSpinT > 0 ? -0.4 + (1 - p.knightSpinT / KNIGHT_SPIN_T) * 3.6 : 0));
-    ctx.strokeStyle = '#c9a76a'; ctx.lineWidth = 3.2; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(-18, 0); ctx.lineTo(48, 0); ctx.stroke();
-    ctx.fillStyle = '#e8eefc';                 // 枪头
-    ctx.beginPath(); ctx.moveTo(64, 0); ctx.lineTo(46, -5.4); ctx.lineTo(48, 0); ctx.lineTo(46, 5.4); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = GOLD;                      // 护手 + 尾配重
-    ctx.fillRect(30, -4, 3.4, 8);
-    ctx.fillRect(-20, -3, 4, 6);
-    ctx.fillStyle = '#e8b98a';                 // 握枪的手
-    ctx.beginPath(); ctx.arc(-8, 0, 3.2, 0, TAU); ctx.fill();
+    const lcv = pxLanceSprite(false);
+    if (lcv) {
+      const sm = ctx.imageSmoothingEnabled;
+      if (sm) ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(lcv, -24, -16, 92, 36);
+      if (sm) ctx.imageSmoothingEnabled = true;
+    } else {
+      ctx.strokeStyle = '#c9a76a'; ctx.lineWidth = 3.2; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.moveTo(-18, 0); ctx.lineTo(48, 0); ctx.stroke();
+      ctx.fillStyle = '#e8eefc';                 // 枪头
+      ctx.beginPath(); ctx.moveTo(64, 0); ctx.lineTo(46, -5.4); ctx.lineTo(48, 0); ctx.lineTo(46, 5.4); ctx.closePath(); ctx.fill();
+      ctx.fillStyle = GOLD;                      // 护手 + 尾配重
+      ctx.fillRect(30, -4, 3.4, 8);
+      ctx.fillRect(-20, -3, 4, 6);
+      ctx.fillStyle = '#e8b98a';                 // 握枪的手
+      ctx.beginPath(); ctx.arc(-8, 0, 3.2, 0, TAU); ctx.fill();
+    }
     ctx.restore();
   }
   ctx.restore();
