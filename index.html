@@ -2882,6 +2882,50 @@ function pxRingStroke(x, y, r) {
   ctx.globalAlpha = 1;
 }
 
+/* 通用「临时像素贴图」缓存：给**固定形状的道具**（骑士盾、图标、道具）用。
+   和 PX_SPEC / PX_PSPEC 那两套的区别：那两套是「会动的角色」，这套是「一个形状 + 几个配色变体」。
+   build(px) 里按 art 坐标画，函数返回已光栅化的 canvas（同样只建一次）。 */
+function pxMakeSprite(key, w, h, build) {
+  const had = PX_CV[key];
+  if (had !== undefined) return had;
+  const px = PXC(w, h);
+  build(px);
+  return pxRaster(px, key);
+}
+/* 盾面模板（骑士鸢盾）：一次缓存，永远复用 —— 描边 + 三阶金属 + 金十字 + 中心宝珠 */
+const PX_SHIELD_KEY = 'SPR:shield';
+function pxShieldSprite() {
+  return pxMakeSprite(PX_SHIELD_KEY, 16, 20, (px) => {
+    const pal = {
+      l: '#e2e9f2', b: '#8f9bb2', d: '#5a6b86', dd: '#333f52',
+      gl: '#ffe9a8', g: '#d8a441', gd: '#8a6420', k: '#1b2130'
+    };
+    /* 鸢盾外形：上宽下尖（逐行铺方块，天然是像素轮廓） */
+    for (let y = 0; y < 19; y++) {
+      const t = y / 18;
+      let half = 7.2;
+      if (t > 0.62) half = 7.2 * (1 - (t - 0.62) / 0.38 * 0.92);   // 下半收成尖
+      const x0 = Math.round(8 - half), x1 = Math.round(8 + half);
+      for (let x = x0; x <= x1; x++) {
+        /* 三阶：左侧亮、下侧暗（光从左上） */
+        const nx = (x - 8) / 7.2;
+        const v = nx * 0.35 + (t - 0.35) * 1.1;
+        pxPut(px, x, y, pxCI(px, v < -0.28 ? pal.l : (v < 0.3 ? pal.b : (v < 0.72 ? pal.d : pal.dd))));
+      }
+    }
+    /* 金十字 */
+    pxRect(px, 7, 3, 2, 12, pal.g);
+    pxRect(px, 7, 3, 1, 12, pal.gl);
+    pxRect(px, 3, 7, 10, 2, pal.g);
+    pxRect(px, 3, 7, 10, 1, pal.gl);
+    /* 中心宝珠 */
+    pxEll(px, 8, 10, 2.2, 2.2, pal.gd);
+    pxEll(px, 8, 9.6, 1.5, 1.5, pal.g);
+    pxPut(px, 8, 9, pxCI(px, '#fffdf0'));
+    pxOutline(px, pal.k);
+  });
+}
+
 /* 像素粗光线（法师光炮 / 水柱共用）：沿线段按栅格铺三层方块（外晕 / 中层 / 白芯）。
    比原来 round-cap 的平滑粗线更像像素画，也保住「光束很粗很有力」的读感。 */
 function pxBeam(x1, y1, x2, y2, w, colGlow, colCore, alpha, k) {
@@ -24614,10 +24658,8 @@ function drawNuke() {
     const k = Math.min(1, n.t / n.fall);
     const by = -60 + (n.y - 40 + 60) * k;   // 弹头从屏幕上方落向正中
     ctx.save();
-    /* 落点锁定十字 + 收缩预警圈 */
-    ctx.strokeStyle = 'rgba(255,120,90,0.75)';
-    ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(n.x, n.y, 120 * (1 - k) + 26, 0, TAU); ctx.stroke();
+    /* 落点锁定十字 + 收缩预警圈（🎨 预警圈换成像素锯齿环） */
+    pxRing(n.x, n.y, 120 * (1 - k) + 26, 'rgba(255,120,90,0.75)', 3, 0.9);
     ctx.strokeStyle = 'rgba(255,220,150,0.9)';
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -24630,12 +24672,15 @@ function drawNuke() {
     ctx.beginPath(); ctx.moveTo(0, 16); ctx.quadraticCurveTo(7, 4, 5, -14); ctx.lineTo(-5, -14); ctx.quadraticCurveTo(-7, 4, 0, 16); ctx.closePath(); ctx.fill();
     ctx.fillStyle = '#c9d2dc'; ctx.fillRect(-5, -13, 10, 5);
     ctx.fillStyle = '#d84a32'; ctx.fillRect(-5, -8, 10, 3);
+    /* ⚠️ 尾焰原来用 `Math.random()` —— **绘制期吃全局随机数会推移后面所有判定**
+       （本项目铁律，见 AGENTS.md 6.5）。改成按时间取确定性的伪随机。 */
+    const fl1 = pxRand(time * 37 + 11), fl2 = pxRand(time * 53 + 23);
     ctx.globalAlpha = 0.9;
     ctx.fillStyle = '#ffd166';
-    ctx.beginPath(); ctx.moveTo(-4, -14); ctx.lineTo(0, -30 - Math.random() * 14); ctx.lineTo(4, -14); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-4, -14); ctx.lineTo(0, -30 - fl1 * 14); ctx.lineTo(4, -14); ctx.closePath(); ctx.fill();
     ctx.globalAlpha = 0.5;
     ctx.fillStyle = '#ff8a3c';
-    ctx.beginPath(); ctx.moveTo(-6, -14); ctx.lineTo(0, -46 - Math.random() * 20); ctx.lineTo(6, -14); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(-6, -14); ctx.lineTo(0, -46 - fl2 * 20); ctx.lineTo(6, -14); ctx.closePath(); ctx.fill();
     ctx.restore();
     return;
   }
@@ -24649,11 +24694,10 @@ function drawNuke() {
     ctx.fillRect(0, 0, W, H);
     ctx.globalAlpha = 1;
   }
-  /* 冲击波 */
+  /* 冲击波（🎨 像素锯齿环：两层，外圈更淡更宽） */
   const shock = 40 + bt * 1500;
-  ctx.strokeStyle = 'rgba(255,236,180,' + (0.85 * f).toFixed(2) + ')';
-  ctx.lineWidth = 16 * f + 3;
-  ctx.beginPath(); ctx.arc(n.x, n.y, shock, 0, TAU); ctx.stroke();
+  pxRing(n.x, n.y, shock, 'rgba(255,236,180,' + (0.85 * f).toFixed(2) + ')', 16 * f + 3, 0.9);
+  pxRing(n.x, n.y, shock * 0.82, 'rgba(255,255,240,' + (0.5 * f).toFixed(2) + ')', 8 * f + 2, 0.7);
   /* 火球 */
   ctx.globalAlpha = f;
   const fb = ctx.createRadialGradient(n.x, n.y - 10, 10, n.x, n.y - 10, 150 + bt * 60);
@@ -25214,26 +25258,25 @@ function drawKnightPlayer() {
   /* 腿（板甲护腿 + 铁靴） */
   /* 🎨 本体：像素模型（骑士）。鸢盾与长枪继续由下面的代码画（它们带格挡/冲撞特效）。 */
   pxPlayerBody('knight');
-  /* ---------- 🛡️ 左手鸢盾：始终朝向前方（挡住正面） ---------- */
+  /* ---------- 🛡️ 左手鸢盾：始终朝向前方（挡住正面） ----------
+     🎨 像素化：原来是一条平滑多边形 + 平滑描边；现在用**缓存的像素盾贴图**
+     （逐行铺方块成鸢形、三阶金属、金十字、中心宝珠、1px 描边），只建一次。 */
   ctx.save();
   ctx.translate(Math.cos(f) * 13, Math.sin(f) * 13 - 2);
   ctx.rotate(f);
-  ctx.fillStyle = '#5a6b86';
-  ctx.beginPath();
-  ctx.moveTo(-2, -14); ctx.lineTo(8, -14); ctx.lineTo(9, 4); ctx.lineTo(3, 16); ctx.lineTo(-3, 16); ctx.lineTo(-9, 4); ctx.lineTo(-8, -14);
-  ctx.closePath(); ctx.fill();
-  ctx.strokeStyle = GOLD; ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(-2, -14); ctx.lineTo(8, -14); ctx.lineTo(9, 4); ctx.lineTo(3, 16); ctx.lineTo(-3, 16); ctx.lineTo(-9, 4); ctx.lineTo(-8, -14);
-  ctx.closePath(); ctx.stroke();
-  ctx.fillStyle = GOLD;                       // 盾面十字 + 中心宝珠
-  ctx.fillRect(-1.6, -12, 3.2, 24);
-  ctx.fillRect(-7, -3, 14, 3);
-  ctx.beginPath(); ctx.arc(0, 5, 3, 0, TAU); ctx.fill();
-  if (p.blockFxT > 0) {                       // 刚挡下攻击：盾面闪光
-    ctx.globalAlpha = Math.min(1, p.blockFxT / 0.22);
-    ctx.strokeStyle = '#dff6ff'; ctx.lineWidth = 2.5;
-    ctx.beginPath(); ctx.arc(0, 1, 18, 0, TAU); ctx.stroke();
+  {
+    const shCv = pxShieldSprite();
+    if (shCv) {
+      const sm0 = ctx.imageSmoothingEnabled;
+      if (sm0) ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(shCv, -16, -20, 32, 40);      // art 16×20 @2x，与原来的盾面尺寸对齐
+      if (sm0) ctx.imageSmoothingEnabled = true;
+    }
+  }
+  if (p.blockFxT > 0) {                       // 刚挡下攻击：盾面闪光（像素锯齿环）
+    const ka = Math.min(1, p.blockFxT / 0.22);
+    pxRing(0, 1, 18, '#dff6ff', 3, ka);
+    pxRing(0, 1, 18 - 6 * ka, '#ffffff', 2, ka * 0.7);
     ctx.globalAlpha = 1;
   }
   ctx.restore();
