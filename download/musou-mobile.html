@@ -2883,6 +2883,29 @@ function pxRingStroke(x, y, r) {
 
 /* 🃏 牌皇甩出的纸牌（像素贴图 + 缓存）：6×9 art px，2x 放大 = 12×18 世界像素。
    白底 + 花色边框 + 角标，比原来的平滑圆角矩形更有"像素卡牌"味道。 */
+/* 像素**抖动椭圆面**：把一整片椭圆（水洼 / 熔岩 / 影子 / 冲击地痕）铺成 2px 方块。
+   `density` 0~1 = 填充概率（<1 就是半透明颗粒感，比实心 fill 更有像素味）。
+   面积大也便宜：按 4px 网格采样，一块最多 (rx/2)*(ry/2) 个方块。 */
+function pxDitherEllipse(x, y, rx, ry, color, alpha, density) {
+  if (!isFinite(x) || !isFinite(y) || !isFinite(rx) || !isFinite(ry)) return;
+  if (rx <= 0 || ry <= 0) return;
+  const den = density === undefined ? 1 : Math.max(0, Math.min(1, density));
+  ctx.fillStyle = color;
+  if (alpha !== undefined) ctx.globalAlpha = alpha;
+  const step = Math.max(PX_FX_G, Math.round(Math.min(rx, ry) * 0.5 / PX_FX_G) * PX_FX_G);
+  const ox = pxSnap(x), oy = pxSnap(y);
+  for (let dy = -ry; dy <= ry; dy += step) {
+    const k = 1 - (dy / ry) * (dy / ry);
+    if (k <= 0) continue;
+    const half = rx * Math.sqrt(k);
+    for (let dx = -half; dx <= half; dx += step) {
+      if (den < 1 && pxRand(dx * 3 + dy * 7 + rx) > den) continue;
+      ctx.fillRect(ox + pxSnap(dx), oy + pxSnap(dy), PX_FX_G * 2, PX_FX_G * 2);
+    }
+  }
+  if (alpha !== undefined) ctx.globalAlpha = 1;
+}
+
 function pxCardSprite() {
   return pxMakeSprite('SPR:card', 6, 9, (px) => {
     pxRect(px, 0, 0, 6, 9, '#2a1f3a');            // 描边底
@@ -9982,15 +10005,12 @@ function drawPetRocks() {
   for (const q of petRocks) {
     const k = Math.max(0, Math.min(1, q.t / q.life));      // 1 → 0
     const my = q.y - k * PET_METEOR_H * 0.7;
-    /* 落点预警圈 */
+    /* 落点预警圈（🎨 抖动椭圆 + 阶梯环，压扁坐标） */
     ctx.save();
-    ctx.globalAlpha = 0.30 + 0.45 * (1 - k);
-    ctx.strokeStyle = q.tint;
-    ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.ellipse(q.x, q.y, q.boomR * 0.8, q.boomR * 0.32, 0, 0, TAU); ctx.stroke();
-    ctx.globalAlpha = 0.16;
-    ctx.fillStyle = q.tint;
-    ctx.beginPath(); ctx.ellipse(q.x, q.y, q.boomR * 0.8, q.boomR * 0.32, 0, 0, TAU); ctx.fill();
+    ctx.translate(q.x, q.y);
+    ctx.scale(1, 0.4);                          // 0.32/0.8 ≈ 0.4，等价于原来的扁椭圆
+    pxRing(0, 0, q.boomR * 0.8, q.tint, 3, 0.30 + 0.45 * (1 - k));
+    pxDitherEllipse(0, 0, q.boomR * 0.8, q.boomR * 0.8, q.tint, 0.16, 0.6);
     ctx.restore();
     /* 石头本体：7 边形 + 固定随机量（用 seed 做伪随机，形状每块不同但每帧一样） */
     const R = 17 + 7 * (1 - k);
@@ -10385,21 +10405,22 @@ function drawPetVHeats() {
     ctx.restore();
   }
 }
-/* 月亮本体：粉白圆月 + 一圈柔光（朝哪飞都看得清） */
+/* 月亮本体：粉白圆月 + 一圈柔光（朝哪飞都看得清）
+   🎨 像素化：三层圆（柔光 / 月体 / 陨石坑）改成**阶梯圆**（沿圆周摆方块），外晕用 2 圈更稀的方块。 */
 function drawPetMoons() {
   if (!petMoons.length) return;
   for (const q of petMoons) {
     const pulse = 1 + Math.sin(time * 9 + q.x * 0.05) * 0.07;
     ctx.save();
-    ctx.globalAlpha = 0.30;
-    ctx.fillStyle = '#ffb0e0';
-    ctx.beginPath(); ctx.arc(q.x, q.y, q.r * 1.9 * pulse, 0, TAU); ctx.fill();
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = '#fff6fb';
-    ctx.beginPath(); ctx.arc(q.x, q.y, q.r * pulse, 0, TAU); ctx.fill();
-    ctx.fillStyle = 'rgba(255,176,224,0.55)';
-    ctx.beginPath(); ctx.arc(q.x - q.r * 0.32, q.y - q.r * 0.30, q.r * 0.36 * pulse, 0, TAU); ctx.fill();
-    ctx.beginPath(); ctx.arc(q.x + q.r * 0.30, q.y + q.r * 0.22, q.r * 0.26 * pulse, 0, TAU); ctx.fill();
+    /* 外晕：两圈稀方块（代替实心大圆） */
+    pxRing(q.x, q.y, q.r * 1.9 * pulse, '#ffb0e0', 5, 0.22);
+    pxRing(q.x, q.y, q.r * 1.45 * pulse, '#ffd0ec', 4, 0.20);
+    /* 月体：阶梯圆 */
+    pxRing(q.x, q.y, q.r * pulse, '#fff6fb', Math.max(3, q.r * 1.1), 0.95);
+    pxRing(q.x, q.y, q.r * 0.55 * pulse, '#ffffff', Math.max(2, q.r * 0.8), 0.9);
+    /* 陨石坑 */
+    pxBlock(q.x - q.r * 0.32, q.y - q.r * 0.30, Math.max(2, q.r * 0.42), 'rgba(255,176,224,0.55)');
+    pxBlock(q.x + q.r * 0.30, q.y + q.r * 0.22, Math.max(2, q.r * 0.32), 'rgba(255,176,224,0.55)');
     ctx.restore();
   }
 }
@@ -10411,25 +10432,26 @@ function drawPetSector() {
     const s = u.secDraw;
     const pulse = 0.5 + 0.5 * Math.sin(time * 8);
     ctx.save();
-    const g = ctx.createRadialGradient(s.x, s.y, 16, s.x, s.y, s.r);
-    g.addColorStop(0, 'rgba(255,176,224,0.30)');
-    g.addColorStop(0.55, 'rgba(255,176,224,0.17)');
-    g.addColorStop(1, 'rgba(255,214,240,0.04)');
-    ctx.fillStyle = g;
-    ctx.beginPath();
-    ctx.moveTo(s.x, s.y);
-    ctx.arc(s.x, s.y, s.r, s.a - s.arc / 2, s.a + s.arc / 2);
-    ctx.closePath();
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(255,190,232,' + (0.35 + 0.35 * pulse).toFixed(2) + ')';
-    ctx.lineWidth = 3;
-    ctx.stroke();
-    for (let i = 1; i <= 3; i++) {
+    /* 🎨 像素化：原来是「径向渐变填的扇形 + 平滑弧线」。
+       扇形面积大，逐像素铺方块太贵，所以用**抖动填充**（每 4px 一个 2px 方块，按半径分层加密度），
+       弧线部分走 pxArcStroke（阶梯弧）。整体读起来是像素化的光扇。 */
+    const a0 = s.a - s.arc / 2, a1 = s.a + s.arc / 2;
+    const ST = 4;
+    ctx.fillStyle = 'rgba(255,176,224,0.20)';
+    for (let rr = ST; rr <= s.r; rr += ST) {
+      const rings2 = Math.max(6, Math.round(s.arc * rr / ST * 0.55));
+      for (let k = 0; k < rings2; k++) {
+        const aa = a0 + s.arc * (k / rings2);
+        /* 越靠外越稀 → 边缘自然淡出（代替原来的渐变） */
+        if (pxRand(k * 7 + rr) < (rr / s.r) * 0.55) continue;
+        ctx.fillRect(pxSnap(s.x + Math.cos(aa) * rr), pxSnap(s.y + Math.sin(aa) * rr), PX_FX_G, PX_FX_G);
+      }
+    }
+    /* 三条阶梯弧（边缘 + 两层内圈） */
+    pxArcStroke(s.x, s.y, s.r, a0, a1, 'rgba(255,190,232,' + (0.35 + 0.35 * pulse).toFixed(2) + ')', 3, 0.9);
+    for (let i = 1; i <= 2; i++) {
       const rr = s.r * ((i / 3) * 0.85 + 0.1) * (0.9 + 0.1 * pulse);
-      ctx.globalAlpha = 0.25 / i + 0.08;
-      ctx.beginPath();
-      ctx.arc(s.x, s.y, rr, s.a - s.arc / 2 * 0.9, s.a + s.arc / 2 * 0.9);
-      ctx.stroke();
+      pxArcStroke(s.x, s.y, rr, s.a - s.arc / 2 * 0.9, s.a + s.arc / 2 * 0.9, '#ffbeE8', 2, 0.25 / i + 0.08);
     }
     ctx.restore();
   }
@@ -12136,18 +12158,20 @@ function drawPetPools() {
   for (const q of petPools) {
     const fade = Math.min(1, (q.life - q.t) / 1.2);
     ctx.save();
-    ctx.globalAlpha = 0.8 * Math.max(0.2, fade);
-    const g = ctx.createRadialGradient(q.x, q.y, q.r * 0.1, q.x, q.y, q.r);
-    g.addColorStop(0, 'rgba(150,225,255,0.85)');
-    g.addColorStop(0.6, 'rgba(60,150,220,0.55)');
-    g.addColorStop(1, 'rgba(20,70,120,0)');
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.ellipse(q.x, q.y, q.r, q.r * 0.72, 0, 0, TAU); ctx.fill();
-    ctx.strokeStyle = 'rgba(190,240,255,' + (0.5 * fade).toFixed(2) + ')';
-    ctx.lineWidth = 3;
+    /* 🎨 像素化：径向渐变水洼 → **抖动椭圆**（三层：深底 / 中层 / 亮心），外沿走阶梯环。
+       椭圆被压扁 0.72，所以环用 pxRing 再 `scale` 压扁也行 —— 这里直接用椭圆抖动更省事。 */
+    const a = 0.8 * Math.max(0.2, fade);
+    pxDitherEllipse(q.x, q.y, q.r, q.r * 0.72, 'rgba(20,70,120,0.85)', a, 0.9);
+    pxDitherEllipse(q.x, q.y, q.r * 0.82, q.r * 0.82 * 0.72, 'rgba(60,150,220,0.75)', a, 0.8);
+    pxDitherEllipse(q.x, q.y, q.r * 0.5, q.r * 0.5 * 0.72, 'rgba(150,225,255,0.85)', a, 0.7);
+    /* 涟漪：两道阶梯弧（压扁坐标） */
     const k = (q.t % 1.2) / 1.2;
-    ctx.beginPath(); ctx.ellipse(q.x, q.y, q.r * (0.35 + 0.6 * k), q.r * 0.72 * (0.35 + 0.6 * k), 0, 0, TAU); ctx.stroke();
-    ctx.beginPath(); ctx.ellipse(q.x, q.y, q.r * 0.8, q.r * 0.8 * 0.72, 0, 0, TAU); ctx.stroke();
+    ctx.save();
+    ctx.translate(q.x, q.y);
+    ctx.scale(1, 0.72);
+    pxRing(0, 0, q.r * (0.35 + 0.6 * k), 'rgba(190,240,255,' + (0.5 * fade).toFixed(2) + ')', 3, 0.9);
+    pxRing(0, 0, q.r * 0.8, 'rgba(190,240,255,' + (0.35 * fade).toFixed(2) + ')', 2, 0.8);
+    ctx.restore();
     ctx.restore();
   }
 }
