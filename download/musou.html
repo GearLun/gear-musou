@@ -23338,22 +23338,19 @@ function drawPlunderRunes() {
     const k = Math.max(0, Math.min(1, r.t / (r.max || 1)));
     const pulse = 0.5 + Math.sin(time * 12) * 0.3;
     ctx.save();
-    ctx.globalAlpha = 0.20 + 0.26 * k;
-    ctx.fillStyle = '#7a4ac0';
-    ctx.beginPath(); ctx.ellipse(r.x, r.y, PLUNDER.sumRuneR, PLUNDER.sumRuneR * 0.55, 0, 0, TAU); ctx.fill();
-    ctx.globalAlpha = 0.85;
-    ctx.strokeStyle = '#c9a6ff'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.ellipse(r.x, r.y, PLUNDER.sumRuneR, PLUNDER.sumRuneR * 0.55, 0, 0, TAU); ctx.stroke();
-    ctx.strokeStyle = 'rgba(232,220,255,' + (0.5 + 0.4 * pulse).toFixed(2) + ')'; ctx.lineWidth = 2.2;
+    /* 🎨 像素化：扁椭圆法阵（填充 + 两道环 + 6 个光点）→ 压扁变换后的抖动椭圆 + 阶梯环 + 像素火花 */
+    ctx.save();
+    ctx.translate(r.x, r.y);
+    ctx.scale(1, 0.55);
+    pxDitherEllipse(0, 0, PLUNDER.sumRuneR, PLUNDER.sumRuneR, '#7a4ac0', 0.20 + 0.26 * k, 0.55);
+    pxRing(0, 0, PLUNDER.sumRuneR, '#c9a6ff', 3, 0.85);
     const rr2 = PLUNDER.sumRuneR * Math.max(0.18, 1 - 0.8 * k);   // 内圈随蓄力收缩：缩到中心 = 骷髅头出来
-    ctx.beginPath(); ctx.ellipse(r.x, r.y, rr2, rr2 * 0.55, 0, 0, TAU); ctx.stroke();
-    ctx.fillStyle = '#e8dcff';
+    pxRing(0, 0, rr2, 'rgba(232,220,255,' + (0.5 + 0.4 * pulse).toFixed(2) + ')', 2, 0.9);
     for (let i = 0; i < 6; i++) {
       const a = time * 1.4 + i * (TAU / 6);
-      ctx.beginPath();
-      ctx.arc(r.x + Math.cos(a) * PLUNDER.sumRuneR * 0.82, r.y + Math.sin(a) * PLUNDER.sumRuneR * 0.45, 2.6, 0, TAU);
-      ctx.fill();
+      pxBlock(Math.cos(a) * PLUNDER.sumRuneR * 0.82, Math.sin(a) * PLUNDER.sumRuneR * 0.82, 4, '#e8dcff', 0.95);
     }
+    ctx.restore();
     /* 上方浮现的骷髅虚影：提前告诉玩家「法阵要吐什么」 */
     const hy = r.y - 46 - 12 * k;
     ctx.globalAlpha = 0.30 + 0.45 * k;
@@ -24472,8 +24469,9 @@ function drawArcherPlayer() {
   const musou = p.musouT > 0;
   if (musou) {
     const pul = 0.6 + Math.sin(time * 14) * 0.4;
-    ctx.fillStyle = 'rgba(255,209,102,' + (0.14 * pul).toFixed(3) + ')';
-    ctx.beginPath(); ctx.arc(p.x, p.y, 44 + Math.sin(time * 9) * 6, 0, TAU); ctx.fill();
+    /* 🎨 像素化：实心光环圆 → 抖动椭圆（中心透明、边缘留一圈亮环） */
+    pxDitherEllipse(p.x, p.y, 44 + Math.sin(time * 9) * 6, 44 + Math.sin(time * 9) * 6, 'rgba(255,209,102,0.85)', 0.14 * pul, 0.45);
+    pxRing(p.x, p.y, 44 + Math.sin(time * 9) * 6, 'rgba(255,209,102,0.9)', 3, 0.22 * pul);
   }
   if (p.iframes > 0 && Math.sin(time * 40) > 0 && p.hurtT <= 0) return;
   if (isTrainer()) { drawTrainerPlayer(); return; }   // 🧢 训练家：专属立绘（不拿弓）
@@ -24777,8 +24775,9 @@ function drawMagePlayer() {
   };
   if (musou) {
     const pul = 0.6 + Math.sin(time * 14) * 0.4;
-    ctx.fillStyle = C.aura + (0.16 * pul).toFixed(3) + ')';
-    ctx.beginPath(); ctx.arc(p.x, p.y, 46 + Math.sin(time * 9) * 7, 0, TAU); ctx.fill();
+    /* 🎨 像素化：法师无双光环 → 抖动圆 + 阶梯环 */
+    pxDitherEllipse(p.x, p.y, 46 + Math.sin(time * 9) * 7, 46 + Math.sin(time * 9) * 7, C.aura + '0.85)', 0.16 * pul, 0.45);
+    pxRing(p.x, p.y, 46 + Math.sin(time * 9) * 7, C.aura + '0.95)', 3, 0.20 * pul);
   }
   if (p.iframes > 0 && Math.sin(time * 40) > 0 && p.hurtT <= 0) return;
   const m = Math.hypot(p.vx, p.vy);
@@ -25070,17 +25069,14 @@ function drawShinyAura() {
   const col = classSetCol(p.role);
   const pul = 0.5 + Math.sin(time * 6) * 0.5;
   ctx.save();
-  const g = ctx.createRadialGradient(p.x, p.y, 4, p.x, p.y, 46);
-  g.addColorStop(0, 'rgba(255,229,150,0.30)');
-  g.addColorStop(0.6, 'rgba(255,209,102,0.12)');
-  g.addColorStop(1, 'rgba(255,209,102,0)');
-  ctx.fillStyle = g;
-  ctx.beginPath(); ctx.arc(p.x, p.y, 46, 0, TAU); ctx.fill();
-  ctx.strokeStyle = col; ctx.globalAlpha = 0.35 + 0.35 * pul;
-  ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.ellipse(p.x, p.y + 12, 26 + pul * 3, 10 + pul * 1.6, 0, 0, TAU); ctx.stroke();
-  ctx.globalAlpha = 0.22 + 0.3 * pul;
-  ctx.beginPath(); ctx.arc(p.x, p.y, 30 + pul * 4, 0, TAU); ctx.stroke();
+  /* 🎨 像素化：闪光光环（径向渐变实心圆 + 两道平滑环）→ 抖动圆 + 阶梯环（压扁的足下环也用变换压扁） */
+  pxDitherEllipse(p.x, p.y, 46, 46, 'rgba(255,209,102,0.9)', 0.22 + 0.12 * pul, 0.4);
+  ctx.save();
+  ctx.translate(p.x, p.y + 12);
+  ctx.scale(1, 0.38);
+  pxRing(0, 0, 26 + pul * 3, col, 2, 0.35 + 0.35 * pul);
+  ctx.restore();
+  pxRing(p.x, p.y, 30 + pul * 4, col, 2, 0.22 + 0.3 * pul);
   /* 环绕金色星点 */
   for (let i = 0; i < 3; i++) {
     const an = time * 1.6 + i * (TAU / 3);
@@ -25139,16 +25135,13 @@ function drawRoninMark() {
   if (ready) {
     const pul = 0.5 + 0.5 * Math.sin(time * 7);
     ctx.save();
-    ctx.globalAlpha = 0.20 + 0.16 * pul;
-    const g = ctx.createRadialGradient(p.x, p.y, 6, p.x, p.y, 44);
-    g.addColorStop(0, 'rgba(190,250,255,0.55)');
-    g.addColorStop(1, 'rgba(140,220,255,0)');
-    ctx.fillStyle = g;
-    ctx.beginPath(); ctx.arc(p.x, p.y, 44, 0, TAU); ctx.fill();
-    ctx.globalAlpha = 0.5 + 0.4 * pul;
-    ctx.strokeStyle = 'rgba(190,240,255,0.9)';
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.ellipse(p.x, p.y + 10, 24 + pul * 3, 9 + pul * 1.5, 0, 0, TAU); ctx.stroke();
+    /* 🎨 像素化：径向渐变实心圆 + 平滑扁椭圆 → 抖动圆 + 压扁的阶梯环 */
+    pxDitherEllipse(p.x, p.y, 44, 44, 'rgba(190,250,255,0.9)', 0.20 + 0.16 * pul, 0.42);
+    ctx.save();
+    ctx.translate(p.x, p.y + 10);
+    ctx.scale(1, 0.36);
+    pxRing(0, 0, 24 + pul * 3, 'rgba(190,240,255,0.9)', 2, 0.5 + 0.4 * pul);
+    ctx.restore();
     ctx.restore();
   }
   ctx.save();
@@ -25304,8 +25297,9 @@ function drawRoninPlayer() {
   const musou = p.musouT > 0;
   if (musou) {   // 无双光环（与其它职业口径一致）
     const pul = 0.6 + Math.sin(time * 14) * 0.4;
-    ctx.fillStyle = 'rgba(255,209,102,' + (0.14 * pul).toFixed(3) + ')';
-    ctx.beginPath(); ctx.arc(p.x, p.y, 44 + Math.sin(time * 9) * 6, 0, TAU); ctx.fill();
+    /* 🎨 像素化：实心光环圆 → 抖动椭圆（中心透明、边缘留一圈亮环） */
+    pxDitherEllipse(p.x, p.y, 44 + Math.sin(time * 9) * 6, 44 + Math.sin(time * 9) * 6, 'rgba(255,209,102,0.85)', 0.14 * pul, 0.45);
+    pxRing(p.x, p.y, 44 + Math.sin(time * 9) * 6, 'rgba(255,209,102,0.9)', 3, 0.22 * pul);
   }
   if (p.iframes > 0 && Math.sin(time * 40) > 0 && p.hurtT <= 0) return;
   const m = Math.hypot(p.vx, p.vy);
@@ -25374,8 +25368,9 @@ function drawKnightPlayer() {
   const musou = p.musouT > 0;
   if (musou) {   // 无双光环（与其它职业口径一致）
     const pul = 0.6 + Math.sin(time * 14) * 0.4;
-    ctx.fillStyle = 'rgba(255,209,102,' + (0.14 * pul).toFixed(3) + ')';
-    ctx.beginPath(); ctx.arc(p.x, p.y, 44 + Math.sin(time * 9) * 6, 0, TAU); ctx.fill();
+    /* 🎨 像素化：实心光环圆 → 抖动椭圆（中心透明、边缘留一圈亮环） */
+    pxDitherEllipse(p.x, p.y, 44 + Math.sin(time * 9) * 6, 44 + Math.sin(time * 9) * 6, 'rgba(255,209,102,0.85)', 0.14 * pul, 0.45);
+    pxRing(p.x, p.y, 44 + Math.sin(time * 9) * 6, 'rgba(255,209,102,0.9)', 3, 0.22 * pul);
   }
   if (p.iframes > 0 && Math.sin(time * 40) > 0 && p.hurtT <= 0) return;
   const m = Math.hypot(p.vx, p.vy);
@@ -26037,8 +26032,9 @@ function drawWMPlayer() {
   const musou = p.wmMusouT > 0;
   if (musou) {
     const pul = 0.6 + Math.sin(time * 16) * 0.4;
-    ctx.fillStyle = 'rgba(255,209,102,' + (0.16 * pul).toFixed(3) + ')';
-    ctx.beginPath(); ctx.arc(p.x, p.y, 52 + Math.sin(time * 10) * 6, 0, TAU); ctx.fill();
+    /* 🎨 像素化：武器大师万武齐鸣光环 → 抖动圆 + 阶梯环 */
+    pxDitherEllipse(p.x, p.y, 52 + Math.sin(time * 10) * 6, 52 + Math.sin(time * 10) * 6, 'rgba(255,209,102,0.9)', 0.16 * pul, 0.45);
+    pxRing(p.x, p.y, 52 + Math.sin(time * 10) * 6, 'rgba(255,209,102,0.95)', 3, 0.24 * pul);
   }
   if (p.iframes > 0 && !musou && Math.sin(time * 40) > 0 && p.hurtT <= 0) return;   // 万武齐鸣期间不闪角色（改由金色光环表示无敌）
   const m = Math.hypot(p.vx, p.vy);
@@ -26123,17 +26119,12 @@ function drawWMThrusts() {
       const heads = Math.max(1, st.heads | 0);
       const isField = inst.id === 'gearfield';
       const gear = inst.id === 'gearset' || isField;
-      /* 攻击范围：轨道圈（判定就是「圈上的齿轮撞到谁」）——所见即所得 */
+      /* 攻击范围：轨道圈（判定就是「圈上的齿轮撞到谁」）——所见即所得
+         🎨 像素化：两道平滑圆 → 阶梯环（虚线那道也用阶梯环，视觉上同样是"断续"的栅格点） */
       ctx.save();
-      ctx.globalAlpha = isField ? 0.34 : 0.3;
-      ctx.strokeStyle = gear ? (isField ? '#ffd166' : '#9adcff') : '#ffe9a8';
-      ctx.lineWidth = 2;
-      ctx.beginPath(); ctx.arc(p.x, p.y, st.orbitR, 0, TAU); ctx.stroke();
-      if (isField) {   // 🛞 齿轮领域：外圈虚线标出「轨道 + 判定半径」的实际打击带
-        ctx.globalAlpha = 0.18;
-        if (ctx.setLineDash) ctx.setLineDash([10, 12]);
-        ctx.beginPath(); ctx.arc(p.x, p.y, st.orbitR + st.hitR, 0, TAU); ctx.stroke();
-        if (ctx.setLineDash) ctx.setLineDash([]);
+      pxRing(p.x, p.y, st.orbitR, gear ? (isField ? '#ffd166' : '#9adcff') : '#ffe9a8', 2, isField ? 0.34 : 0.3);
+      if (isField) {   // 🛞 齿轮领域：外圈标出「轨道 + 判定半径」的实际打击带
+        pxRing(p.x, p.y, st.orbitR + st.hitR, gear ? '#ffd166' : '#9adcff', 2, 0.18);
       }
       ctx.restore();
       for (let h = 0; h < heads; h++) {
@@ -26338,8 +26329,9 @@ function drawPlayer() {
   // 无双光环
   if (musou) {
     const pul = 0.6 + Math.sin(time * 14) * 0.4;
-    ctx.fillStyle = 'rgba(255,209,102,' + (0.14 * pul).toFixed(3) + ')';
-    ctx.beginPath(); ctx.arc(p.x, p.y, 44 + Math.sin(time * 9) * 6, 0, TAU); ctx.fill();
+    /* 🎨 像素化：实心光环圆 → 抖动椭圆（中心透明、边缘留一圈亮环） */
+    pxDitherEllipse(p.x, p.y, 44 + Math.sin(time * 9) * 6, 44 + Math.sin(time * 9) * 6, 'rgba(255,209,102,0.85)', 0.14 * pul, 0.45);
+    pxRing(p.x, p.y, 44 + Math.sin(time * 9) * 6, 'rgba(255,209,102,0.9)', 3, 0.22 * pul);
   }
   if (p.iframes > 0 && Math.sin(time * 40) > 0 && p.hurtT <= 0) return;
   const m = Math.hypot(p.vx, p.vy);
