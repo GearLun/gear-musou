@@ -11874,14 +11874,16 @@ function drawPetBeams() {
       /* 折返段（s.bounce）画得**细一点、芯亮一点** —— 光柱垂直撞墙时折返段和去程完全共线，
          不做出区别就「看起来根本没反弹」（用户报过：看不到反弹） */
       const kb = s.bounce ? 0.78 : 1;
-      ctx.globalAlpha = 0.45 * k * kb;
-      ctx.strokeStyle = PAL.outer;
-      ctx.lineWidth = b.w * (0.75 + 0.25 * k) * kb;
-      ctx.beginPath(); ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2); ctx.stroke();
-      ctx.globalAlpha = 0.95 * k;
-      ctx.strokeStyle = PAL.core;
-      ctx.lineWidth = Math.max(3, b.w * 0.34) * (0.6 + 0.4 * k) * (s.bounce ? 1.15 : 1);
-      ctx.beginPath(); ctx.moveTo(s.x1, s.y1); ctx.lineTo(s.x2, s.y2); ctx.stroke();
+      /* 🎨 像素化：宝可梦光束（日光束 / 水炮 / 龙息…）也是「攻击特效」，
+         同样沿线段铺三层方块；折返段更细（kb）以保留「反弹看得见」这个读感。 */
+      pxBeam(s.x1, s.y1, s.x2, s.y2, b.w * (0.75 + 0.25 * k) * kb, PAL.outer, PAL.core, k * (s.bounce ? 1 : 0.95), k);
+      if (s.bounce) {
+        ctx.globalAlpha = 0.9 * k;
+        ctx.fillStyle = PAL.core;
+        const sb = pxSnapS(Math.max(2, b.w * 0.4));
+        ctx.fillRect(pxSnap(s.x1) - sb / 2, pxSnap(s.y1) - sb / 2, sb, sb);
+        ctx.globalAlpha = 1;
+      }
     }
     /* 撞墙点：白色闪光 + 绿色冲击环 + 放射光刺（反弹这一下必须看得见） */
     for (const bp of (b.bounces || [])) {
