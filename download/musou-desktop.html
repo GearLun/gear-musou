@@ -1837,10 +1837,16 @@ function pxHumanoid(px, f, mode, cfg, pal) {
   else if (mode === 'atk') { const k = f ? 1 : 0; wind = k; armPh = k ? -1.2 : 1.1; bob = k ? -1 : 0; }
   else { bob = (f & 1) ? -1 : 0; legPh = (f & 1) ? 0.35 : -0.35; }
 
-  const cx = Math.round(px.w / 2);
+  /* 中线略偏左（0.47）：给右侧的武器/盾牌留出空间，避免被画布裁成半截 */
+  const cx = Math.round(px.w * 0.47);
   const footY = px.h - 2 + bob;
   const headR = c.headR || 3.7;
-  const headY = (c.headDY || 0) + 4.4 + bob * 0.6;
+  /* ⚠️ **戴高头饰的（盔缨 / 尖顶法师帽 / 角 / 王冠 / 小丑帽）头要往下让** ——
+     否则头饰会顶出画布上边界被裁掉（本轮用 tools\_px-bounds.js 量出来的：
+     总大将的盔缨、指挥官的盔缨、法师的塔尖都中过这个）。 */
+  const tallHelm = (c.helm === 'plume' || c.helm === 'wizard' || c.helm === 'horned' ||
+                    c.helm === 'crown' || c.helm === 'jester' || c.helm === 'knight');
+  const headY = (c.headDY || 0) + (tallHelm ? 7.0 : 4.4) + bob * 0.6;
   const shY = headY + headR + 1.2;
   const hipY = c.hipY || (footY - 5.2);
   const halfW = c.skinny ? 3.2 : 4.0;
@@ -1906,12 +1912,14 @@ function pxHumanoid(px, f, mode, cfg, pal) {
     } else if (hk === 'plume') {
       pxBall(px, cx, headY - 1.2, headR + 0.4, headR * 0.86, pal.ml, pal.m, pal.md, null, false);
       pxRect(px, cx - headR, headY + 0.4, Math.round(headR * 2), 1, pal.md);
-      for (let i = 0; i < 4; i++) pxLine(px, cx - 1, headY - 3 - i * 0.6, cx - 1 - i * 0.9, headY - 6 - i * 1.1, pal.a, 1.2);   // 盔缨
-      pxLine(px, cx - 1, headY - 3, cx - 0.4, headY - 6.2, pal.al, 1);
+      /* 盔缨：长度必须**留在画布内**（原来 4 段各 -6~-9 会顶出上边界被裁） */
+      for (let i = 0; i < 3; i++) pxLine(px, cx - 1, headY - 3 - i * 0.5, cx - 1 - i * 0.8, headY - 4.6 - i * 0.9, pal.a, 1.2);
+      pxLine(px, cx - 1, headY - 3, cx - 0.4, headY - 4.8, pal.al, 1);
     } else if (hk === 'wizard') {
-      /* 尖顶法师帽：三层塔尖 + 帽檐 + 星点 */
-      pxPoly(px, [[cx - headR - 1.2, headY - 1.4], [cx + headR + 1.2, headY - 1.4], [cx + 0.4, headY - 7.6]], pal.a);
-      pxPoly(px, [[cx - headR - 1.2, headY - 1.4], [cx, headY - 1.4], [cx + 0.4, headY - 7.6]], pal.ad);
+      /* 尖顶法师帽：塔尖 + 帽檐 + 星点（塔尖高度按画布夹住，别再顶出去） */
+      const tipY = Math.max(1.5, headY - 7.6);
+      pxPoly(px, [[cx - headR - 1.2, headY - 1.4], [cx + headR + 1.2, headY - 1.4], [cx + 0.4, tipY]], pal.a);
+      pxPoly(px, [[cx - headR - 1.2, headY - 1.4], [cx, headY - 1.4], [cx + 0.4, tipY]], pal.ad);
       pxRect(px, cx - headR - 2, headY - 1.6, Math.round(headR * 2) + 4, 1.6, pal.ad);
       pxPut(px, cx - 1, headY - 4, pxCI(px, pal.al));
       pxPut(px, cx + 1, headY - 5, pxCI(px, pal.al));
@@ -1927,6 +1935,27 @@ function pxHumanoid(px, f, mode, cfg, pal) {
       pxBall(px, cx, headY - 1.4, headR + 0.2, headR * 0.7, pal.ml, pal.a, pal.ad, null, false);
       for (let i = 0; i < 3; i++) pxRect(px, cx - 3 + i * 3, headY - 5.4, 1, 2, pal.al);
       pxPut(px, cx, headY - 1, pxCI(px, '#ff6a8a'));
+    } else if (hk === 'band') {
+      /* 头带（战士）：额前一条 + 后方两根飘带 + 上方露出的头发 */
+      pxRect(px, cx - headR - 0.4, headY - 1.8, Math.round((headR + 0.4) * 2), 1.6, pal.a);
+      pxRect(px, cx - headR - 0.4, headY - 1.8, Math.round((headR + 0.4) * 2), 1, pal.al);
+      const fl = legPh * 1.4;
+      pxLine(px, cx - headR - 0.4, headY - 1.2, cx - headR - 3.2, headY + 1.4 + fl, pal.ad, 1.2);
+      pxLine(px, cx - headR - 0.4, headY - 1.2, cx - headR - 2.6, headY + 2.6 + fl, pal.a, 1);
+      pxEll(px, cx, headY - headR * 0.64, headR * 0.96, headR * 0.48, pxDeep(pal.skd, 0.35));
+    } else if (hk === 'cap') {
+      /* 鸭舌帽（训练家）：帽体 + 前檐 + 帽徽 */
+      pxBall(px, cx, headY - 1.6, headR + 0.4, headR * 0.9, pal.al, pal.a, pal.ad, null, false);
+      pxRect(px, cx - headR - 0.6, headY - 1.0, Math.round((headR + 0.6) * 2), 1.4, pal.ad);
+      pxRect(px, cx - headR, headY + 0.4, Math.round(headR * 2) + 1, 1, pal.ad);
+      pxRect(px, cx - 1, headY - 3.4, 2, 2, '#ffffff');
+    } else if (hk === 'jester') {
+      /* 小丑帽（牌皇）：两个尖角 + 铃铛 */
+      pxPoly(px, [[cx - headR - 0.6, headY - 1.2], [cx - 0.4, headY - 1.2], [cx - headR - 2.6, headY - 6.6]], pal.a);
+      pxPoly(px, [[cx + 0.4, headY - 1.2], [cx + headR + 0.6, headY - 1.2], [cx + headR + 2.6, headY - 6.6]], pal.al);
+      pxRect(px, cx - headR - 0.6, headY - 1.4, Math.round((headR + 0.6) * 2), 1.4, pal.ad);
+      pxPut(px, Math.round(cx - headR - 2.6), Math.round(headY - 7), pxCI(px, '#ffe9a8'));
+      pxPut(px, Math.round(cx + headR + 2.6), Math.round(headY - 7), pxCI(px, '#fff6d0'));
     }
   }
 
@@ -1949,9 +1978,11 @@ function pxHumanoid(px, f, mode, cfg, pal) {
   const wq = c.weapon;
   if (wq && wq !== 'none') {
     const tipLift = (mode === 'atk') ? (f ? 3.2 : -1.6) : 0;
-    const hx = handX, hy = handY;
+    /* ⚠️ 武器锚点要**夹在画布内**：手在身体右侧，往右伸的武器（弓/枪/刀）很容易伸出画布
+       被裁成半截（本轮用 tools\_px-bounds.js 量出来的）。这里统一留 5px 余量。 */
+    const hx = Math.min(handX, px.w - 6), hy = handY;
     if (wq === 'sword' || wq === 'dagger') {
-      const len = wq === 'dagger' ? 4 : 7;
+      const len = wq === 'dagger' ? Math.min(4, Math.max(2, (px.w - 1) - hx)) : Math.min(7, Math.max(3, (px.w - 1) - hx));
       pxCapsule(px, hx, hy, hx + 1.0, hy - len + tipLift, 0.8, pal.ml);       // 刃
       pxLine(px, hx, hy, hx + 1.0, hy - len + tipLift, pal.w, 1);             // 刃口高光
       pxRect(px, hx - 1, hy, 3, 1, pal.ad);                                    // 护手
@@ -1977,6 +2008,24 @@ function pxHumanoid(px, f, mode, cfg, pal) {
       pxLine(px, hx - 0.6, hy + 2, hx + 1.0, hy - 7 + tipLift, pxDeep(pal.a, 0.4), 1.3);
       pxBall(px, hx + 1.0, hy - 7.6 + tipLift, 1.9, 1.9, pal.al, pal.a, pal.ad, null, false);   // 法球
       pxPut(px, hx + 1, hy - 8, pxCI(px, '#ffffff'));
+    } else if (wq === 'katana') {
+      /* 太刀（浪客）：细长微弯 + 白刃口 + 长柄 */
+      const len2 = 11;
+      for (let i = 0; i <= len2; i++) {
+        const t2 = i / len2;
+        const bxx = hx + t2 * 2.2, byy = hy - t2 * len2 + tipLift;
+        pxPut(px, Math.round(bxx), Math.round(byy), pxCI(px, pal.ml));
+        pxPut(px, Math.round(bxx) + 1, Math.round(byy), pxCI(px, i < 4 ? pal.md : pal.w));
+      }
+      pxRect(px, hx - 1, hy, 3, 1, pal.ad);              // 鍔（护手）
+      pxLine(px, hx - 0.4, hy + 1, hx - 1.4, hy + 4, pxDeep(pal.a, 0.55), 1.2);   // 柄
+    } else if (wq === 'gun') {
+      /* 手枪（枪械兵）：枪管 + 转轮 + 握把 */
+      pxRect(px, hx, hy - 1, 5, 1, pal.md);              // 枪管
+      pxRect(px, hx, hy - 2, 4, 1, pal.ml);              // 上沿高光
+      pxRect(px, hx, hy, 1, 2, pxDeep(pal.ad, 0.4));     // 握把
+      pxRect(px, hx + 1, hy - 1, 2, 1, pal.a);           // 转轮
+      if (mode === 'atk') { pxPut(px, hx + 5, hy - 1, pxCI(px, '#fff3c0')); pxPut(px, hx + 6, hy - 1, pxCI(px, '#ffd166')); }
     }
   }
   /* 角 / 光环等额外装饰 */
@@ -1997,31 +2046,120 @@ const PX_SPEC = {
   /* —— 杂兵 —— */
   grunt:   { w: 16, h: 20, sc: 2, kind: 'human', cfg: { helm: 'pot', weapon: 'sword', armor: 1 }, death: { mode: 'topple', dirt: 6 } },
   runner:  { w: 14, h: 18, sc: 2, kind: 'human', cfg: { headR: 3.1, helm: 'hood', weapon: 'dagger', skinny: 1, cape: 1 }, death: { mode: 'spin', dust: 8 } },
-  archer:  { w: 16, h: 20, sc: 2, kind: 'human', cfg: { headR: 3.3, helm: 'hood', weapon: 'bow', cape: 1 }, death: { mode: 'topple', dirt: 5, drop: 'bow' } },
-  mage:    { w: 16, h: 22, sc: 2, kind: 'human', cfg: { headR: 3.5, helm: 'wizard', weapon: 'staff' }, death: { mode: 'dissolve', spark: 10 } },
+  archer:  { w: 18, h: 20, sc: 2, kind: 'human', cfg: { headR: 3.3, helm: 'hood', weapon: 'bow', cape: 1 }, death: { mode: 'topple', dirt: 5, drop: 'bow' } },
+  mage:    { w: 18, h: 26, sc: 2, kind: 'human', cfg: { headR: 3.5, helm: 'wizard', weapon: 'staff' }, death: { mode: 'dissolve', spark: 10 } },
   brute:   { w: 22, h: 28, sc: 3, kind: 'human', cfg: { headR: 4.6, helm: 'horned', weapon: 'axe', armor: 1 }, death: { mode: 'slam', dust: 14 } },
   /* —— 骑兵（马 + 骑手）—— */
-  cavalry: { w: 26, h: 22, sc: 2, kind: 'horse', death: { mode: 'topple', dust: 10 } },
+  cavalry: { w: 28, h: 22, sc: 2, kind: 'horse', death: { mode: 'topple', dust: 10 } },
   /* —— Boss —— */
-  general:  { w: 28, h: 34, sc: 3, kind: 'general', death: { mode: 'kneel', dust: 20, spark: 8 } },
-  commander:{ w: 26, h: 32, sc: 3, kind: 'human2', cfg: { headR: 4.2, helm: 'plume', weapon: 'lance', armor: 1, cape: 1 }, death: { mode: 'kneel', dust: 16 } },
+  general:  { w: 34, h: 38, sc: 3, kind: 'general', death: { mode: 'kneel', dust: 20, spark: 8 } },
+  commander:{ w: 30, h: 34, sc: 3, kind: 'human2', cfg: { headR: 4.2, helm: 'plume', weapon: 'lance', armor: 1, cape: 1 }, death: { mode: 'kneel', dust: 16 } },
   final3:   { w: 34, h: 30, sc: 3, kind: 'worm', death: { mode: 'ash', dust: 24 } },
   final4:   { w: 34, h: 30, sc: 3, kind: 'plant', death: { mode: 'wilt', petals: 10 } },
   final5:   { w: 28, h: 26, sc: 3, kind: 'twin', death: { mode: 'shatter', shards: 12 } },
   final6:   { w: 26, h: 34, sc: 3, kind: 'voidBlade', death: { mode: 'dissolve', spark: 16 } },
   final2:   { w: 34, h: 34, sc: 3, kind: 'gear', death: { mode: 'shatter', shards: 16 } },
   final:    { w: 32, h: 34, sc: 3, kind: 'demon', death: { mode: 'ash', dust: 22, spark: 12 } },
-  slimeKing:{ w: 40, h: 32, sc: 3, kind: 'slime', crown: 1, death: { mode: 'melt', goo: 18 } },
+  slimeKing:{ w: 40, h: 35, sc: 3, kind: 'slime', crown: 1, death: { mode: 'melt', goo: 18 } },
   slimeMini:{ w: 24, h: 20, sc: 2, kind: 'slime', death: { mode: 'melt', goo: 10 } },
   plunder:  { w: 28, h: 34, sc: 3, kind: 'plunder', death: { mode: 'dissolve', spark: 14 } },
   skull:    { w: 14, h: 14, sc: 2, kind: 'skull', death: { mode: 'shatter', shards: 7 } },
-  sprinter: { w: 22, h: 24, sc: 2, kind: 'sprinter', death: { mode: 'spin', dust: 12 } },
+  sprinter: { w: 24, h: 26, sc: 2, kind: 'sprinter', death: { mode: 'spin', dust: 12 } },
   tentacle: { w: 20, h: 20, sc: 2, kind: 'tentacle', death: { mode: 'wilt', petals: 4 } }
 };
 
 /* 缓存 key：type + 帧 + 动作 + 配色 + 变体 */
 const PX_MODE_FRAMES = { idle: 2, walk: 4, atk: 2 };
 const PX_MODE_FPS = { idle: 3.2, walk: 8.0, atk: 11.0 };
+
+/* ============================================================
+   🧑 玩家像素模型（9 个职业）
+   ============================================================
+   玩家永远在画面中心，是「美术跃迁」最直观的一块。
+   每个职业只写差异项（配色 + 头盔 + 武器 + 盾/披风），建模器复用 `pxHumanoid`，
+   所以 9 个职业风格统一，但一眼能分清：头带 / 兜帽 / 尖顶法师帽 / 板甲 / 鸭舌帽 / 小丑帽。
+   朝向：`p.face` 指向左时水平翻转（像素画翻面不违和，成本为 0）。
+   ============================================================ */
+const PX_PSPEC = {
+  warrior: { w: 20, h: 24, sc: 2, col: '#c9d2dc', dark: '#5a6572', acc: '#c0392b', cfg: { headR: 4.0, helm: 'band', weapon: 'sword', armor: 1 } },
+  ronin:   { w: 20, h: 24, sc: 2, col: '#2f3a4a', dark: '#141a24', acc: '#5b8fd8', cfg: { headR: 3.9, helm: 'none', weapon: 'katana', cape: 1 } },
+  knight:  { w: 22, h: 24, sc: 2, col: '#8f9aa8', dark: '#3a4450', acc: '#e2b93f', cfg: { headR: 4.0, helm: 'knight', weapon: 'lance', shield: 1, armor: 1 } },
+  wm:      { w: 20, h: 24, sc: 2, col: '#8a6a4a', dark: '#3a2a1c', acc: '#c9a227', cfg: { headR: 3.9, helm: 'none', weapon: 'sword', armor: 1 } },
+  archer:  { w: 22, h: 24, sc: 2, col: '#3f6f4f', dark: '#1f3a2b', acc: '#c8b070', cfg: { headR: 3.8, helm: 'hood', weapon: 'bow', cape: 1 } },
+  gunner:  { w: 22, h: 24, sc: 2, col: '#4a5a3a', dark: '#232b1c', acc: '#d8a441', cfg: { headR: 3.8, helm: 'pot', weapon: 'gun', armor: 1 } },
+  card:    { w: 22, h: 24, sc: 2, col: '#6a3f8f', dark: '#2a1740', acc: '#ffd166', cfg: { headR: 3.8, helm: 'jester', weapon: 'dagger', cape: 1 } },
+  trainer: { w: 20, h: 24, sc: 2, col: '#d94f4f', dark: '#6a1f1f', acc: '#f5f2e8', cfg: { headR: 3.9, helm: 'cap', weapon: 'none' } },
+  mage:    { w: 22, h: 30, sc: 2, col: '#4a3a8f', dark: '#1e1740', acc: '#9adcff', cfg: { headR: 3.9, helm: 'wizard', weapon: 'staff', cape: 1 } }
+};
+/* 玩家当前属于哪个像素模型（弓箭手那 4 个分支各一份） */
+function pxPlayerClass() {
+  if (isTrainer()) return 'trainer';
+  if (isArcher()) return isGunner() ? 'gunner' : (isCard() ? 'card' : 'archer');
+  if (isMage()) return 'mage';
+  if (isRonin()) return 'ronin';
+  if (isKnight()) return 'knight';
+  if (isWM()) return 'wm';
+  return 'warrior';
+}
+/* 取玩家贴图（同样走缓存）。variant：'' / 'flash'（受伤白闪） */
+function pxPlayerSpriteOf(cls, frame, mode, variant) {
+  const spec = PX_PSPEC[cls] || PX_PSPEC.warrior;
+  const key = 'P:' + cls + '|' + mode + '|' + frame + '|' + (variant || '');
+  const had = PX_CV[key];
+  if (had !== undefined) return had;
+  const pal = pxPalOf(spec.col, spec.dark, spec.acc);
+  const px = PXC(spec.w, spec.h);
+  pxHumanoid(px, frame, mode, spec.cfg, pal);
+  pxOutline(px, pal.k);
+  let out = px;
+  if (variant === 'flash') {
+    out = { w: px.w, h: px.h, bw: px.bw, bh: px.bh, buf: px.buf, idx: null, pal: [null].concat(px.pal.slice(1).map(() => '#ffffff')) };
+  }
+  return pxRaster(out, key);
+}
+/* 当前动作 / 帧号（和旧矢量版的 `p.walk` `p.swingT` 口径对齐，动画节奏不变） */
+function pxPlayerAnim() {
+  const mv = Math.hypot(p.vx || 0, p.vy || 0);
+  let mode = 'idle', f = 0;
+  if (p.swingT > 0) {
+    mode = 'atk';
+    const pr = Math.max(0, Math.min(1, 1 - p.swingT / 0.17));
+    f = pr < 0.5 ? 0 : 1;
+  } else if (mv > 25) {
+    mode = 'walk';
+    f = Math.floor((p.walk || 0) * 0.35 / 1.5708) % 4;
+    if (f < 0) f += 4;
+  } else {
+    f = Math.floor(time * 3.2) % 2;
+  }
+  return { mode: mode, f: f };
+}
+/* 画玩家本体（像素）。cls 省略时自动判定；opts.flip 可强制朝向 */
+function pxPlayerBody(cls, opts) {
+  const c = cls || pxPlayerClass();
+  const spec = PX_PSPEC[c] || PX_PSPEC.warrior;
+  const a = pxPlayerAnim();
+  const o = opts || {};
+  const variant = o.flash ? 'flash' : '';
+  const cv = pxPlayerSpriteOf(c, a.f, a.mode, variant);
+  if (!cv) return;
+  const w = cv.width * spec.sc, h = cv.height * spec.sc;
+  /* 朝向：默认跟 `p.face` 的水平分量；|cos| 太小时保持上一次朝向（避免抖动） */
+  let faceLeft = o.faceLeft;
+  if (faceLeft === undefined) {
+    const cx2 = Math.cos(p.face === undefined ? 1 : p.face);
+    if (!pxPlayerBody.lastFlip) pxPlayerBody.lastFlip = { left: false };
+    if (Math.abs(cx2) > 0.08) pxPlayerBody.lastFlip.left = cx2 < 0;
+    faceLeft = pxPlayerBody.lastFlip.left;
+  }
+  /* 脚底：旧矢量版腿部画到 y≈+15，这里对齐同一地面线 */
+  const footY = (o.footY === undefined ? 15 : o.footY);
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  if (faceLeft) { ctx.translate(-1, 0); ctx.scale(-1, 1); }
+  ctx.drawImage(cv, Math.round(-w / 2), Math.round(footY - h), w, h);
+  ctx.restore();
+}
 
 /* 取一张已光栅化的贴图（不存在就建）。
    variant: 'flash' = 全白受击闪 · 'dark0..4' = 死亡渐黑 · '' = 原样 */
@@ -2257,7 +2395,7 @@ const PX_BODY = {
     pxLine(px, cx - headR, headY - 2.4, cx - headR - 3.6, headY - 6.6, pal.ml, 1.8);
     pxLine(px, cx + headR, headY - 2.4, cx + headR + 3.6, headY - 6.6, pal.ml, 1.8);
     pxLine(px, cx - headR - 1.6, headY - 4.4, cx - headR - 3.4, headY - 6.4, pal.w, 1);
-    for (let i = 0; i < 5; i++) pxLine(px, cx, headY - 4.6 - i * 0.5, cx - 1 + i * 0.4, headY - 7.4 - i * 1.1, pal.a, 1.2);
+    for (let i = 0; i < 3; i++) pxLine(px, cx, headY - 4.0 - i * 0.4, cx - 1 + i * 0.4, headY - 5.6 - i * 0.8, pal.a, 1.2);
     /* 眼睛（金色发光） */
     pxRect(px, cx - 3, headY - 0.4, 2, 1.4, pal.a);
     pxRect(px, cx + 1, headY - 0.4, 2, 1.4, pal.a);
@@ -2509,11 +2647,11 @@ const PX_BODY = {
     /* 王冠（超级史莱姆专属）：**必须完全落在画布内**（原来顶出上边界被裁成一根横杠） */
     if (spec && spec.crown) {
       const cy2 = Math.max(3, cy - ry + 3);
-      pxRect(px, cx - 6, cy2 - 2, 12, 2, pal.al);
-      pxRect(px, cx - 6, cy2 - 2, 12, 1, '#fffbe0');
+      pxRect(px, cx - 5, cy2 - 2, 10, 2, pal.al);
+      pxRect(px, cx - 5, cy2 - 2, 10, 1, '#fffbe0');
       for (let i = 0; i < 3; i++) {
-        pxRect(px, cx - 6 + i * 5, cy2 - 5, 2, 3, pal.al);
-        pxRect(px, cx - 6 + i * 5, cy2 - 5, 1, 3, '#fffbe0');
+        pxRect(px, cx - 5 + i * 4, cy2 - 5, 2, 3, pal.al);
+        pxRect(px, cx - 5 + i * 4, cy2 - 5, 1, 3, '#fffbe0');
       }
       pxPut(px, cx, cy2 - 1, pxCI(px, '#ff5a7a'));
     }
@@ -2583,7 +2721,7 @@ const PX_BODY = {
     const hipY = footY - 7, headY = 6.4;
     /* 速度线（身后三道） */
     for (let i = 0; i < 3; i++) {
-      pxLine(px, cx - 7 - i * 2, headY + 2 + i * 3, cx - 12 - i * 3, headY + 2 + i * 3, 'rgba(255,209,102,' + (0.55 - i * 0.15) + ')', 1.2);
+      pxLine(px, cx - 6 - i * 1.5, headY + 2 + i * 3, cx - 8.5 - i * 1.8, headY + 2 + i * 3, 'rgba(255,209,102,' + (0.55 - i * 0.15) + ')', 1.2);
     }
     /* 围巾（长长飘在身后） */
     const sc = A.legPh;
@@ -23933,27 +24071,8 @@ function drawArcherPlayer() {
   ctx.save();
   ctx.translate(p.x, p.y);
   ctx.scale(1, crouch);
-  // 腿
-  ctx.fillStyle = '#3d4650';
-  ctx.fillRect(-6, 8 - leg, 5, 7);
-  ctx.fillRect(2, 8 + leg, 5, 7);
-  // 身体铠甲
-  ctx.fillStyle = '#c9d2dc';
-  rr(-11, -12, 22, 22, 9);
-  ctx.fill();
-  ctx.strokeStyle = '#5a6572'; ctx.lineWidth = 1.5;
-  ctx.stroke();
-  ctx.fillStyle = '#2ba08f';
-  ctx.fillRect(-11, 2, 22, 6);
-  ctx.fillStyle = '#f0d9a0';
-  ctx.fillRect(-11, -12, 22, 3);
-  // 头 + 发带
-  ctx.fillStyle = '#e8b98a';
-  ctx.beginPath(); ctx.arc(0, -18, 8, 0, TAU); ctx.fill();
-  ctx.fillStyle = '#1d2026';
-  ctx.fillRect(-9, -24, 18, 5);
-  // 围巾（青碧色飘动）
-  ctx.strokeStyle = '#2ba08f'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  /* 🎨 本体：像素模型（传统弓） */
+  pxPlayerBody('archer');
   drawSlashStreak();   // 🗡️ 刀光拖尾（统一函数）
   // 背后箭袋（露出三支箭羽）
   ctx.save();
@@ -24030,73 +24149,18 @@ function drawTrainerPlayer() {
   const riding = !!mt;
   ctx.save();
   ctx.translate(p.x, p.y);
-  if (riding) {
-    /* 坐骑：训练家整个人抬高到宝可梦背上（宝可梦自己的贴图在 drawPet 里画过了） */
-    ctx.translate(0, -PET_RIDE_LIFT);
-    ctx.fillStyle = 'rgba(0,0,0,0.28)';                       // 骑乘阴影
-    ctx.beginPath(); ctx.ellipse(0, PET_RIDE_LIFT, 15, 5, 0, 0, TAU); ctx.fill();
-    /* 跨坐的腿（左右各一条，垂在坐骑两侧） */
-    ctx.fillStyle = '#3f5f96';
-    ctx.fillRect(-8.5, 8, 5, 7);
-    ctx.fillRect(3.5, 8, 5, 7);
-    ctx.fillStyle = '#eef1f4';
-    ctx.fillRect(-9.5, 14, 7, 3);
-    ctx.fillRect(2.5, 14, 7, 3);
-  } else {
-    /* 腿：牛仔裤 + 白色运动鞋 */
-    ctx.fillStyle = '#3f5f96';
-    ctx.fillRect(-6, 8 - leg, 5, 8);
-    ctx.fillRect(2, 8 + leg, 5, 8);
-    ctx.fillStyle = '#eef1f4';
-    ctx.fillRect(-7, 15 - leg, 7, 3);
-    ctx.fillRect(1, 15 + leg, 7, 3);
-  }
-  /* 背包（小智的背包：固定挂在背后偏左，**不跟着指针转到身后**）—— 先画，被身体压住一半 */
+  /* 🧢 骑乘：整体抬高到坐骑背上（宝可梦贴图由 drawPet 画） */
+  if (riding) ctx.translate(0, -PET_RIDE_LIFT);
+  /* 背包（小智的背包：固定挂在背后偏左）—— 先画，被身体压住一半 */
   ctx.fillStyle = '#2f6fc4';
   rr(-20, -7, 10, 16, 3.6); ctx.fill();
   ctx.strokeStyle = '#1d4f8f'; ctx.lineWidth = 1.2; ctx.stroke();
   ctx.fillStyle = '#e0a03a';
   rr(-20, -0.6, 10, 3.6, 1.4); ctx.fill();
-  /* 身体：白色内衬 + 蓝色马甲（小智同款配色） */
-  ctx.fillStyle = '#f2f4f6';
-  rr(-11, -12, 22, 22, 9); ctx.fill();
-  ctx.strokeStyle = '#8a94a0'; ctx.lineWidth = 1.4; ctx.stroke();
-  ctx.fillStyle = '#2f6fc4';
-  rr(-10, -9, 20, 14, 5); ctx.fill();
-  ctx.fillStyle = '#1d4f8f';
-  ctx.fillRect(-10, -9, 20, 2.6);
-  /* 双手（不拿武器，摊在身侧） */
-  ctx.fillStyle = '#e8b98a';
-  ctx.beginPath(); ctx.arc(-11, 1, 3.3, 0, TAU); ctx.fill();
-  ctx.beginPath(); ctx.arc(11, 1, 3.3, 0, TAU); ctx.fill();
-  /* 腰带 + 腰间的精灵球 */
-  ctx.fillStyle = '#43372a';
-  ctx.fillRect(-11, 4.4, 22, 3.2);
-  ctx.fillStyle = '#c9a227';
-  ctx.fillRect(-3, 4.4, 5, 3.2);
+  /* 🎨 本体：像素模型（训练家）—— 旧的圆角矩形拼人已替换 */
+  pxPlayerBody('trainer');
+  /* 腰间的精灵球（辨识度很高的细节，保留） */
   drawPokeball(-8.5, 9.4, 3.6);
-  /* 头（头心 = (0,-18)，半径 8） */
-  const HX = 0, HY = -18, HR = 8;
-  ctx.fillStyle = '#e8b98a';
-  ctx.beginPath(); ctx.arc(HX, HY, HR, 0, TAU); ctx.fill();
-  ctx.fillStyle = '#3a2a1e';                                   // 鬓角（固定在头两侧）
-  ctx.beginPath(); ctx.arc(HX - HR * 0.84, HY + 1.4, 2.6, 0, TAU); ctx.fill();
-  ctx.beginPath(); ctx.arc(HX + HR * 0.84, HY + 1.4, 2.6, 0, TAU); ctx.fill();
-  /* 🧢 红白鸭舌帽：**整顶帽子都是固定朝向**（帽檐朝正下方＝冲着观众，不随指针转） */
-  ctx.save();
-  ctx.translate(HX, HY - 1.8);                                 // 帽子中心 = 头顶
-  ctx.fillStyle = '#c0392b';                                    // ① 帽檐（固定：正前方的一片，压在帽身下）
-  rr(-9.4, 0.6, 18.8, 3.8, 1.8); ctx.fill();
-  ctx.fillStyle = '#d84a32';                                    // ② 帽身（上半圆 + 齐边）
-  ctx.beginPath(); ctx.arc(0, 0, 9.2, Math.PI, TAU); ctx.fill();
-  ctx.fillRect(-9.2, -1.2, 18.4, 1.6);
-  ctx.fillStyle = '#b93a2b';                                    // 帽顶暗面
-  ctx.beginPath(); ctx.arc(0, 0, 9.2, Math.PI, Math.PI * 1.5); ctx.fill();
-  ctx.fillStyle = '#f2f4f6';                                    // ③ 帽前白带（永远画，不因朝向隐藏）
-  rr(-9.2, -1.2, 18.4, 3.2, 1.4); ctx.fill();
-  ctx.fillStyle = '#2f6fc4';                                    // ④ 帽徽（白带正中）
-  ctx.beginPath(); ctx.arc(0, 0.4, 2.1, 0, TAU); ctx.fill();
-  ctx.restore();
   ctx.restore();
 }
 /* 现代枪械：全身军用迷彩的士兵 + AK（射击后坐与枪口火焰沿用放箭计时 p.bowT） */
@@ -24119,49 +24183,8 @@ function drawGunnerPlayer() {
   ctx.strokeStyle = '#1c2116'; ctx.lineWidth = 1.2; ctx.stroke();
   ctx.fillStyle = CAMO_B; rr(-6, -3, 12, 5, 2); ctx.fill();
   ctx.restore();
-  /* 腿 + 战术靴 */
-  ctx.fillStyle = CAMO;
-  ctx.fillRect(-7, 7 - leg, 6, 9);
-  ctx.fillRect(1, 7 + leg, 6, 9);
-  ctx.fillStyle = CAMO_D;
-  ctx.fillRect(-7, 4 - leg, 6, 4);
-  ctx.fillRect(1, 4 + leg, 6, 4);
-  ctx.fillStyle = '#1c2116';
-  ctx.fillRect(-8, 15 - leg, 8, 4);
-  ctx.fillRect(0, 15 + leg, 8, 4);
-  /* 躯干：迷彩作战服 + 战术背心 */
-  ctx.fillStyle = CAMO;
-  rr(-11, -13, 22, 22, 7); ctx.fill();
-  ctx.save();
-  ctx.beginPath(); rr(-11, -13, 22, 22, 7); ctx.clip();
-  for (const [bx, by, br] of blob) { ctx.fillStyle = (bx + by) % 2 ? CAMO_D : CAMO_B; ctx.beginPath(); ctx.arc(bx, by, br, 0, TAU); ctx.fill(); }
-  ctx.fillStyle = CAMO_L; ctx.beginPath(); ctx.arc(5, -9, 3, 0, TAU); ctx.fill();
-  ctx.restore();
-  ctx.strokeStyle = '#232a1a'; ctx.lineWidth = 1.5; ctx.stroke();
-  /* 战术背心（深色 + 弹匣袋） */
-  ctx.fillStyle = '#3a4030';
-  rr(-9, -9, 18, 13, 3); ctx.fill();
-  ctx.strokeStyle = '#1c2116'; ctx.lineWidth = 1.1; ctx.stroke();
-  ctx.fillStyle = '#2a3020';
-  ctx.fillRect(-7, -2, 5, 5); ctx.fillRect(-1, -2, 5, 5); ctx.fillRect(5, -2, 4, 5);
-  ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.strokeRect(-7, -2, 5, 5); ctx.strokeRect(-1, -2, 5, 5);
-  /* 头：迷彩头盔 + 护目镜 + 面罩 */
-  ctx.fillStyle = '#c98a5a';
-  ctx.beginPath(); ctx.arc(0, -19, 7.4, 0, TAU); ctx.fill();
-  ctx.fillStyle = '#2a3020';   // 面罩/围脖
-  ctx.beginPath(); ctx.arc(0, -17.5, 7.2, 0.15 * Math.PI, 0.85 * Math.PI); ctx.fill();
-  ctx.fillStyle = CAMO;        // 头盔
-  ctx.beginPath(); ctx.arc(0, -21, 9, Math.PI, TAU); ctx.fill();
-  ctx.save();
-  ctx.beginPath(); ctx.arc(0, -21, 9, Math.PI, TAU); ctx.clip();
-  ctx.fillStyle = CAMO_D; ctx.fillRect(-6, -27, 5, 5); ctx.fillStyle = CAMO_B; ctx.fillRect(3, -25, 6, 4);
-  ctx.restore();
-  ctx.strokeStyle = '#232a1a'; ctx.lineWidth = 1.2;
-  ctx.beginPath(); ctx.arc(0, -21, 9, Math.PI, TAU); ctx.stroke();
-  ctx.fillStyle = '#1c2116';   // 盔带
-  ctx.fillRect(-9.5, -20, 19, 2);
-  ctx.fillStyle = '#7fd4ff';   // 护目镜镜片反光
-  ctx.fillRect(-6, -22.5, 5, 2.6); ctx.fillRect(1, -22.5, 5, 2.6);
+  /* 🎨 本体：像素模型（枪械兵）。背包留在上面（它在身后），身体换像素。 */
+  pxPlayerBody('gunner');
   ctx.restore();
 
   /* AK：跟随朝向，枪身 + 弹匣 + 枪口火焰 */
@@ -24258,44 +24281,8 @@ function drawCardPlayer() {
     else ctx.lineTo(xx, yy + 4);
   }
   ctx.stroke();
-  /* 腿 + 亮面皮鞋 */
-  ctx.fillStyle = '#1b1729';
-  ctx.fillRect(-6.5, 7 - leg, 5.5, 8);
-  ctx.fillRect(1.5, 7 + leg, 5.5, 8);
-  ctx.fillStyle = '#0f0c18';
-  ctx.fillRect(-7.5, 14 - leg, 7.5, 3.6);
-  ctx.fillRect(1, 14 + leg, 7.5, 3.6);
-  /* 燕尾服：深紫黑外套 + 白衬衫 + 洋红翻领 + 红领结 */
-  ctx.fillStyle = COAT_L;
-  rr(-11, -13, 22, 22, 8); ctx.fill();
-  ctx.strokeStyle = '#100c1c'; ctx.lineWidth = 1.4; ctx.stroke();
-  ctx.fillStyle = COAT;
-  ctx.beginPath(); ctx.moveTo(-11, 3); ctx.lineTo(-3, 3); ctx.lineTo(-5, 12); ctx.lineTo(-12, 10); ctx.closePath(); ctx.fill();   // 燕尾（后摆）
-  ctx.beginPath(); ctx.moveTo(11, 3); ctx.lineTo(3, 3); ctx.lineTo(5, 12); ctx.lineTo(12, 10); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = SHIRT;                 // 白衬衫 V 领
-  ctx.beginPath(); ctx.moveTo(-5, -12); ctx.lineTo(5, -12); ctx.lineTo(0, -3); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = TRIM;                  // 洋红翻领
-  ctx.beginPath(); ctx.moveTo(-6, -12.5); ctx.lineTo(-1.5, -11.5); ctx.lineTo(0, -3); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(6, -12.5); ctx.lineTo(1.5, -11.5); ctx.lineTo(0, -3); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#e23b5a';             // 红领结
-  ctx.beginPath(); ctx.moveTo(-3.4, -11.6); ctx.lineTo(0, -10.2); ctx.lineTo(3.4, -11.6); ctx.lineTo(0, -8.6); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#f0d9a0';             // 腰带扣
-  ctx.fillRect(-11, 2.4, 22, 1.6);
-  /* 头 + 高礼帽 */
-  ctx.fillStyle = '#e8b98a';
-  ctx.beginPath(); ctx.arc(0, -19, 7.6, 0, TAU); ctx.fill();
-  ctx.fillStyle = '#2b2338';             // 眼睛（朝向前方）
-  ctx.beginPath(); ctx.arc(Math.cos(p.face) * 2.4 - 1.2, -19.4, 1.2, 0, TAU); ctx.fill();
-  ctx.fillStyle = '#141021';             // 帽檐
-  ctx.beginPath(); ctx.ellipse(0, -25, 12.6, 3.4, 0, 0, TAU); ctx.fill();
-  ctx.fillStyle = '#1d1730';             // 帽筒
-  rr(-8.4, -38, 16.8, 13.5, 2.4); ctx.fill();
-  ctx.strokeStyle = '#0d0a16'; ctx.lineWidth = 1.2;
-  rr(-8.4, -38, 16.8, 13.5, 2.4); ctx.stroke();
-  ctx.fillStyle = TRIM;                  // 帽带（洋红）
-  ctx.fillRect(-8.4, -28.4, 16.8, 3.2);
-  ctx.fillStyle = 'rgba(255,255,255,0.16)';   // 帽筒高光
-  ctx.fillRect(-6.6, -36.6, 3, 11);
+  /* 🎨 本体：像素模型（牌皇）—— 披风留在上面（它在身后），身体换像素 */
+  pxPlayerBody('card');
   /* 持牌的手：三色牌扇（甩牌时向外甩开 + 抖一下） */
   ctx.save();
   ctx.translate(Math.cos(p.face) * 14, Math.sin(p.face) * 14 - 4);
@@ -24376,37 +24363,8 @@ function drawMagePlayer() {
   ctx.save();
   ctx.translate(p.x, p.y);
   ctx.scale(1, crouch);
-  // 腿
-  ctx.fillStyle = '#3d4650';
-  ctx.fillRect(-6, 8 - leg, 5, 7);
-  ctx.fillRect(2, 8 + leg, 5, 7);
-  // 长袍（元素配色，下摆随移动飘动）
-  ctx.fillStyle = C.robe;
-  rr(-12, -12, 24, 26, 8);
-  ctx.fill();
-  ctx.strokeStyle = C.robeLine; ctx.lineWidth = 1.5;
-  ctx.stroke();
-  ctx.fillStyle = C.hem;
-  ctx.beginPath();
-  ctx.moveTo(-12, 6); ctx.lineTo(-15 - Math.sin(time * 8) * 2, 16);
-  ctx.lineTo(15 + Math.sin(time * 8) * 2, 16); ctx.lineTo(12, 6);
-  ctx.closePath(); ctx.fill();
-  // 肩披 / 星纹
-  ctx.fillStyle = C.trim;
-  ctx.fillRect(-12, -12, 24, 3);
-  ctx.fillStyle = '#ffe9a8';
-  ctx.beginPath(); ctx.arc(0, 0, 2.4, 0, TAU); ctx.fill();
-  // 头 + 尖顶法师帽
-  ctx.fillStyle = '#e8b98a';
-  ctx.beginPath(); ctx.arc(0, -18, 8, 0, TAU); ctx.fill();
-  ctx.fillStyle = C.hat;
-  ctx.beginPath();
-  ctx.moveTo(-12, -22); ctx.lineTo(0, -40); ctx.lineTo(12, -22);
-  ctx.closePath(); ctx.fill();
-  ctx.fillStyle = C.hatBand;
-  ctx.fillRect(-13, -23, 26, 3.4);
-  ctx.fillStyle = '#ffd166';
-  ctx.beginPath(); ctx.arc(0, -27, 1.8, 0, TAU); ctx.fill();
+  /* 🎨 本体：像素模型（法师）。元素配色仍由 C.* 控制法杖光效，本体换像素。 */
+  pxPlayerBody('mage');
   // 法杖：杖身 + 顶端法球（咏唱时前推并亮起）
   ctx.save();
   ctx.translate(Math.cos(p.face) * (14 + rec * 5), Math.sin(p.face) * (14 + rec * 5) - 2);
@@ -24931,55 +24889,9 @@ function drawRoninPlayer() {
   const REC = '#1b2540', REC_D = '#121a2e', TRIM = '#e8eefc', HAK = '#242c50', HAK_D = '#171d38';
   ctx.save();
   ctx.translate(p.x, p.y);
-  /* 袴（宽大的马乘袴）：两条梯形腿 + 摆动 */
-  ctx.fillStyle = HAK_D;
-  ctx.beginPath(); ctx.moveTo(-11, 4); ctx.lineTo(-1, 4); ctx.lineTo(-2 - step * 2, 17 - leg); ctx.lineTo(-12 - step * 2, 16 - leg); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(1, 4); ctx.lineTo(11, 4); ctx.lineTo(12 - step * 2, 16 + leg); ctx.lineTo(2 - step * 2, 17 + leg); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = HAK;
-  ctx.beginPath(); ctx.moveTo(-12, 1); ctx.lineTo(12, 1); ctx.lineTo(13, 8); ctx.lineTo(-13, 8); ctx.closePath(); ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1;
-  for (const px of [-6, 0, 6]) { ctx.beginPath(); ctx.moveTo(px, 3); ctx.lineTo(px * 1.1, 15); ctx.stroke(); }   // 袴的襞（折线）
-  /* 草鞋 */
-  ctx.fillStyle = '#2a2418';
-  ctx.fillRect(-13 - step * 2, 16 - leg, 9, 3.4);
-  ctx.fillRect(4 - step * 2, 16 + leg, 9, 3.4);
-  /* 着物上身 + 白衣交领 */
-  ctx.fillStyle = REC;
-  rr(-11, -14, 22, 19, 7); ctx.fill();
-  ctx.strokeStyle = '#0d1220'; ctx.lineWidth = 1.4;
-  rr(-11, -14, 22, 19, 7); ctx.stroke();
-  ctx.fillStyle = TRIM;                                  // 白交领
-  ctx.beginPath(); ctx.moveTo(-6, -14); ctx.lineTo(0, -6); ctx.lineTo(6, -14); ctx.lineTo(3, -14.6); ctx.lineTo(0, -10.5); ctx.lineTo(-3, -14.6); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = REC_D;                                 // 羽织前襟
-  ctx.beginPath(); ctx.moveTo(-11, -14); ctx.lineTo(-4, -14); ctx.lineTo(-2, 3); ctx.lineTo(-11, 4); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(11, -14); ctx.lineTo(4, -14); ctx.lineTo(2, 3); ctx.lineTo(11, 4); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = 'rgba(255,255,255,0.85)';              // 胸前的家纹（圆 + 月牙）
-  ctx.beginPath(); ctx.arc(-6.5, -8, 3.1, 0, TAU); ctx.fill();
-  ctx.fillStyle = REC_D;
-  ctx.beginPath(); ctx.arc(-5.4, -8.6, 2.2, 0, TAU); ctx.fill();
-  ctx.fillStyle = TRIM;                                  // 腰带（白帯）
-  ctx.fillRect(-12, 1.5, 24, 3.4);
-  ctx.fillStyle = REC_D;
-  ctx.fillRect(-12, 1.5, 24, 1.1);
-  /* 宽袖（羽织袖）：随走动摆动 */
-  const flap = step * 3;
-  ctx.fillStyle = REC_D;
-  ctx.beginPath(); ctx.moveTo(-11, -12); ctx.quadraticCurveTo(-19, -6 + flap, -16, 4 + flap); ctx.lineTo(-9, 2); ctx.closePath(); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(11, -12); ctx.quadraticCurveTo(19, -6 - flap, 16, 4 - flap); ctx.lineTo(9, 2); ctx.closePath(); ctx.fill();
-  /* 头 + 丁髷（发髻） */
-  ctx.fillStyle = '#e8b98a';
-  ctx.beginPath(); ctx.arc(0, -20, 7.4, 0, TAU); ctx.fill();
-  ctx.fillStyle = '#171426';                             // 头发（月代 + 鬓）
-  ctx.beginPath(); ctx.arc(0, -22.4, 7.6, Math.PI * 0.98, TAU * 1.01); ctx.fill();
-  ctx.fillRect(-7.6, -22, 15.2, 3.2);
-  ctx.fillStyle = '#2b2338';                             // 眼
-  ctx.beginPath(); ctx.arc(Math.cos(p.face) * 2.2 - 1.0, -20.2, 1.15, 0, TAU); ctx.fill();
-  ctx.beginPath(); ctx.arc(Math.cos(p.face) * 2.2 + 2.6, -20.2, 1.15, 0, TAU); ctx.fill();
-  ctx.fillStyle = '#171426';                             // 丁髷：小辫 + 发髻
-  rr(-2.6 - Math.cos(p.face) * 1.2, -30, 5.2, 8, 2.2); ctx.fill();
-  ctx.beginPath(); ctx.arc(-Math.cos(p.face) * 2.4, -30.4, 3.4, 0, TAU); ctx.fill();
-  ctx.strokeStyle = '#c9b8ff'; ctx.lineWidth = 1.1;      // 系发绳
-  ctx.beginPath(); ctx.moveTo(-3 - Math.cos(p.face) * 1.6, -26.4); ctx.lineTo(3 - Math.cos(p.face) * 1.6, -26.4); ctx.stroke();
+  /* 🎨 本体：像素模型（浪客）—— 旧的袴/着物/发髻矢量拼人已替换。
+     腰间的刀鞘与右手太刀（带祖传宝刀金光）继续由下面的代码画，保留手感。 */
+  pxPlayerBody('ronin');
   /* 腰间的空刀鞘（左腰，略斜） */
   ctx.save();
   ctx.translate(-Math.cos(p.face) * 4, 4);
@@ -25077,42 +24989,8 @@ function drawKnightPlayer() {
   if (horse) ctx.translate(0, -14);   // 骑在马背上
   ctx.rotate(0);
   /* 腿（板甲护腿 + 铁靴） */
-  ctx.fillStyle = STEEL_D;
-  ctx.fillRect(-7, 6 - step * 4, 6, 9);
-  ctx.fillRect(1, 6 + step * 4, 6, 9);
-  ctx.fillStyle = '#2b3242';
-  ctx.fillRect(-8, 14 - step * 4, 8, 4);
-  ctx.fillRect(0, 14 + step * 4, 8, 4);
-  /* 躯干：板甲胸铠 + 蓝色战袍 */
-  ctx.fillStyle = CLOTH;
-  rr(-12, -15, 24, 22, 7); ctx.fill();
-  ctx.fillStyle = STEEL;
-  rr(-11, -14, 22, 18, 6); ctx.fill();
-  ctx.strokeStyle = '#39435a'; ctx.lineWidth = 1.5;
-  rr(-11, -14, 22, 18, 6); ctx.stroke();
-  ctx.fillStyle = 'rgba(255,255,255,0.25)';
-  ctx.fillRect(-9, -12, 4, 14);
-  ctx.fillStyle = GOLD;                       // 金色胸饰
-  ctx.beginPath(); ctx.arc(0, -6, 3.2, 0, TAU); ctx.fill();
-  ctx.fillStyle = CLOTH_D;
-  ctx.fillRect(-12, 2, 24, 5);
-  /* 头盔（全罩式 + 面甲缝 + 盔缨） */
-  ctx.fillStyle = STEEL;
-  ctx.beginPath(); ctx.arc(0, -20, 8.4, 0, TAU); ctx.fill();
-  ctx.fillStyle = '#2b3242';
-  ctx.fillRect(-6.5, -21, 13, 2.6);           // 面甲缝
-  ctx.fillStyle = GOLD;
-  ctx.beginPath(); ctx.arc(0, -28.5, 2.6, 0, TAU); ctx.fill();
-  ctx.strokeStyle = CLOTH; ctx.lineWidth = 3; ctx.lineCap = 'round';
-  ctx.beginPath();
-  for (let i = 0; i <= 3; i++) {
-    const t = i / 3;
-    const xx = -Math.cos(f) * (5 + t * 20);
-    const yy = -Math.sin(f) * (5 + t * 20) - 4 + Math.sin(time * 9 + i) * t * 5;
-    if (i === 0) ctx.moveTo(-Math.cos(f) * 4, -26);
-    else ctx.lineTo(xx, yy);
-  }
-  ctx.stroke();
+  /* 🎨 本体：像素模型（骑士）。鸢盾与长枪继续由下面的代码画（它们带格挡/冲撞特效）。 */
+  pxPlayerBody('knight');
   /* ---------- 🛡️ 左手鸢盾：始终朝向前方（挡住正面） ---------- */
   ctx.save();
   ctx.translate(Math.cos(f) * 13, Math.sin(f) * 13 - 2);
@@ -25673,20 +25551,8 @@ function drawWMPlayer() {
   /* 影子 */
   ctx.fillStyle = 'rgba(0,0,0,0.28)';
   ctx.beginPath(); ctx.ellipse(0, 12, 15, 6, 0, 0, TAU); ctx.fill();
-  /* 腿（短打绑腿） */
-  ctx.fillStyle = '#3a3f52';
-  ctx.fillRect(-8, 4, 6, 12 + leg); ctx.fillRect(2, 4, 6, 12 - leg);
-  /* 身（皮甲短打 + 腰带） */
-  ctx.fillStyle = '#6b4a2a';
-  ctx.beginPath(); ctx.ellipse(0, -4, 11, 13, 0, 0, TAU); ctx.fill();
-  ctx.fillStyle = '#8a6236';
-  ctx.fillRect(-11, 0, 22, 4);
-  /* 头 + 束发 */
-  ctx.fillStyle = '#e8c9a0';
-  ctx.beginPath(); ctx.arc(0, -18, 8, 0, TAU); ctx.fill();
-  ctx.fillStyle = '#5a3a1c';
-  ctx.beginPath(); ctx.arc(0, -21, 8, Math.PI, TAU); ctx.fill();
-  ctx.fillRect(-2, -30, 4, 8);
+  /* 🎨 本体：像素模型（武器大师）—— 腰间与四角悬浮武器继续由下面的代码画 */
+  pxPlayerBody('wm');
   /* 腰间挂的家伙（背包里的其它武器，最多 3 把看得见）——无双期间它们都飞到头顶去了，腰间就不重复挂 */
   const bag = wmStored();
   if (!musou) {
@@ -25988,27 +25854,9 @@ function drawPlayer() {
   ctx.save();
   ctx.translate(p.x, p.y);
   ctx.scale(1, crouch);
-  // 腿
-  ctx.fillStyle = '#3d4650';
-  ctx.fillRect(-6, 8 - leg, 5, 7);
-  ctx.fillRect(2, 8 + leg, 5, 7);
-  // 身体铠甲
-  ctx.fillStyle = '#c9d2dc';
-  rr(-11, -12, 22, 22, 9);
-  ctx.fill();
-  ctx.strokeStyle = '#5a6572'; ctx.lineWidth = 1.5;
-  ctx.stroke();
-  ctx.fillStyle = '#c0392b';
-  ctx.fillRect(-11, 2, 22, 6);
-  ctx.fillStyle = '#f0d9a0';
-  ctx.fillRect(-11, -12, 22, 3);
-  // 头
-  ctx.fillStyle = '#e8b98a';
-  ctx.beginPath(); ctx.arc(0, -18, 8, 0, TAU); ctx.fill();
-  ctx.fillStyle = '#1d2026';
-  ctx.fillRect(-9, -24, 18, 5);           // 发带
-  // 围巾飘动
-  ctx.strokeStyle = '#d84a32'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  /* 🎨 本体：像素模型（战士）—— 旧的「几个圆角矩形拼人」已替换。
+     `ctx.scale(1, crouch)` 仍在 → 挥刀时的下蹲压缩照样生效。 */
+  pxPlayerBody('warrior');
   drawSlashStreak();   // 🗡️ 刀光拖尾（统一函数）
   /* ---------- 挥刀动作特效（哈姆杀所有 → 黑洞般的暗色刀光） ---------- */
   const Lb = (30 + effRangeBonus() * 42 + (musou ? 12 : 0)) * effRangeShopMul();
