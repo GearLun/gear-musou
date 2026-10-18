@@ -2236,6 +2236,35 @@ function pxPlayerAnim() {
   }
   return { mode: mode, f: f };
 }
+/* 🪄 法师**杖头法球的世界坐标**（局部坐标，相对玩家 p.x/p.y）。
+   像素模型的杖身是"斜握"的固定姿势（只有左右镜像、不跟 face 旋转），
+   所以杖头位置要按同一套 art 常量反推，才能让**弹幕从法球射出来**（用户明确要求）。
+   推导：art 坐标 → 画布像素（含 PX_PAD）→ 世界坐标（sc 倍），再把底边对齐脚底 footY=15。
+   ⚠️ 改了 PX_PSPEC.mage 的 w/h/headR 或 pxHumanoid 的 staff 几何，这里要跟着改。 */
+function pxMageStaffTip() {
+  const spec = PX_PSPEC.mage;
+  const w = spec.w, h = spec.h, sc = spec.sc;
+  const halfW = 4.0;
+  const cxA = Math.round(w * 0.47);
+  const headY = 7.0;                                  // wizard 属于 tallHelm → headY 基准 7.0
+  const shY = headY + (spec.cfg.headR || 3.5) + 1.2;
+  const ay = shY + 1.4;
+  const hy = ay + 4.2;
+  const hx = Math.min(cxA + halfW + 0.4, w - 6);
+  const tipAx = hx + 2.6;
+  const tipAy = hy - 10.5 - 2.6;
+  const cwW = (w + PX_PAD * 2) * sc;
+  const cwH = (h + PX_PAD * 2) * sc;
+  const footY = 15;
+  let lx = (tipAx + PX_PAD) * sc - cwW / 2;
+  const ly = (tipAy + PX_PAD) * sc - cwH + footY;
+  /* 左右镜像：和 pxPlayerBody 的翻转判据保持一致（|cos|>0.08 才更新，避免抖动） */
+  if (!pxPlayerBody.lastFlip) pxPlayerBody.lastFlip = { left: false };
+  const cosv = Math.cos(p.face === undefined ? 1 : p.face);
+  if (Math.abs(cosv) > 0.08) pxPlayerBody.lastFlip.left = cosv < 0;
+  if (pxPlayerBody.lastFlip.left) lx = -lx;
+  return { x: p.x + lx, y: p.y + ly, lx: lx, ly: ly };
+}
 /* 画玩家本体（像素）。cls 省略时自动判定；opts.flip 可强制朝向 */
 function pxPlayerBody(cls, opts) {
   const c = cls || pxPlayerClass();
@@ -19559,6 +19588,15 @@ function musouPullForce() { return (isMage() || isArcher() || isWM()) ? 0 : 900;
    打穿敌人继续直线飞，**同一只只吃一次满伤**（`hitSet`），飞满射程就消失（**不再有任何爆炸/溅射**）。
    ＋ 伤害口径（用户最新）：**法师普攻 + 玩家等级**，**无双期间再 ×1.5** → 见 `fireBallDmg()`。 */
 function fireBall(ang, dmg) {
+  /* 🪄 弹道起点 = **法杖头部的法球**（用户要求：「攻击弹幕要从法杖射出才行」）。
+     原来是 `p.x + cos*20`（身体中心往前 20px）→ 看着像从胸口/肚皮喷出来。
+     `pxMageStaffTip()` 按像素模型的斜握杖身反推杖头坐标（含左右镜像）。 */
+  const tip = pxMageStaffTip();
+  const ox = tip ? tip.x : p.x + Math.cos(ang) * 20;
+  const oy = tip ? tip.y : p.y + Math.sin(ang) * 20;
+  /* ⚠️ **弹道仍沿角色瞄准线**（`p.x/p.y + ang`），不改成"从杖头重新取角"：
+     杖头比身体高 ~38px，一旦改角，弹道就整体偏了 —— 会破坏「一发穿透同一线上的两个靶」
+     这类判定（冒烟里当场变红）。所以：**物理走原线，视觉在杖头补发射闪光**（见 drawMagePlayer 的 p.mageT 那段）。 */
   pBullets.push({
     x: p.x + Math.cos(ang) * 20, y: p.y + Math.sin(ang) * 20,
     vx: Math.cos(ang) * 470, vy: Math.sin(ang) * 470,
@@ -19568,6 +19606,17 @@ function fireBall(ang, dmg) {
     R: fireRadius(),
     trav: 0, maxTrav: mageRange(false), dead: false
   });
+  /* 出膛火花：从法球喷出来的那一下（让"射出"有起点读感）
+     ⚠️ 这里**必须用 pxRand（确定性哈希）**，不能用 `rnd()` —— 一开火就消耗全局随机数会推移整条
+     随机流，把 Boss 状态机、掉落判定全带偏（本轮踩过：seed 303 的「世界吞噬者钻地循环」当场变红）。 */
+  for (let i = 0; i < 5; i++) {
+    const a2 = ang + (pxRand(time * 53 + i * 7) - 0.5);
+    const sp1 = 60 + pxRand(time * 31 + i * 13) * 90;
+    const lf = 0.14 + pxRand(time * 17 + i * 5) * 0.14;
+    const sz = 2 + pxRand(time * 23 + i * 3) * 1.4;
+    addPart(ox, oy, Math.cos(a2) * sp1, Math.sin(a2) * sp1, lf, sz,
+      i % 2 ? '#ffd166' : '#fff3c4', 0);
+  }
   dbgFires++;
 }
 /* 无双发动：清空全场敌方射弹（弓兵的箭 / 妖法师与 Boss 的弹幕都算）——
@@ -20109,6 +20158,11 @@ const THUNDER_EXEC_BOSS_PCT = 0.03;                                             
 const THUNDER_EXEC_BOSS_CD = 0.5;                                                    // 雷罚对 Boss 的冷却：0.5 秒内最多触发一次
 let thunBossCd = 0;                                                                  // 雷罚·Boss 冷却剩余秒数（tickThunderBossCd 每帧递减）
 function fireBolt(ang, dmg) {
+  /* ⚡ 同样从**法球**射出（见 fireBall 的说明） */
+  const tip = pxMageStaffTip();
+  const ox = tip ? tip.x : p.x + Math.cos(ang) * 20;
+  const oy = tip ? tip.y : p.y + Math.sin(ang) * 20;
+  /* ⚠️ 同 fireBall：**物理严格沿瞄准线**，只在杖头补火花 */
   pBullets.push({
     x: p.x + Math.cos(ang) * 20, y: p.y + Math.sin(ang) * 20,
     vx: Math.cos(ang) * 480, vy: Math.sin(ang) * 480,   // 基础飞行 480px/s（追踪时会自己拐弯，太快就画不出弧）
@@ -20117,6 +20171,15 @@ function fireBolt(ang, dmg) {
     homingTurn: 4.5,                                    // ⚡ 自动追踪的转向速率（rad/s）
     trav: 0, maxTrav: mageRange(false), dead: false
   });
+  /* 同 fireBall：出膛火花用确定性哈希，绝不消耗全局随机流 */
+  for (let i = 0; i < 4; i++) {
+    const a2 = ang + (pxRand(time * 47 + i * 11) - 0.5) * 1.2;
+    const sp1 = 70 + pxRand(time * 29 + i * 7) * 90;
+    const lf = 0.12 + pxRand(time * 19 + i * 3) * 0.12;
+    const sz = 2 + pxRand(time * 37 + i * 5) * 1;
+    addPart(ox, oy, Math.cos(a2) * sp1, Math.sin(a2) * sp1, lf, sz,
+      i % 2 ? '#8fd8ff' : '#ffffff', 0);
+  }
   dbgBolts++;
 }
 /* 雷击命中结算：伤害 → 术有专攻（定身 + 累积雷罚）→ 连锁到另外至多 3 名敌人（同伤害） */
@@ -23396,134 +23459,82 @@ function buildGround() {
   const grR = (a, b) => a + (b - a) * gr();
   const g = ground.getContext('2d');
   if (!sceneDark) {
-    /* —— 草原战场 ——
-       ⚠️ 第一件事必须是「**整张画布铺满不透明底色**」：后面所有绘制都叠在它上面。
-       用户报过「地图右下角缺失、完全是灾难」—— 根因就是**没有任何一层保证兜底**：
-       暗角是用半径 780 的圆形渐变铺的，而地图是 3200×1800（中心到角 ≈1835），
-       半径之外的区域只能拿到渐变的**最后一档颜色**，四个角于是变成一片死黑。
-       现在：① 先 fillRect 纯色兜底 ② 暗角改成按地图对角线匹配的椭圆衰减。 */
-    g.fillStyle = '#33412f';
+    /* —— 草原战场：**统一底色 + 细密纹理**（彻底重做）——
+       ⚠️ 用户截图里的问题：地图被**几块大色块硬拼**在一起。根因是我上一版画了
+         ① 46 个 180~520px 的大光斑 → 大块明暗差
+         ② 一条 46px 宽的蜿蜒土路 → 像把地图切成几块
+       现在全部删掉。宝可梦野外地图的本质是：**整体一个绿、纹理极细、点缀均匀**，
+       分区感靠"物件"（草丛/石头/花）而不是"色块"。 */
+    g.fillStyle = '#4a6b3a';
     g.fillRect(0, 0, W, H);
-    const grad = g.createLinearGradient(0, 0, 0, H);
-    grad.addColorStop(0, '#3a4a35'); grad.addColorStop(0.5, '#33412f'); grad.addColorStop(1, '#2b3828');
-    g.fillStyle = grad; g.fillRect(0, 0, W, H);
-    /* —— 草原战场：**分区 + 层次**（不是"铺一层噪点"）——
-       ① 底色渐变
-       ② 大块有机光斑（云影 / 地势）：正负 alpha 的大椭圆，营造明暗起伏
-       ③ 1px 细噪点（32×32 tile **按 1:1 平铺**，绝不放大 —— 上次 4 倍放大=8px 马赛克砖，被骂惨了）
-       ④ **高草丛区域**：成片的深色草簇（宝可梦那种"草丛块"，有明确边界）
-       ⑤ 一条**蜿蜒土路**穿过地图
-       ⑥ 边界植被带（天然的"地图边框"往里收）
-       ⑦ 少量大件装饰 */
-    /* ② 大块光斑 */
-    for (let i = 0; i < 46; i++) {
+    /* ① 极低对比的大尺度明暗（只做"有光"的感觉，不能看出边界）：
+         用很多**小半径、极低 alpha** 的椭圆叠出来，避免大块色差。 */
+    for (let i = 0; i < 520; i++) {
       const x = gr() * W, y = gr() * H;
       const up = gr() < 0.5;
-      g.fillStyle = up ? 'rgba(120,150,100,' + grR(0.03, 0.07).toFixed(3) + ')'
-                       : 'rgba(0,0,0,' + grR(0.05, 0.11).toFixed(3) + ')';
+      g.fillStyle = up ? 'rgba(150,180,120,0.028)' : 'rgba(20,32,16,0.030)';
       g.beginPath();
-      g.ellipse(x, y, grR(180, 520), grR(90, 300), grR(0, 3), 0, TAU);
+      g.ellipse(x, y, grR(60, 160), grR(40, 110), grR(0, 3), 0, TAU);
       g.fill();
     }
-    /* ③ 1px 细噪点（tile 1:1 平铺） */
+    /* ② 1px 细噪点（32×32 tile 按 1:1 平铺；绝不放大） */
     {
       const T = 32;
       const c2 = document.createElement('canvas');
       c2.width = T; c2.height = T;
       const pg = c2.getContext && c2.getContext('2d');
       if (pg) {
-        for (let i = 0; i < 210; i++) {
+        for (let i = 0; i < 260; i++) {
           const x = (gr() * T) | 0, y = (gr() * T) | 0;
-          pg.fillStyle = gr() < 0.5 ? 'rgba(140,162,112,0.22)' : 'rgba(52,66,44,0.26)';
+          pg.fillStyle = gr() < 0.5 ? 'rgba(160,190,130,0.20)' : 'rgba(44,62,34,0.24)';
           pg.fillRect(x, y, 1, 1);
         }
         const pat = g.createPattern(c2, 'repeat');
         if (pat) { g.fillStyle = pat; g.fillRect(0, 0, W, H); }
       }
     }
-    /* ④ 高草丛区域（成片，有边界） */
-    const patchN = 11;
-    for (let pi = 0; pi < patchN; pi++) {
-      const px2 = grR(140, W - 140), py2 = grR(140, H - 140);
-      const prx = grR(120, 300), pry = grR(80, 200);
-      const dens = 34;
-      for (let i = 0; i < dens * 9; i++) {
-        /* 椭圆内均匀取点（用 sqrt 保证面积均匀），边缘再乘一次扁平度 → 边界自然淡出 */
-        const a = gr() * TAU, rr = Math.sqrt(gr());
-        const bx = px2 + Math.cos(a) * prx * rr, by = py2 + Math.sin(a) * pry * rr;
-        if (rr > 0.94 && gr() < 0.7) continue;          // 最外圈稀疏 → 软边界
-        const h = grR(4, 9);
-        /* 草簇本体：3~4 根 1px 草叶（深色 + 一根亮色），底下压一小块暗影 */
-        g.fillStyle = 'rgba(0,0,0,0.13)';
-        g.fillRect(Math.round(bx) - 2, Math.round(by) + 1, 5, 2);
-        for (let b = 0; b < 3 + ((gr() * 2) | 0); b++) {
-          const ox = grR(-3, 3);
-          g.strokeStyle = gr() < 0.35 ? 'rgba(126,158,96,0.75)' : 'rgba(58,84,46,0.85)';
-          g.lineWidth = 1;
-          g.beginPath();
-          g.moveTo(bx + ox, by);
-          g.lineTo(bx + ox + grR(-1.4, 1.4), by - h * grR(0.7, 1.1));
-          g.stroke();
-        }
-      }
-    }
-    /* ⑤ 蜿蜒土路（多段贝塞尔，宽 30~44，边缘碎石） */
-    {
-      const rp = [];
-      const segs = 7;
-      for (let i = 0; i <= segs; i++) {
-        rp.push({ x: (W / segs) * i, y: H * 0.5 + Math.sin(i * 1.3 + 0.6) * H * 0.24 + grR(-70, 70) });
-      }
-      const drawPath = (lw, col, alpha) => {
-        g.strokeStyle = col; g.globalAlpha = alpha; g.lineWidth = lw;
-        g.lineCap = 'round'; g.lineJoin = 'round';
-        g.beginPath();
-        g.moveTo(rp[0].x, rp[0].y);
-        for (let i = 1; i < rp.length; i++) {
-          const mx = (rp[i - 1].x + rp[i].x) / 2, my = (rp[i - 1].y + rp[i].y) / 2;
-          g.quadraticCurveTo(rp[i - 1].x, rp[i - 1].y, mx, my);
-        }
-        g.lineTo(rp[rp.length - 1].x, rp[rp.length - 1].y);
-        g.stroke();
-        g.globalAlpha = 1;
-      };
-      drawPath(46, '#4c4a33', 0.20);          /* 路肩暗边 */
-      drawPath(38, '#6b6248', 0.42);          /* 土路主体 */
-      drawPath(26, '#7d7256', 0.30);          /* 中间被踩亮的部分 */
-      /* 路面碎石 / 车辙 */
-      for (let i = 0; i < 520; i++) {
-        const t2 = gr(), k2 = Math.floor(t2 * (rp.length - 1));
-        const seg2 = rp[k2], nxt = rp[Math.min(k2 + 1, rp.length - 1)];
-        const u = t2 * (rp.length - 1) - k2;
-        const bx = seg2.x + (nxt.x - seg2.x) * u + grR(-16, 16);
-        const by = seg2.y + (nxt.y - seg2.y) * u + grR(-13, 13);
-        g.fillStyle = gr() < 0.5 ? 'rgba(150,142,116,0.34)' : 'rgba(52,48,34,0.30)';
-        g.fillRect(Math.round(bx), Math.round(by), 1 + ((gr() * 2) | 0), 1);
-      }
-    }
-    /* ⑥ 边界植被带（越是地图边缘草越密越暗 → 天然的框） */
-    for (let i = 0; i < 2600; i++) {
-      /* 在四条边上取点（用平方让边缘更密） */
-      const side = (gr() * 4) | 0;
-      const u = gr(), d = Math.pow(gr(), 2.2) * 190;      // 0~190px 向内
-      let bx, by;
-      if (side === 0) { bx = u * W; by = d; }
-      else if (side === 1) { bx = u * W; by = H - d; }
-      else if (side === 2) { bx = d; by = u * H; }
-      else { bx = W - d; by = u * H; }
-      const h = grR(6, 16);
-      g.strokeStyle = 'rgba(' + (gr() < 0.4 ? '74,100,58' : '42,60,36') + ',' + grR(0.35, 0.75).toFixed(2) + ')';
+    /* ③ 均匀散布的小草叶（**全图均匀**，不做"草丛区域"那种大块）——
+         每撮 2~3 根 1px 短草，深浅两色，密度足够但不扎眼。 */
+    for (let i = 0; i < 9000; i++) {
+      const x = gr() * W, y = gr() * H;
+      const h = grR(3, 7);
+      const dark = gr() < 0.62;
+      g.strokeStyle = dark ? 'rgba(48,68,36,' + grR(0.30, 0.55).toFixed(2) + ')'
+                           : 'rgba(122,152,92,' + grR(0.22, 0.42).toFixed(2) + ')';
       g.lineWidth = 1;
       g.beginPath();
-      g.moveTo(bx, by);
-      g.lineTo(bx + grR(-2.5, 2.5), by - h);
+      g.moveTo(x, y);
+      g.lineTo(x + grR(-1.2, 1.2), y - h);
       g.stroke();
+      if (gr() < 0.35) {
+        g.beginPath();
+        g.moveTo(x + grR(1, 2.5), y);
+        g.lineTo(x + grR(1.4, 3.4), y - h * grR(0.5, 0.8));
+        g.stroke();
+      }
     }
-    /* ⑦ 大件装饰（只放地图中段，别压边界植被带） */
-    for (let i = 0; i < 30; i++) {
-      const x = grR(220, W - 220), y = grR(200, H - 200);
+    /* ④ 稀疏点缀：小石子 / 小花（均匀分布，不聚成块） */
+    for (let i = 0; i < 420; i++) {
+      const x = gr() * W, y = gr() * H;
       const r0 = gr();
-      const kind = r0 < 0.45 ? 'rock' : (r0 < 0.75 ? 'bush' : 'ruin');
+      if (r0 < 0.55) {
+        g.fillStyle = 'rgba(112,120,104,' + grR(0.30, 0.55).toFixed(2) + ')';
+        g.fillRect(Math.round(x), Math.round(y), 2, 2);
+        g.fillStyle = 'rgba(158,166,148,0.40)';
+        g.fillRect(Math.round(x), Math.round(y), 1, 1);
+      } else if (r0 < 0.86) {
+        g.fillStyle = gr() < 0.5 ? 'rgba(214,205,140,0.55)' : 'rgba(200,170,190,0.45)';
+        g.fillRect(Math.round(x), Math.round(y), 1, 1);
+      } else {
+        g.fillStyle = 'rgba(96,116,86,0.35)';
+        g.fillRect(Math.round(x), Math.round(y), 2, 1);
+      }
+    }
+    /* ⑤ 少量大件装饰（岩石 / 灌木 / 断柱）——**当作地图物件**，不当色块 */
+    for (let i = 0; i < 40; i++) {
+      const x = grR(200, W - 200), y = grR(180, H - 180);
+      const r0 = gr();
+      const kind = r0 < 0.45 ? 'rock' : (r0 < 0.78 ? 'bush' : 'ruin');
       pxDecor(g, kind, x, y, kind === 'ruin' ? 8 : grR(7, 11), gr, grR);
     }
     /* 暗角：**半径必须覆盖地图对角线**（中心到角 ≈ hypot(1600,900)=1835）。
@@ -23545,109 +23556,70 @@ function buildGround() {
     const grad = g.createLinearGradient(0, 0, 0, H);
     grad.addColorStop(0, '#151318'); grad.addColorStop(0.55, '#0b0a0e'); grad.addColorStop(1, '#050408');
     g.fillStyle = grad; g.fillRect(0, 0, W, H);
-    /* —— 黑暗战场：**分区 + 层次**（和草原同一套思路）——
-       ① 大块明暗（焦土起伏 / 远处火光）
-       ② 1px 细噪点（tile 1:1）
-       ③ **成片的熔岩裂缝区**（暗红发光裂纹，有明确区域）
-       ④ 碎石堆区（碎裂石板拼块）
-       ⑤ 边界残骸带
-       ⑥ 少量余烬暖点 + 白骨/断柱 */
-    /* ① 大块明暗 */
-    for (let i = 0; i < 40; i++) {
+    /* —— 黑暗战场：**统一底色 + 细密纹理**（同草原，去掉一切"区块"）—— */
+    /* ① 极低对比的大尺度明暗（大量小椭圆叠出来，看不出边界） */
+    for (let i = 0; i < 460; i++) {
       const x = gr() * W, y = gr() * H;
-      const warm = gr() < 0.35;
-      g.fillStyle = warm ? 'rgba(120,50,26,' + grR(0.04, 0.09).toFixed(3) + ')'
-                         : 'rgba(0,0,0,' + grR(0.10, 0.22).toFixed(3) + ')';
+      const warm = gr() < 0.32;
+      g.fillStyle = warm ? 'rgba(96,40,20,0.026)' : (gr() < 0.5 ? 'rgba(60,56,72,0.030)' : 'rgba(0,0,0,0.055)');
       g.beginPath();
-      g.ellipse(x, y, grR(180, 520), grR(90, 300), grR(0, 3), 0, TAU);
+      g.ellipse(x, y, grR(60, 160), grR(40, 110), grR(0, 3), 0, TAU);
       g.fill();
     }
-    /* ② 1px 细噪点 */
+    /* ② 1px 细噪点（1:1 平铺） */
     {
       const T = 32;
       const c2 = document.createElement('canvas');
       c2.width = T; c2.height = T;
       const pg = c2.getContext && c2.getContext('2d');
       if (pg) {
-        for (let i = 0; i < 210; i++) {
+        for (let i = 0; i < 260; i++) {
           const x = (gr() * T) | 0, y = (gr() * T) | 0;
-          pg.fillStyle = gr() < 0.5 ? 'rgba(120,110,132,0.18)' : 'rgba(8,6,10,0.30)';
+          pg.fillStyle = gr() < 0.5 ? 'rgba(130,120,144,0.16)' : 'rgba(6,4,8,0.34)';
           pg.fillRect(x, y, 1, 1);
         }
         const pat = g.createPattern(c2, 'repeat');
         if (pat) { g.fillStyle = pat; g.fillRect(0, 0, W, H); }
       }
     }
-    /* ③ 熔岩裂缝区（成片，有暖色光晕） */
-    for (let ci = 0; ci < 8; ci++) {
-      const cx3 = grR(180, W - 180), cy3 = grR(180, H - 180);
-      const crx = grR(110, 240), cry = grR(80, 170);
-      /* 区域底光 */
-      g.fillStyle = 'rgba(150,44,18,' + grR(0.06, 0.12).toFixed(3) + ')';
-      g.beginPath(); g.ellipse(cx3, cy3, crx, cry, 0, 0, TAU); g.fill();
-      /* 主裂缝：一条曲折的暗红纹 + 更亮的内芯 */
-      let lx = cx3, ly = cy3, ang0 = gr() * TAU;
-      const segn = 26;
+    /* ③ **均匀**的细裂缝（全图分布，短、细、暗红微光）——不做"熔岩区"那种大块 */
+    for (let i = 0; i < 420; i++) {
+      let cx3 = gr() * W, cy3 = gr() * H;
+      let ang0 = gr() * TAU;
+      const segn = 2 + ((gr() * 4) | 0);
       for (let si2 = 0; si2 < segn; si2++) {
-        ang0 += grR(-0.55, 0.55);
-        const nx2 = lx + Math.cos(ang0) * grR(9, 20), ny2 = ly + Math.sin(ang0) * grR(6, 15);
-        if (Math.hypot(nx2 - cx3, ny2 - cy3) > crx * 1.15) break;
-        g.strokeStyle = 'rgba(52,14,8,0.85)'; g.lineWidth = 4;
-        g.beginPath(); g.moveTo(lx, ly); g.lineTo(nx2, ny2); g.stroke();
-        g.strokeStyle = 'rgba(190,54,20,0.55)'; g.lineWidth = 2;
-        g.beginPath(); g.moveTo(lx, ly); g.lineTo(nx2, ny2); g.stroke();
-        g.strokeStyle = 'rgba(255,132,52,' + grR(0.25, 0.6).toFixed(2) + ')'; g.lineWidth = 1;
-        g.beginPath(); g.moveTo(lx, ly); g.lineTo(nx2, ny2); g.stroke();
-        lx = nx2; ly = ny2;
-      }
-      /* 支裂缝 */
-      let bx3 = cx3, by3 = cy3, ang1 = gr() * TAU;
-      for (let si3 = 0; si3 < 10; si3++) {
-        ang1 += grR(-0.7, 0.7);
-        const nx3 = bx3 + Math.cos(ang1) * grR(8, 16), ny3 = by3 + Math.sin(ang1) * grR(6, 13);
-        g.strokeStyle = 'rgba(84,20,10,0.7)'; g.lineWidth = 2;
-        g.beginPath(); g.moveTo(bx3, by3); g.lineTo(nx3, ny3); g.stroke();
-        bx3 = nx3; by3 = ny3;
+        ang0 += grR(-0.8, 0.8);
+        const nx2 = cx3 + Math.cos(ang0) * grR(10, 26), ny2 = cy3 + Math.sin(ang0) * grR(8, 20);
+        g.strokeStyle = 'rgba(38,10,6,' + grR(0.35, 0.6).toFixed(2) + ')';
+        g.lineWidth = 2;
+        g.beginPath(); g.moveTo(cx3, cy3); g.lineTo(nx2, ny2); g.stroke();
+        g.strokeStyle = 'rgba(190,54,20,' + grR(0.12, 0.3).toFixed(2) + ')';
+        g.lineWidth = 1;
+        g.beginPath(); g.moveTo(cx3, cy3); g.lineTo(nx2, ny2); g.stroke();
+        cx3 = nx2; cy3 = ny2;
       }
     }
-    /* ④ 碎石堆区（碎裂石板） */
-    for (let ci = 0; ci < 9; ci++) {
-      const cx4 = grR(160, W - 160), cy4 = grR(160, H - 160);
-      for (let i = 0; i < 90; i++) {
-        const a4 = gr() * TAU, r4 = Math.sqrt(gr()) * grR(60, 150);
-        const sx4 = cx4 + Math.cos(a4) * r4, sy4 = cy4 + Math.sin(a4) * r4 * 0.7;
-        const w4 = 3 + ((gr() * 4) | 0) * 2, h4 = 2 + ((gr() * 3) | 0);
-        g.fillStyle = 'rgba(' + (gr() < 0.5 ? '58,54,50' : '84,78,72') + ',' + grR(0.35, 0.7).toFixed(2) + ')';
-        g.fillRect(Math.round(sx4), Math.round(sy4), w4, h4);
-        g.fillStyle = 'rgba(120,112,104,0.35)';
-        g.fillRect(Math.round(sx4), Math.round(sy4), w4, 1);
-      }
-    }
-    /* ⑤ 边界残骸带 */
-    for (let i = 0; i < 2000; i++) {
-      const side = (gr() * 4) | 0;
-      const u = gr(), d = Math.pow(gr(), 2.2) * 190;
-      let bx2, by2;
-      if (side === 0) { bx2 = u * W; by2 = d; }
-      else if (side === 1) { bx2 = u * W; by2 = H - d; }
-      else if (side === 2) { bx2 = d; by2 = u * H; }
-      else { bx2 = W - d; by2 = u * H; }
-      const h2 = grR(5, 13);
-      g.strokeStyle = 'rgba(' + (gr() < 0.4 ? '96,86,104' : '44,38,48') + ',' + grR(0.30, 0.65).toFixed(2) + ')';
-      g.lineWidth = 1;
-      g.beginPath(); g.moveTo(bx2, by2); g.lineTo(bx2 + grR(-2.5, 2.5), by2 - h2); g.stroke();
-    }
-    /* ⑥ 余烬暖点 */
-    for (let i = 0; i < 190; i++) {
-      const x = grR(20, W - 20), y = grR(20, H - 20);
-      g.fillStyle = 'rgba(' + (gr() < 0.5 ? '255,120,60' : '255,80,40') + ',' + grR(0.16, 0.42).toFixed(2) + ')';
-      g.fillRect(Math.round(x), Math.round(y), 1, 1);
-    }
-    /* 残骸点缀 */
-    for (let i = 0; i < 30; i++) {
-      const x = grR(220, W - 220), y = grR(200, H - 200);
+    /* ④ 均匀的碎石 / 灰烬颗粒 */
+    for (let i = 0; i < 2600; i++) {
+      const x = gr() * W, y = gr() * H;
       const r0 = gr();
-      const kind = r0 < 0.40 ? 'bone' : (r0 < 0.72 ? 'rock' : 'ruin');
+      if (r0 < 0.5) {
+        g.fillStyle = 'rgba(' + (gr() < 0.5 ? '62,58,54' : '84,78,72') + ',' + grR(0.25, 0.5).toFixed(2) + ')';
+        g.fillRect(Math.round(x), Math.round(y), 1 + ((gr() * 2) | 0), 1);
+      } else if (r0 < 0.88) {
+        g.strokeStyle = 'rgba(' + (gr() < 0.5 ? '110,100,120' : '40,36,46') + ',' + grR(0.14, 0.32).toFixed(2) + ')';
+        g.lineWidth = 1;
+        g.beginPath(); g.moveTo(x, y); g.lineTo(x + grR(-1.5, 1.5), y - grR(2, 5)); g.stroke();
+      } else {
+        g.fillStyle = 'rgba(255,' + Math.floor(grR(90, 140)) + ',50,' + grR(0.14, 0.34).toFixed(2) + ')';
+        g.fillRect(Math.round(x), Math.round(y), 1, 1);
+      }
+    }
+    /* ⑤ 少量残骸（白骨 / 断柱 / 碎石） */
+    for (let i = 0; i < 34; i++) {
+      const x = grR(200, W - 200), y = grR(180, H - 180);
+      const r0 = gr();
+      const kind = r0 < 0.40 ? 'bone' : (r0 < 0.74 ? 'rock' : 'ruin');
       pxDecor(g, kind, x, y, kind === 'ruin' ? 8 : grR(7, 11), gr, grR);
     }
     /* 中央惨淡幽光 + 重暗角（同样按地图对角线放大半径，别留死黑角） */
@@ -24864,6 +24836,23 @@ function drawArcherPlayer() {
   /* 🎨 本体：像素模型（传统弓） */
   pxPlayerBody('archer');
   drawSlashStreak();   // 🗡️ 刀光拖尾（统一函数）
+  /* 🏹 **撒手闪光**：`p.bowT` 在放箭那一刻被设成 0.16s —— 用它画「弦松开 + 箭出膛」的那一瞬。
+     弓兵的"出手过程"= 拉满 → 撒手（这一下）→ 箭带彗尾飞出（彗尾已在弹幕层统一做）。
+     位置在身体前方 22px（弓的握把略前），朝瞄准方向喷一小段锥形火花。 */
+  if (p.bowT > 0) {
+    const kf = Math.min(1, p.bowT / 0.16);
+    const mx2 = p.x + Math.cos(p.face) * 22, my2 = p.y + Math.sin(p.face) * 22 - 4;
+    pxRing(mx2, my2, 4 + 10 * (1 - kf), '#cfe6ff', 2, 0.75 * kf);
+    pxBlock(mx2, my2, Math.max(2, 5 * kf + 2), '#ffffff', 0.8 * kf);
+    for (let i = 0; i < 3; i++) {
+      const aa = p.face + (i - 1) * 0.20;
+      for (let j = 1; j <= 3; j++) {
+        if (pxRand(i * 7 + j) < 0.35) continue;
+        pxBlock(mx2 + Math.cos(aa) * j * 4 * kf, my2 + Math.sin(aa) * j * 4 * kf,
+                Math.max(2, 4 - j), i === 1 ? '#ffffff' : '#9adcff', 0.6 * kf);
+      }
+    }
+  }
   // 背后箭袋（露出三支箭羽）
   ctx.save();
   ctx.translate(-Math.cos(p.face) * 11, -Math.sin(p.face) * 11);
@@ -24977,6 +24966,21 @@ function drawGunnerPlayer() {
   ctx.restore();
   /* 🎨 本体：像素模型（枪械兵）。背包留在上面（它在身后），身体换像素。 */
   pxPlayerBody('gunner');
+  /* 🔫 **枪口火焰**：`p.bowT`（射击后坐计时）> 0 时在枪口位置爆一小团。
+     枪械的"出手过程"= 后坐（枪身后仰已在上面做）→ 枪口焰（这一下）→ 弹壳飞出。 */
+  if (p.bowT > 0) {
+    const kf = Math.min(1, p.bowT / 0.16);
+    const mx2 = p.x + Math.cos(p.face) * 26, my2 = p.y + Math.sin(p.face) * 26 - 4;
+    pxDitherEllipse(mx2, my2, 9 * kf + 3, 9 * kf + 3, '#ffd166', 0.7 * kf, 0.6);
+    pxRing(mx2, my2, 4 + 9 * (1 - kf), '#fff3c4', 2, 0.8 * kf);
+    pxBlock(mx2, my2, Math.max(2, 6 * kf + 2), '#ffffff', 0.85 * kf);
+    /* 前方锥形火星 */
+    for (let j = 1; j <= 4; j++) {
+      if (pxRand(j * 11) < 0.3) continue;
+      pxBlock(mx2 + Math.cos(p.face) * j * 5 * kf, my2 + Math.sin(p.face) * j * 5 * kf,
+              Math.max(2, 5 - j), j < 2 ? '#ffffff' : '#ff8a3c', 0.6 * kf);
+    }
+  }
   ctx.restore();
 
   /* AK：跟随朝向，枪身 + 弹匣 + 枪口火焰 */
@@ -25075,6 +25079,19 @@ function drawCardPlayer() {
   ctx.stroke();
   /* 🎨 本体：像素模型（牌皇）—— 披风留在上面（它在身后），身体换像素 */
   pxPlayerBody('card');
+  /* 🃏 **甩手闪光**：牌皇的"出手过程"= 手腕一抖（下面牌扇会跟着抖）→ 这张手部闪光 → 纸牌旋转脱手。
+     位置在持牌手（身前 18px），用元素色（洋红）而不是白，和牌皇配色统一。 */
+  if (rec > 0.12) {
+    const kf = Math.min(1, (rec - 0.12) / 0.88);
+    const mx2 = p.x + Math.cos(p.face) * 18, my2 = p.y + Math.sin(p.face) * 18 - 6;
+    pxRing(mx2, my2, 3 + 8 * (1 - kf), '#ffd6ff', 2, 0.7 * kf);
+    pxBlock(mx2, my2, Math.max(2, 5 * kf + 2), '#ffffff', 0.8 * kf);
+    for (let i = 0; i < 3; i++) {
+      const aa = p.face + (i - 1) * 0.3;
+      pxBlock(mx2 + Math.cos(aa) * (5 + i * 3) * kf, my2 + Math.sin(aa) * (5 + i * 3) * kf,
+              Math.max(2, 4 - i), '#ffb0e0', 0.55 * kf);
+    }
+  }
   /* 持牌的手：三色牌扇（甩牌时向外甩开 + 抖一下） */
   ctx.save();
   ctx.translate(Math.cos(p.face) * 14, Math.sin(p.face) * 14 - 4);
@@ -25168,21 +25185,36 @@ function drawMagePlayer() {
   ctx.scale(1, crouch);
   /* 🎨 本体：像素模型（法师）。元素配色仍由 C.* 控制法杖光效，本体换像素。 */
   pxPlayerBody('mage');
-  // 法杖：杖身 + 顶端法球（咏唱时前推并亮起）
-  ctx.save();
-  ctx.translate(Math.cos(p.face) * (14 + rec * 5), Math.sin(p.face) * (14 + rec * 5) - 2);
-  ctx.rotate(p.face);
-  ctx.strokeStyle = C.staff; ctx.lineWidth = 3;
-  ctx.beginPath(); ctx.moveTo(-12, 0); ctx.lineTo(20, 0); ctx.stroke();
-  ctx.fillStyle = C.socket;
-  ctx.beginPath(); ctx.arc(22, 0, 5.4, 0, TAU); ctx.fill();
-  ctx.shadowColor = C.orbGlow; ctx.shadowBlur = 10 + rec * 12;
-  ctx.fillStyle = musou ? '#ffd166' : C.orb;
-  ctx.beginPath(); ctx.arc(22, 0, 3.4 + rec * 1.2, 0, TAU); ctx.fill();
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = 'rgba(255,255,255,0.85)';
-  ctx.beginPath(); ctx.arc(22, -1, 1.2, 0, TAU); ctx.fill();
-  ctx.restore();
+  /* 🪄 杖头法球的光效（**旧的矢量法杖已删除** ——
+     用户原话：「你给法师加了一个法杖没错，但是你没删掉原来的法杖阿，导致还是有个和dick一样的法杖在那边旋转」。
+     现在杖身由像素模型自己画（斜握在手里），这里只补"咏唱时杖头发亮"那一层。 */
+  {
+    const tip = pxMageStaffTip();
+    const pulse = 0.75 + 0.25 * Math.sin(time * 9);
+    const R2 = (3.4 + rec * 2.2) * pulse;
+    pxRing(tip.x, tip.y, R2 * 2.1, C.orbGlow, 2, 0.22 + rec * 0.3);
+    pxDitherEllipse(tip.x, tip.y, R2 * 1.5, R2 * 1.5, C.orbGlow, 0.5 + rec * 0.3, 0.55);
+    pxBlock(tip.x, tip.y, Math.max(3, R2), musou ? '#ffd166' : C.orb, 0.95);
+    pxBlock(tip.x, tip.y, Math.max(2, R2 * 0.5), '#ffffff', 0.9);
+    /* 💥 **开火瞬间的杖头闪光**（`p.mageT` 由 doCast 设 0.18 秒）——
+       这就是"弹幕从法杖射出来"的视觉由来：弹道本身仍沿瞄准线（判定不变），
+       但出膛那一瞬杖头爆亮 + 一圈冲击环 + 向前的锥形火花，读感完全是从法球打出去的。 */
+    if (p.mageT > 0) {
+      const kf = Math.min(1, p.mageT / 0.18);
+      pxDitherEllipse(tip.x, tip.y, 10 * kf + 4, 10 * kf + 4, '#ffffff', 0.75 * kf, 0.6);
+      pxRing(tip.x, tip.y, 6 + 14 * (1 - kf), C.orbGlow, 3, 0.85 * kf);
+      pxRing(tip.x, tip.y, 4 + 8 * (1 - kf), '#ffffff', 2, 0.7 * kf);
+      /* 朝瞄准方向的锥形火花 */
+      for (let i = 0; i < 3; i++) {
+        const aa = p.face + (i - 1) * 0.22;
+        for (let j = 1; j <= 4; j++) {
+          const dd = (6 + j * 5) * kf;
+          pxBlock(tip.x + Math.cos(aa) * dd, tip.y + Math.sin(aa) * dd,
+                  Math.max(2, 5 - j), i === 1 ? '#ffffff' : C.orb, 0.65 * kf);
+        }
+      }
+    }
+  }
   ctx.restore();
 }
 /* 士兵的部署单位 / 假人 / 小跟班 / 榴弹 / 火箭弹 */
