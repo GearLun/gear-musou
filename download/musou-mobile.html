@@ -25904,6 +25904,40 @@ function drawKnightPlayer() {
     }
     ctx.restore();
   }
+  /* ⚔ **冲锋残影**（骑士的"突刺过程"）：
+     骑士的输出是「冲撞」，但原来画面上只有一把静止的枪 —— 玩家看不到"在冲"。
+     这里按**实际移动速度**画一串沿反方向的枪影 + 一道枪尖气流：
+     跑得越快越长越亮；速度低于阈值就不画（站着不动时不该有）。
+     ⚠️ 用 pxRand 做抖动量（不能用 rnd，会推移全局随机流）。 */
+  {
+    const spd2 = Math.hypot(p.vx || 0, p.vy || 0);
+    if (spd2 > 190) {
+      const k2 = Math.min(1, (spd2 - 190) / 420);
+      const ma = Math.atan2(p.vy || 0, p.vx || 0);
+      const fx2 = Math.cos(ma), fy2 = Math.sin(ma);
+      /* 反向枪影：3~5 个，越远越淡越小 */
+      const n2 = 3 + Math.round(k2 * 2);
+      for (let i = 1; i <= n2; i++) {
+        const d2 = i * (14 + k2 * 10);
+        const alpha2 = (1 - i / (n2 + 1)) * 0.34 * k2;
+        const ss2 = pxSnapS(Math.max(2, 7 - i * 1.1));
+        ctx.globalAlpha = alpha2;
+        ctx.fillStyle = i <= 1 ? '#ffffff' : '#ffe9a8';
+        /* 沿枪的方向铺：枪在身前，所以影在身后 */
+        const bxp = p.x - fx2 * d2 + Math.cos(p.face) * 30;
+        const byp = p.y - fy2 * d2 + Math.sin(p.face) * 30;
+        ctx.fillRect(pxSnap(bxp) - ss2 / 2, pxSnap(byp) - ss2 / 2, ss2, ss2);
+        /* 轻微横向抖动（气流的"被撕开"感） */
+        const wob = (pxRand(i * 17 + Math.round(time * 40)) - 0.5) * 6;
+        ctx.fillRect(pxSnap(bxp - fy2 * wob) - ss2 / 2, pxSnap(byp + fx2 * wob) - ss2 / 2, ss2, ss2);
+      }
+      ctx.globalAlpha = 1;
+      /* 枪尖气流：从枪头往前拖一小段（速度越快越长） */
+      const tipX = p.x + Math.cos(p.face) * 56, tipY = p.y + Math.sin(p.face) * 56;
+      pxBeam(tipX, tipY, tipX + fx2 * (18 + k2 * 34), tipY + fy2 * (18 + k2 * 34),
+             5, '#ffe9a8', '#ffffff', 0.55 * k2, k2);
+    }
+  }
   ctx.restore();
   ctx.restore();
 }
@@ -26478,13 +26512,30 @@ function drawWMPlayer() {
     const aim = wmAimAngleOf(eqAll[i], c);                 // 远程 = 枪口指瞄准点；近战 = 身体朝向
     ctx.save();
     ctx.translate(c.x, c.y + bob);
-    ctx.globalAlpha = 0.22;                       // 品质底色，一眼看出稀有度
-    ctx.fillStyle = wmQualCol(eqAll[i].q);
-    ctx.beginPath(); ctx.arc(0, 0, 13, 0, TAU); ctx.fill();
+    /* 🎨 品质底色改成**阶梯环**（原来是平滑实心圆，一堆圆点叠在角色身上很脏） */
+    pxRing(0, 0, 13, wmQualCol(eqAll[i].q), 3, 0.30);
     ctx.globalAlpha = 1;
     ctx.rotate(wmDrawAim(aim, dbgWMCornerAims));  // ← 朝向跟着鼠标改变（远程直接指向指针；记录的就是这里用的角）
+    /* ⚔ **出手轨迹**（武器大师的"挥动过程"）：`an.sw` 是这把武器近战出手的剩余时间。
+       在这把武器自己的位置画一道**从后往前扫过**的扇形拖尾 —— 每把武器各自有各自的出手瞬间，
+       四角就有"依次出手"的节奏感（原来只有武器前顶 9px，看不出在砍）。 */
+    if ((an.sw || 0) > 0) {
+      const ksw = 1 - (an.sw / WM_SWING_T);        // 0 → 1 挥砍进度
+      const swArc = 1.5;                            // 挥砍角宽
+      const a0 = -swArc * 0.5, a1 = a0 + swArc * (0.35 + 0.65 * ksw);
+      pxSweep(0, 0, a0, a1, 10, 34, 1,
+        'rgba(150,200,255,0.5)', wmQualCol(eqAll[i].q), '#ffffff',
+        (1 - ksw) * 0.9 + 0.1);
+    }
     ctx.translate(((an.sw || 0) / WM_SWING_T) * 9 - ((an.rc || 0) / WM_RECOIL_T) * 6, 0);
     wmBlitWeapon(eqAll[i].id, 30, 1);
+    /* 🔫 远程出手：枪口火焰（`an.rc` 是后坐剩余时间） */
+    if ((an.rc || 0) > 0) {
+      const kr = 1 - (an.rc / WM_RECOIL_T);
+      const mx3 = 30, my3 = 0;
+      pxDitherEllipse(mx3, my3, 8 * kr + 3, 8 * kr + 3, '#ffd166', 0.7 * kr, 0.65);
+      pxBlock(mx3, my3, Math.max(2, 5 * kr + 2), '#ffffff', 0.85 * kr);
+    }
     ctx.restore();
     dbgWMCornerDrawN++;
   }
@@ -26499,11 +26550,17 @@ function drawWMPlayer() {
       const aim = wmAimAngleOf(bag[i], off);
       ctx.save();
       ctx.translate(off.x, off.y + Math.sin(time * 4.2 + i * 1.3) * 2.6);
-      ctx.globalAlpha = 0.24;                       // 品质底色
-      ctx.fillStyle = wmQualCol(bag[i].q);
-      ctx.beginPath(); ctx.arc(0, 0, 12, 0, TAU); ctx.fill();
+      /* 🎨 品质底色 → 阶梯环（同四角武器） */
+      pxRing(0, 0, 12, wmQualCol(bag[i].q), 3, 0.32);
       ctx.globalAlpha = 0.95;
       ctx.rotate(wmDrawAim(aim, dbgWMMusouAims));   // ← 和四角武器同款：朝向跟着指针（记录的就是这里用的角）
+      /* ⚔ 出手轨迹（同上：每把武器各自扫一道，头顶一排依次出手） */
+      if ((an.sw || 0) > 0) {
+        const ksw = 1 - (an.sw / WM_SWING_T);
+        const swArc = 1.4;
+        pxSweep(0, 0, -swArc * 0.5, -swArc * 0.5 + swArc * (0.35 + 0.65 * ksw), 9, 30, 1,
+          'rgba(150,200,255,0.45)', wmQualCol(bag[i].q), '#ffffff', (1 - ksw) * 0.8 + 0.1);
+      }
       ctx.translate(((an.sw || 0) / WM_SWING_T) * 8 - ((an.rc || 0) / WM_RECOIL_T) * 5, 0);
       wmBlitWeapon(bag[i].id, 26, 0.95);
       ctx.restore();
