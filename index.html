@@ -24629,6 +24629,8 @@ window.__musouTreeTest = (x, y) => ({
   bullet: treeBlocksBullet(x, y)
 });
 const ART_BASE_GRASS = '#456334';        // 兜底底色
+/* 🌿 土/草交界的草沿位置（每次 buildGround 收集一次，贴完地形再画草叶） */
+let artDirtEdges = [];
 
 /* 草 6 阶（暗 → 亮）：偏黄绿的暖调，星露谷那种"有太阳"的绿 */
 const ART_GRASS_TONES = ['#16281a', '#22391f', '#2f5026', '#3f6a30', '#54873f', '#6fa851'];
@@ -24773,6 +24775,10 @@ function artPaintTerrain(g, W, H) {
         /* 土/草交界一律描（这是真正的结构边）；同色系内跨 2 档才描，避免糊成黑网 */
         hardEdge = (nbDirt !== isDirt) || Math.abs(nbLv - lv) >= 2;
       }
+      /* 🌿 草贴着土 → 记下来，稍后在这个位置长草叶（草沿） */
+      if (hardEdge && !isDirt && artDirtEdges.length < 9000 && ((k * 2654435761) >>> 20) % 3 === 0) {
+        artDirtEdges.push(x * SC + 1, y * SC + 1);
+      }
       const c = hardEdge ? base[0] : base[Math.max(0, Math.min(5, lv))];
       const o = k * 4;
       d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255;
@@ -24808,7 +24814,7 @@ function artSprites() {
         /* 贴住压暗后的地表：只比地面亮 1~2 档，太亮会变成"浅色小点"浮在深地上 */
         const base = c2 ? '#243d1c' : '#2d4a22';
         const tip = c2 ? '#3d6630' : '#54833a';
-        const n = 3 + (v % 3);
+        const n = 3 + (v % 4);
         for (let i = 0; i < n; i++) {
           const bx = 5 + Math.round((artHash(v, i, 1) - 0.5) * 5);
           const hh = 5 + Math.round(artHash(v, i, 2) * 6);
@@ -24828,11 +24834,12 @@ function artSprites() {
   }
   /* 4 种花簇（13×11） */
   const flowers = [];
-  const FPAL = [['#e8e2b0', '#fffbe0'], ['#e0c24a', '#f7e58a'], ['#d98bb0', '#f5c0d8'], ['#9fb6e8', '#d0def7']];
-  for (let v = 0; v < 4; v++) {
+  const FPAL = [['#e8e2b0', '#fffbe0'], ['#e0c24a', '#f7e58a'], ['#d98bb0', '#f5c0d8'], ['#9fb6e8', '#d0def7'],
+                ['#c8a2e8', '#e6ccf7'], ['#f0a878', '#ffd0a8'], ['#a8e0c0', '#d6f7e2'], ['#e8e0e8', '#ffffff']];
+  for (let v = 0; v < 8; v++) {
     const pal = FPAL[v];
     const cv = mk(13, 11, (cg, w2, h2) => {
-      const n = 3 + (v % 3);
+      const n = 3 + (v % 4);
       for (let i = 0; i < n; i++) {
         const bx = 3 + Math.round(artHash(v, i, 5) * 7);
         const by = 4 + Math.round(artHash(v, i, 6) * 5);
@@ -24851,7 +24858,7 @@ function artSprites() {
   }
   /* 2 种小石子（5×4） */
   const pebbles = [];
-  for (let v = 0; v < 2; v++) {
+  for (let v = 0; v < 4; v++) {
     const cv = mk(6, 5, (cg) => {
       cg.fillStyle = 'rgba(40,38,30,0.5)';
       cg.fillRect(1, 3, 4, 1);
@@ -25023,6 +25030,20 @@ function artBuildGrassGround(g, W, H, gr, grR) {
     g.fillStyle = '#496b37';
     g.fillRect(0, 0, W, H);
   }
+  /* 🌿 草沿：沿土/草交界长一圈参差草叶（土块边缘才有"毛边"） */
+  if (artDirtEdges.length) {
+    const COL_A = '#3d6b2c', COL_B = '#578c3a', COL_C = '#6da84a';
+    for (let i = 0; i < artDirtEdges.length; i += 2) {
+      const ex = artDirtEdges[i], ey = artDirtEdges[i + 1];
+      const hsh = artHash(ex, ey, 131);
+      const h2 = 2 + Math.round(hsh * 3);              // 叶长 2~5px
+      const lean = Math.round((artHash(ex, ey, 137) - 0.5) * 3);
+      g.fillStyle = hsh < 0.4 ? COL_A : (hsh < 0.78 ? COL_B : COL_C);
+      g.fillRect(ex, ey - h2, 1, h2);
+      if (hsh > 0.55) g.fillRect(ex + 1, ey - h2 + 1, 1, Math.max(1, h2 - 1));
+      if (lean) g.fillRect(ex + lean, ey - h2 - 1, 1, 1);
+    }
+  }
   const spr = artSprites();
   /* 土路网络：3 条从地图边穿到另一边，交汇在中心空地附近（战斗区好走） */
   const paths = [
@@ -25060,7 +25081,7 @@ function artBuildGrassGround(g, W, H, gr, grR) {
       for (let cx2 = 0; cx2 < W; cx2 += CELL) {
         /* 密度 = 0.10（保底）~ 0.62（密草皮），由低频噪声决定 */
         const e = artSample(ENV, cx2 / W, cy2 / H);
-        const dens = 0.10 + Math.max(0, Math.min(1, (e - 0.34) * 2.0)) * 0.52;
+        const dens = 0.14 + Math.max(0, Math.min(1, (e - 0.30) * 2.0)) * 0.56;
         if (gr() > dens) continue;
         const x = cx2 + grR(2, CELL - 2), y = cy2 + grR(2, CELL - 2);
         if (inWater(x, y)) continue;
@@ -25085,7 +25106,7 @@ function artBuildGrassGround(g, W, H, gr, grR) {
     if (spr.flowers.length) {
       for (let y = 0; y < H; y += 46) {
         for (let x = 0; x < W; x += 46) {
-          if (gr() > 0.05) continue;
+          if (gr() > 0.085) continue;
           const bx = x + grR(6, 40), by = y + grR(6, 40);
           if (inWater(bx, by)) continue;
           const cv = spr.flowers[(gr() * spr.flowers.length) | 0];
@@ -25113,7 +25134,7 @@ function artBuildGrassGround(g, W, H, gr, grR) {
     for (let y = 0; y < H; y += 38) {
       for (let x = 0; x < W; x += 38) {
         const r = gr();
-        if (r > 0.15) continue;
+        if (r > 0.20) continue;
         const bx = x + grR(4, 34), by = y + grR(4, 34);
         if (inWater(bx, by)) continue;
         if (r < 0.08 && spr.pebbles.length) {
@@ -25141,6 +25162,7 @@ function buildGround() {
   /* 🌳 树是**实体**（每帧动态画），不能烘进地面贴图 —— 所以每次重建地面都清空重来 */
   worldTrees = [];
   worldPonds = [];
+  artDirtEdges = [];
   if (!sceneDark) {
     /* —— 草原战场：**统一底色 + 细密纹理**（彻底重做）——
        ⚠️ 用户截图里的问题：地图被**几块大色块硬拼**在一起。根因是我上一版画了
