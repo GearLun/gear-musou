@@ -26321,20 +26321,36 @@ function drawBlades() {
     ctx.globalAlpha = blink;
     ctx.translate(b.x, b.y);
     ctx.rotate(0.22);
+    /* ⚠️ 这里原来画反了：刀身朝上(y 负)、柄在下方(y 正) → 看起来是**柄着地倒立**。
+       用户报「落地以后应该是插在地上，而不是剑柄朝下」。
+       现在：**刀刃朝下扎进地里、柄朝上**，并在入土处画一圈翻起的土，让"插进去"读得出来。 */
     if (bladeLv() > 0) { ctx.shadowColor = '#ffd166'; ctx.shadowBlur = 12; }
-    ctx.fillStyle = '#ffe9a8';                       // 刀身
+    /* 刀身：从入土点(y=0)往下 10px（埋在地里）+ 往上 26px（露在外面） */
+    ctx.fillStyle = '#ffe9a8';
     ctx.beginPath();
-    ctx.moveTo(-3.4, 6); ctx.quadraticCurveTo(-6.5, -22, -1.5, -46);
-    ctx.quadraticCurveTo(3.6, -24, 4.2, 6); ctx.closePath(); ctx.fill();
+    ctx.moveTo(-3.4, -6); ctx.quadraticCurveTo(-6.5, 12, -1.5, 30);        // 左刃（往地下）
+    ctx.quadraticCurveTo(3.6, 10, 4.2, -6); ctx.closePath(); ctx.fill();
     ctx.shadowBlur = 0;
     ctx.strokeStyle = '#fffdf0'; ctx.lineWidth = 1.2;
-    ctx.beginPath(); ctx.moveTo(3.2, 5); ctx.quadraticCurveTo(2.6, -24, -1.2, -45); ctx.stroke();
-    ctx.fillStyle = '#c9a227';                       // 鐔
-    ctx.fillRect(-6.5, 6, 13, 3.6);
-    ctx.fillStyle = '#5a3a00';                       // 柄
-    ctx.fillRect(-3.6, 9, 7.2, 14);
+    ctx.beginPath(); ctx.moveTo(3.2, -5); ctx.quadraticCurveTo(2.6, 12, -1.2, 29); ctx.stroke();
+    /* 入土处翻起的土（盖住刀刃下半截，视觉上就是"扎进去了"） */
+    ctx.fillStyle = 'rgba(38,48,30,0.95)';
+    ctx.beginPath(); ctx.ellipse(0, 2, 7.5, 3.2, 0, 0, TAU); ctx.fill();
+    ctx.fillStyle = 'rgba(74,92,58,0.95)';
+    ctx.beginPath(); ctx.ellipse(-1, 1, 5.5, 2.2, 0, 0, TAU); ctx.fill();
+    /* 鐔（护手）在土面之上 */
     ctx.fillStyle = '#c9a227';
-    ctx.fillRect(-4.4, 22, 8.8, 3);
+    ctx.fillRect(-6.5, -9.6, 13, 3.6);
+    /* 柄朝上 + 柄头 */
+    ctx.fillStyle = '#5a3a00';
+    ctx.fillRect(-3.6, -27, 7.2, 18);
+    ctx.fillStyle = '#c9a227';
+    ctx.fillRect(-4.4, -30, 8.8, 3.4);
+    /* 柄上的高光（让朝上的柄有立体感） */
+    ctx.fillStyle = 'rgba(255,240,190,0.55)';
+    ctx.fillRect(-2.6, -26, 1.4, 16);
+    ctx.fillStyle = '#ffd166';
+    ctx.fillRect(-1.6, -31.6, 3.2, 2);              // 柄头宝珠
     ctx.restore();
   }
 }
