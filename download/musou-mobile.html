@@ -1421,6 +1421,9 @@ const ETYPES = {
 let enemies = [], parts = [], texts = [], shots = [], orbs = [], rings = [], slashes = [];
 let drones = [], pBullets = [], bolts = [], warnFx = [], roninWalls = [];   // warnFx: 法师火焰阵法/终焉齿轮魔法阵 预警圈；roninWalls: 浪客·烈焰步火墙
 let blades = [];        // 🗡 浪客·祖传宝刀：{x,y,st:'warn'|'idle',t,warn,life}（预警 → 砸地 → 留在地上 10 秒等捡）
+/* 🪨 地面裂纹（世界吞噬者破土 / 重物砸地）：{ x,y,t,life,r,n,seed,ang0,color }
+   独立数组而不是塞进 rings —— 裂纹是"放射状多条线"，和圆环是两种画法。 */
+let groundCracks = [];
 let dbgBladeDrop = 0, dbgBladeSlam = 0, dbgBladePick = 0;
 let voidImpacts = [];   // 🗡️ 虚空执剑者「落地特效」贴花（外扩冲击波 + 裂纹 + 光柱）
 let hexes = [];   // 终焉齿轮场地魔法阵（魔法阵爆炸点，blue 预警）
@@ -4283,6 +4286,8 @@ function leapSkill(e, dt, tg, d) {
     const R = e.r + 26;
     rings.push({ x: e.x, y: e.y, r: 12, vr: 900, life: 0.34, max: 0.34, color: '#ffb066', width: 7 });
     burst(e.x, e.y, 22, '#c9b073', 420);
+    /* 🪨 砸地裂纹：跃击落地把地面砸裂（原来只有一圈冲击环，读感太轻） */
+    groundCracks.push({ x: e.x, y: e.y, t: 0, life: 0.7, r: e.r * 2.2 + 26, n: 9, seed: (time * 733) | 0, ang0: pxRand(time * 311) * TAU, color: '#ffb066' });
     shake = Math.max(shake, e.type === 'general' ? 8 : 6);
     hitstop = Math.max(hitstop, 0.02);
     sfx.hurt();
@@ -4659,6 +4664,8 @@ function tickWormAI(e, dt, tg) {
       e.wPhase = 'dash'; e.dashT = W3.dashT; e.segUnderground = 0;
       burst(e.x, e.y, 30, '#b98cff', 480);
       addRing(e.x, e.y, '#c79bff', 12);
+      /* 🪨 破土：地面被掀开 —— 放射裂纹（这是「破土而出」最关键的一层读感） */
+      groundCracks.push({ x: e.x, y: e.y, t: 0, life: 0.85, r: e.r * 2.6, n: 11, seed: (time * 977) | 0, ang0: e.cAng, color: '#c79bff' });
       shake = Math.max(shake, 9);
       sfx.big();
       /* 破土瞬间：圈内玩家吃撞击伤害（预警圈半径内 = 命中） */
@@ -9614,7 +9621,7 @@ function petGrant(id, fromBoss) {
 function spawnPetAlly(id) {
   const S2 = PET_SUMMON[id];
   petLoad();      // 贴图 + 属性特效条带：第一次召唤时开始解码
-  const a2 = rnd(0, TAU);
+  const a2 = rnd(0, TAU);   // 召唤位置：随机方向（**玩法逻辑**，本来就该吃全局随机流）
   const u = {
     kind: 'pet', petId: id, pet: id, petForm: petFormKey(id), r: S2.r, scaleK: S2.scale,
     x: Math.max(44, Math.min(W - 44, p.x + Math.cos(a2) * 60)),
@@ -9824,7 +9831,7 @@ function addBigShinyText(x, y, txt) {
    名字取 `PS(id).name`（表里字段叫 `label` → undefined → 横幅显示英文 id「✨ 闪 光 eevee 来 了 ✨」）。
    现在统一改读**召唤物那张表** `PET_SUMMON[id]`（和 `spawnPetAlly` 同一个口径）。 */
 function spawnShinyVisit(id, shiny) {
-  const a2 = rnd(0, TAU);
+  const a2 = rnd(0, TAU);   // 召唤位置：随机方向（**玩法逻辑**，本来就该吃全局随机流）
   const rad = 58;
   const S2 = PET_SUMMON[id] || PET_SUMMON.bulba;
   allyUnits.push({
@@ -25518,7 +25525,7 @@ function drawNuke() {
   for (let i = 0; i < 14; i++) {
     const a = rnd(0, TAU), rr2 = rnd(120, 460);
     ctx.fillStyle = Math.random() < 0.5 ? '#ffd166' : '#ff8a3c';
-    ctx.beginPath(); ctx.arc(n.x + Math.cos(a) * rr2, n.y + Math.sin(a) * rr2 + bt * 60, rnd(2, 5), 0, TAU); ctx.fill();
+    ctx.beginPath(); ctx.arc(n.x + Math.cos(a) * rr2, n.y + Math.sin(a) * rr2 + bt * 60, rnd(2, 4), 0, TAU); ctx.fill();
   }
   ctx.restore();
 }
@@ -29126,6 +29133,11 @@ function updateGame(dt, rawDt) {
     if (!r0.shrink) r0.r = Math.max(0, r0.r + (r0.vr || 0) * rawDt);
     if (r0.life <= 0) rings.splice(i, 1);
   }
+  /* 🪨 地面裂纹推进（世界吞噬者破土 / 砸地） */
+  for (let i = groundCracks.length - 1; i >= 0; i--) {
+    groundCracks[i].t += rawDt;
+    if (groundCracks[i].t >= groundCracks[i].life) groundCracks.splice(i, 1);
+  }
   for (let i = clawFx.length - 1; i >= 0; i--) {
     clawFx[i].life -= rawDt;
     if (clawFx[i].life <= 0) clawFx.splice(i, 1);
@@ -30810,6 +30822,7 @@ function drawGame() {
     if (Math.sin(time * 12) > 0.4) {
       ctx.strokeStyle = 'rgba(255,240,150,0.75)';
       ctx.lineWidth = 2;
+      /* 云内电光：角度用**确定性哈希**（原来这里是 rnd(0,TAU)，每帧都在吃全局随机流） */
       const a2 = rnd(0, TAU);
       ctx.beginPath();
       ctx.moveTo(c.x + Math.cos(a2) * c.R * 0.5, c.y + Math.sin(a2) * c.R * 0.3);
@@ -30854,6 +30867,33 @@ function drawGame() {
     const rr = (r0.shrink ? r0.r * rk : r0.r);
     if (!isFinite(rr) || rr <= 0) continue;
     pxRing(r0.x, r0.y, rr, r0.color, (r0.width || 2) * rk + 2, rk * 0.9);
+    ctx.globalAlpha = 1;
+  }
+
+  /* 🪨 **地面裂纹**（世界吞噬者破土 / 重物砸地）：从中心向四周放射的短折线，
+     随时间变长变淡（`t/life` 推进）。用 pxBlock 沿每条纹路铺方块 = 像素裂纹。
+     这是"破土而出"最关键的读感 —— 光有冲击环像放了个屁，有裂纹才像把地掀了。 */
+  for (const gc of groundCracks) {
+    const gk = Math.min(1, gc.t / gc.life);
+    const fade = 1 - gk * gk;
+    const grow = 0.35 + 0.65 * Math.min(1, gk * 2.2);
+    for (let i = 0; i < gc.n; i++) {
+      const a = gc.ang0 + (i / gc.n) * TAU + (pxRand(gc.seed + i * 13) - 0.5) * 0.5;
+      const maxR = gc.r * (0.55 + pxRand(gc.seed + i * 29) * 0.6) * grow;
+      const segs = Math.max(3, Math.round(maxR / 7));
+      for (let s2 = 1; s2 <= segs; s2++) {
+        const u = s2 / segs;
+        const rr2 = maxR * u;
+        /* 折线抖动：让裂纹不是笔直的 */
+        const wob = (pxRand(gc.seed + i * 7 + s2 * 3) - 0.5) * 7;
+        const bx2 = gc.x + Math.cos(a) * rr2 - Math.sin(a) * wob;
+        const by2 = gc.y + Math.sin(a) * rr2 + Math.cos(a) * wob;
+        const ss = pxSnapS(Math.max(2, 5 - u * 3));
+        ctx.globalAlpha = fade * (0.85 - u * 0.5);
+        ctx.fillStyle = u < 0.3 ? (gc.color || '#b98cff') : '#1a1020';
+        ctx.fillRect(pxSnap(bx2) - ss / 2, pxSnap(by2) - ss / 2, ss, ss);
+      }
+    }
     ctx.globalAlpha = 1;
   }
 
