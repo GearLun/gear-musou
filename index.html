@@ -1926,7 +1926,8 @@ function pxHumanoid(px, f, mode, cfg, pal) {
   /* 中线略偏左（0.47）：给右侧的武器/盾牌留出空间，避免被画布裁成半截 */
   const cx = Math.round(px.w * 0.47);
   const footY = px.h - 2 + bob;
-  const headR = c.headR || 3.7;
+  /* 头略小、腿更长 → 头身比从 1:3 调到 ~1:3.6（更成熟，不像 Q 版） */
+  const headR = (c.headR || 3.7) * 0.90;
   /* ⚠️ **戴高头饰的（盔缨 / 尖顶法师帽 / 角 / 王冠 / 小丑帽）头要往下让** ——
      否则头饰会顶出画布上边界被裁掉（本轮用 tools\_px-bounds.js 量出来的：
      总大将的盔缨、指挥官的盔缨、法师的塔尖都中过这个）。 */
@@ -1934,7 +1935,7 @@ function pxHumanoid(px, f, mode, cfg, pal) {
                     c.helm === 'crown' || c.helm === 'jester' || c.helm === 'knight');
   const headY = (c.headDY || 0) + (tallHelm ? 7.0 : 4.4) + bob * 0.6;
   const shY = headY + headR + 1.2;
-  const hipY = c.hipY || (footY - 5.2);
+  const hipY = c.hipY || (footY - 6.6);   // 腿加长 1.4px
   const halfW = c.skinny ? 3.2 : 4.0;
 
   /* —— 披风（画在最下层）—— */
