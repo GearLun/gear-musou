@@ -4283,8 +4283,12 @@ function leapSkill(e, dt, tg, d) {
       /* 起跳：锁定落点（目标当前位置，钳进场地）并挂 0.5 秒落地预警圈 */
       l.phase = 'air'; l.t = 0.5;
       l.sx = e.x; l.sy = e.y;
-      l.tx = Math.max(50, Math.min(W - 50, tg.x));
-      l.ty = Math.max(50, Math.min(H - 50, tg.y));
+      /* 🌳 落点先避开树木/树桩（用户要求：跃击落点要选在没被占位的地方）。
+         找不到空位时退回原落点 —— 落地那一帧还会被 enemyTreeSeparate 推出去，双重保险。 */
+      const spot = treeFreeSpot(Math.max(50, Math.min(W - 50, tg.x)),
+                                Math.max(50, Math.min(H - 50, tg.y)), e.r || 14);
+      l.tx = Math.max(50, Math.min(W - 50, spot.x));
+      l.ty = Math.max(50, Math.min(H - 50, spot.y));
       l.trav = Math.hypot(l.tx - l.sx, l.ty - l.sy);
       l.airMax = Math.min(110, e.r * 2.6 + l.trav * 0.2);
       l.warn = { x: l.tx, y: l.ty, r: e.r + 26, dead: false, slam: 1, t: 0.5, max: 0.5 };
@@ -5217,6 +5221,8 @@ function voidSlamMark(cx, cy, r) {
 }
 /* 诊断计数：虚空执剑者三套技能的出手次数（测试/读数用） */let dbgVoidHits = 0, dbgVoidFan = 0, dbgVoidQi = 0, dbgVoidDash = 0, dbgVoidSlam = 0, dbgVoidQiAng = 0;
 let dbgVoidQiAngs = [], dbgVoidDashPeak = 0;          // 最近一轮三剑气的三道角度 / 冲刺实测峰值速度
+let dbgArcherTreeDodge = 0;                           // 🏹 弓箭手因「箭被树挡住」而换位的次数（诊断 / 冒烟用）
+let dbgTreeSeparate = 0;                              // 🌳 普通敌人被树"推出"的次数（诊断 / 冒烟用；恒 0 = 没生效）
 let dbgVoidSlashFx = 0, dbgVoidSlamFx = 0;            // 斩击特效次数 / 落地特效次数（冒烟 S16 核对"特效真的出了"）
 let dbgTwinBreathHits = 0;                            // 🔥 双子火焰眼「持续喷火」**真的打掉玩家血**的次数（冒烟 S27 核对结算节拍）
 let dbgGearAteCat = 0;                                // 🎡 终焉齿轮吞掉哈根（觉醒猛虎）的次数（冒烟 S29 核对）
@@ -19694,14 +19700,6 @@ function clearShotsInRange(x, y, R) {
   let n = 0;
   for (let i = shots.length - 1; i >= 0; i--) {
     const s = shots[i];
-    /* 🌳 敌方子弹也会被树冠挡住（用户要求"玩家的子弹和敌人的子弹"都被遮） */
-    if (!s.laser && !s.beam && treeBlocksBullet(s.x, s.y)) {
-      shots.splice(i, 1);
-      for (let k2 = 0; k2 < 3; k2++) {
-        addPart(s.x, s.y, Math.cos(k2 * 2.1) * 40, Math.sin(k2 * 2.1) * 40 - 20, 0.22, 2.2, '#3f5730', 0);
-      }
-      continue;
-    }
     if (s.dead) continue;
     const rr = R + (s.r || 8);   // 敌方弹体没有统一半径字段 → 给 8px 的宽容量（贴着圆的边也算斩到）
     const dx = s.x - x, dy = s.y - y;
@@ -22569,7 +22567,7 @@ function labBodyClass(on) {
 function labSpawnBoss(type) {
   enemies = []; spawnQ = []; waveT = -1; orbs = [];
   dbgVoidHits = 0; dbgVoidFan = 0; dbgVoidQi = 0; dbgVoidDash = 0; dbgVoidSlam = 0;   // 虚空执剑者的诊断计数随新 Boss 归零
-  dbgVoidQiAngs = []; dbgVoidDashPeak = 0; dbgVoidSlashFx = 0; dbgVoidSlamFx = 0; voidImpacts = [];
+  dbgVoidQiAngs = []; dbgVoidDashPeak = 0; dbgVoidSlashFx = 0; dbgVoidSlamFx = 0; voidImpacts = []; dbgArcherTreeDodge = 0; dbgTreeSeparate = 0;
   dbgSlimeJumps = 0; dbgSlimeSplits = 0; dbgSlimeSlamHits = 0;
   dbgSkullSpawns = 0; dbgSkullBooms = 0;
   dbgPlunderSkills = 0; dbgPlunderLaserHits = 0; dbgPlunderClaws = 0; dbgPlunderDowns = 0; dbgBlindMax = 0;
@@ -23551,6 +23549,14 @@ const TREE_BULLET_K = 0.95;   // 子弹在树冠的这个比例半径处被挡
 const STUMP_R = 13;           // 树桩碰撞半径
 const TREE_PASS_MIN = 34;     // 闪避要跨过树，至少得走出这么多像素（≈ 树干直径 + 身位）
 const TREE_CELL = 24;         // 碰撞网格边长（把树烘进网格，查一次数组就够，别每颗子弹遍历所有树）
+/* 🈳 **中心空地**：影分身十字斩的"幕布"就是中央 1280×720 的视区（世界中心 W/2,H/2）。
+   用户要求那块地**完全空**、一棵树都不许有，否则分身/走位会被树挡。
+   这里用矩形而不是圆 —— 幕布本身就是矩形。 */
+const TREE_CLEAR_W = 700;     // 空地半宽（视区半宽 640 + 60 余量）
+const TREE_CLEAR_H = 420;     // 空地半高（视区半高 360 + 60 余量）
+function treeInClearZone(x, y) {
+  return Math.abs(x - W / 2) < TREE_CLEAR_W && Math.abs(y - H / 2) < TREE_CLEAR_H;
+}
 let worldTrees = [];          // { x, y, sc, kind:'tree'|'dead'|'stump', canopyR, solidR, bulletR, seed }
 /* 🔌 树木是否生效（测试里统一关掉，避免干扰"弹道机制"类断言；正常游玩恒为 true） */
 let TREES_ACTIVE = true;
@@ -23612,9 +23618,77 @@ function treeBlocksBullet(x, y) {
   if (!TREES_ACTIVE) return false;
   return treeCellAt(treeBulletG, x, y) === 1;
 }
+/* 🚫 普通敌人不能停在树里：每帧统一做一次"推出"。
+   为什么要统一收口而不是在每条移动路径上加：敌人的位移来源太多
+   （常规走位 / 兵卒突刺 / 击退 / 跃击落地 / 奇遇推挤），漏一条就会看到"某类敌人穿树"。
+   这里只在**真的踩进树里**时才做精确计算（网格早退，绝大多数帧零开销）。
+   ⚠️ Boss 一律豁免 —— 用户明确要求「所有 Boss 不受任何遮挡物阻拦」。 */
+/* 🌳 「撞墙」的核心：把**踩进树里**的东西沿法线推出去。
+   玩家和普通敌人共用这一份逻辑（一个数值/判据只有一个定义点）。
+   返回 true = 真的推了。 */
+function treePushOut(o, r) {
+  if (!TREES_ACTIVE || !worldTrees.length || !o) return false;
+  if (!treeCellAt(treeSolidG, o.x, o.y)) return false;
+  let best = null, bd = Infinity;
+  for (const tr of worldTrees) {
+    const sr = tr.solidR || 0;
+    if (!sr) continue;
+    const dx = o.x - tr.x, dy = o.y - tr.y;
+    const rr = sr + r;
+    const d2 = dx * dx + dy * dy;
+    if (d2 < rr * rr && d2 < bd) { bd = d2; best = tr; }
+  }
+  if (!best) return false;
+  const dx = o.x - best.x, dy = o.y - best.y;
+  const d = Math.hypot(dx, dy);
+  const push = (best.solidR + r + 0.5) - d;
+  if (push <= 0) return false;
+  /* ⚠️ 正好站在**树心**时 (dx,dy) = (0,0)，归一化会变成 0 → 推不动（本轮踩过）。
+     退化时用一个确定性方向（按坐标散开，不用随机数）。 */
+  let ux, uy;
+  if (d < 0.5) {
+    const a0 = ((o.x * 0.0137 + o.y * 0.0071) % 1) * TAU;
+    ux = Math.cos(a0); uy = Math.sin(a0);
+  } else { ux = dx / d; uy = dy / d; }
+  o.x += ux * push;
+  o.y += uy * push;
+  return true;
+}
+/* 玩家：**动作（闪避/一闪/闪焰冲锋）进行中不推** —— 用户要求「可以以树桩位置为落点」，
+   等动作结束（下面调用处每帧检查）再把人挤出去。
+   这样"冲刺穿过树桩后停在上面"是允许的，但不会一直卡在树里。 */
+function playerTreeSeparate() {
+  if (!TREES_ACTIVE || !worldTrees.length || !p.alive) return;
+  if (p.dashT > 0 || p.roninDash || p.petBlitz) return;   // 动作中：允许落在遮挡物上
+  if (treePushOut(p, p.r)) dbgTreeSeparate++;
+}
+function enemyTreeSeparate(e) {
+  if (!TREES_ACTIVE || !worldTrees.length || !e || e.dead) return;
+  if (e.boss || e.headBoss || e.phantom || e.segPhantom || e.tentacle || e.bossUnit || e.devDummy) return;
+  /* 敌人的"攻击动作"同样豁免：兵卒突刺 / 跃击腾空 —— 允许落进去，动作结束再挤出来 */
+  if (e.lunge && e.lunge.phase === 'dash') return;
+  if (e.leap && e.leap.phase === 'air') return;
+  if (treePushOut(e, e.r || 10)) dbgTreeSeparate++;
+}
+/* 🈳 找一个"没有树/树桩"的落点（战将跃击用）：从原点向外扩散搜索最近空位 */
+function treeFreeSpot(x, y, r) {
+  if (!TREES_ACTIVE || !worldTrees.length) return { x: x, y: y };
+  const rr = r === undefined ? 16 : r;
+  if (!treeBlocksMove(x, y, rr)) return { x: x, y: y };
+  for (let ring = 1; ring <= 12; ring++) {
+    for (let k = 0; k < 10; k++) {
+      const a = k * (TAU / 10) + ring * 0.4;
+      const nx2 = x + Math.cos(a) * ring * 30, ny2 = y + Math.sin(a) * ring * 30;
+      if (nx2 < 60 || ny2 < 60 || nx2 > W - 60 || ny2 > H - 60) continue;
+      if (!treeBlocksMove(nx2, ny2, rr)) return { x: nx2, y: ny2 };
+    }
+  }
+  return { x: x, y: y };
+}
 /* 把地形里生成的树登记成实体（buildGround 里调用） */
 function treeAdd(x, y, sc, kind) {
   if (x < 70 || y < 90 || x > W - 70 || y > H - 40) return;     // 别压边界 / 画出界
+  if (treeInClearZone(x, y)) return;                            // 中心空地：一棵都不长
   const isStump = kind === 'stump';
   const isDead = kind === 'dead';
   const canopyR = isStump ? 0 : (isDead ? 20 * sc : 26 * sc);
@@ -23744,6 +23818,7 @@ window.__musouTrees = () => ({
   n: worldTrees.length,
   trees: worldTrees.filter(x => x.kind !== 'stump').length,
   stumps: worldTrees.filter(x => x.kind === 'stump').length,
+  all: worldTrees.map(x => ({ x: x.x, y: x.y, kind: x.kind })),
   sample: worldTrees.slice(0, 5).map(x => ({ x: Math.round(x.x), y: Math.round(x.y), kind: x.kind, solidR: x.solidR, bulletR: Math.round(x.bulletR) }))
 });
 window.__musouTreesOff = () => { TREES_ACTIVE = false; return true; };
@@ -23942,19 +24017,16 @@ function buildGround() {
       const cellW = Math.round(W / 22), cellH = Math.round(H / 14);
       for (let gy = 0; gy < 14; gy++) {
         for (let gx = 0; gx < 22; gx++) {
-          if (gr() > 0.30) continue;                       // 30% 的格子长树 → 疏密有致
+          if (gr() > 0.38) continue;                       // 38% 的格子长树（中心空地会吃掉一大块，这里补回密度）
           const tx = gx * cellW + grR(cellW * 0.15, cellW * 0.85);
           const ty = gy * cellH + grR(cellH * 0.2, cellH * 0.9);
-          /* 出生点 / 地图中心附近留空，别一开局就被树怼脸 */
-          if (Math.hypot(tx - W / 2, ty - H / 2) < 210) continue;
+          /* 中心空地由 treeAdd 统一拦（判据只有一处） */
           treeAdd(tx, ty, grR(1.5, 2.6), 'tree');
         }
       }
       /* 树桩：零星分布（数量约树的 1/3）*/
-      for (let i = 0; i < 46; i++) {
-        const tx = grR(150, W - 150), ty = grR(150, H - 120);
-        if (Math.hypot(tx - W / 2, ty - H / 2) < 150) continue;
-        treeAdd(tx, ty, grR(1.0, 1.7), 'stump');
+      for (let i = 0; i < 62; i++) {
+        treeAdd(grR(150, W - 150), grR(150, H - 120), grR(1.0, 1.7), 'stump');
       }
     }
     /* ⑤ 少量小件装饰（岩石 / 灌木 / 断柱）——**当作地图物件**，不当色块 */
@@ -24104,17 +24176,14 @@ function buildGround() {
       const cellW = Math.round(W / 20), cellH = Math.round(H / 13);
       for (let gy = 0; gy < 13; gy++) {
         for (let gx = 0; gx < 20; gx++) {
-          if (gr() > 0.26) continue;
+          if (gr() > 0.34) continue;
           const tx = gx * cellW + grR(cellW * 0.15, cellW * 0.85);
           const ty = gy * cellH + grR(cellH * 0.2, cellH * 0.9);
-          if (Math.hypot(tx - W / 2, ty - H / 2) < 210) continue;
           treeAdd(tx, ty, grR(1.2, 2.2), 'dead');
         }
       }
-      for (let i = 0; i < 40; i++) {
-        const tx = grR(150, W - 150), ty = grR(150, H - 120);
-        if (Math.hypot(tx - W / 2, ty - H / 2) < 150) continue;
-        treeAdd(tx, ty, grR(1.0, 1.6), 'stump');
+      for (let i = 0; i < 54; i++) {
+        treeAdd(grR(150, W - 150), grR(150, H - 120), grR(1.0, 1.6), 'stump');
       }
     }
     /* 中央惨淡幽光 + 重暗角（同样按地图对角线放大半径，别留死黑角） */
@@ -28615,6 +28684,8 @@ function updateGame(dt, rawDt) {
   /* 奇物：追踪体 / 飞剑 / 猫咪 */
   artTick(dt);
 
+  /* 🌳 撞墙：动作结束后把人从树里挤出去（动作中允许停在树桩上） */
+  playerTreeSeparate();
   /* 位移与边界 */
   if (!p.roninDash && !p.petBlitz) {   // 一闪 / 闪焰冲锋期间坐标完全由它们接管（避免输入位移叠加漂移）
     const nx = p.x + p.vx * dt, ny = p.y + p.vy * dt;
@@ -28845,10 +28916,20 @@ function updateGame(dt, rawDt) {
       if (d > FOE_ARCHER_RNG * 0.75) { tx = nx; ty = ny; }        // 太远：往前压（边压边射）
       else if (d < FOE_ARCHER_KEEP) { tx = -nx; ty = -ny; }       // 太近：后退保命
       else { tx = -ny * 0.4; ty = nx * 0.4; }                     // 中距离：侧移游走
+      /* 🏹 箭被树挡住之后的**换位**：1.35 秒内朝新方向移动（含一小段加速），期间不开火。
+         这就是用户要的"射到树上就换个位置继续攻击"。 */
+      if (e.treeMoveT > 0) {
+        e.treeMoveT -= dt;
+        const ma = e.treeMoveAng || 0;
+        tx = Math.cos(ma); ty = Math.sin(ma);
+        e.treeMoveK = Math.min(1, (e.treeMoveK || 0) + dt * 3);
+      } else {
+        e.treeMoveK = 0;
+      }
       e.fireCd -= dt;
-      if (e.fireCd <= 0 && shots.length < 320) {
+      if (e.fireCd <= 0 && shots.length < 320 && !(e.treeMoveT > 0)) {
         e.fireCd = FOE_ARCHER_CD;
-        const bow = { x: e.x, y: e.y, vx: nx * FOE_ARCHER_SPD, vy: ny * FOE_ARCHER_SPD, dmg: e.dmg, dead: false, src: 'archer' };
+        const bow = { x: e.x, y: e.y, vx: nx * FOE_ARCHER_SPD, vy: ny * FOE_ARCHER_SPD, dmg: e.dmg, dead: false, src: 'archer', owner: e };
         shots.push(bow);
         noiseBurst(0.06, 0.05, 1600, 1);
       }
@@ -29039,6 +29120,10 @@ function updateGame(dt, rawDt) {
       if (!e.boss) { e.x -= nx * 14; e.y -= ny * 14; }   // Boss 碰撞不后退
     }
   }
+  /* 🌳 普通敌人也不能停在树里（Boss 豁免；统一收口，见 enemyTreeSeparate 的说明） */
+  if (TREES_ACTIVE && worldTrees.length) {
+    for (const e2 of enemies) enemyTreeSeparate(e2);
+  }
   /* 敌人间互推（避免叠成一点；震慑期间跳过） */
   if (enemyFreezeT <= 0) {
     /* ⚡⚡ **性能：按 x 分桶扫掠**（2026-10 · 旧写法实测占 `updateGame` 耗时的 **94%**）。
@@ -29101,6 +29186,29 @@ function updateGame(dt, rawDt) {
   /* ---- 箭矢 ---- */
   for (const s of shots) {
     s.x += s.vx * dt; s.y += s.vy * dt;
+    /* 🌳 **敌人的子弹也会被树冠挡住**（用户要求）。
+       ⚠️ 上一轮我把这段插到了 clearShotsInRange()（清弹幕函数）里 —— 那里根本不跑推进，
+          所以"敌人的子弹没被挡"这个反馈就是这么来的。现在插在真正的推进循环里。
+       豁免：激光 / 光束（用户明确说激光不被遮挡）· Boss 弹幕（Boss 穿越障碍，弹幕同样不打折） */
+    if (!s.laser && !s.beam && !s.bossShot && s.src !== 'boss' && treeBlocksBullet(s.x, s.y)) {
+      s.dead = true;
+      for (let k2 = 0; k2 < 3; k2++) {
+        addPart(s.x, s.y, Math.cos(k2 * 2.1) * 40, Math.sin(k2 * 2.1) * 40 - 20, 0.22, 2.2, '#3f5730', 0);
+      }
+      /* 🏹 弓箭手：箭被树挡住 → 换个位置再来（用户要求） */
+      const ow = s.owner;
+      if (ow && !ow.dead && ow.ranged) {
+        let ax = ow.x - s.x, ay = ow.y - s.y;
+        const al = Math.hypot(ax, ay) || 1;
+        ax /= al; ay /= al;
+        /* 往"树的反方向 + 侧移"走：正后方会卡在树前反复射，侧后方才能绕开 */
+        const side = ((ow.seed || 0) % 2) ? 1 : -1;
+        ow.treeMoveT = 1.35;                      // 换位持续时间
+        ow.treeMoveAng = Math.atan2(ay, ax) + side * 0.85;
+        dbgArcherTreeDodge++;
+      }
+      continue;
+    }
     if (s.x < -30 || s.x > W + 30 || s.y < -30 || s.y > H + 30) {
       if (s.petShot) petShotHit(s.petEl, Math.max(20, Math.min(W - 20, s.x)), Math.max(20, Math.min(H - 20, s.y)), 2.4);
       s.dead = true; continue;
@@ -33207,7 +33315,8 @@ window.__musouVoidInfo = () => {      // 🗡️ 虚空执剑者读数（状态�
     qiAngs: dbgVoidQiAngs.slice(),     // 最近一轮三剑气的三道角度（测试：外侧两道差 = qiArc）
     qiArc: VOID.qiArc, qiSize: VOID.qiSize,   // 扇形总张角（120°）/ 剑气尺寸倍率
     dashSpd: VOID.dashSpd, dashPeak: +dbgVoidDashPeak.toFixed(1),  // 冲刺设定速度 / 实测峰值速度
-    fxSlash: dbgVoidSlashFx, fxSlam: dbgVoidSlamFx, fxSlamMark: voidImpacts.length   // 斩击特效 / 落地特效计数
+    fxSlash: dbgVoidSlashFx, fxSlam: dbgVoidSlamFx, fxSlamMark: voidImpacts.length, archerTreeDodge: dbgArcherTreeDodge,
+  treeSeparate: dbgTreeSeparate   // 斩击特效 / 落地特效计数
   };
 };
 window.__musouPlanteraInfo = () => {   // 🌸 世纪之花读数（形态 / 移速 / 藤蔓间隔与累计根数 / 触手）
