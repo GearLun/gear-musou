@@ -23623,14 +23623,17 @@ function treeAdd(x, y, sc, kind) {
     canopyR: canopyR,
     solidR: isStump ? STUMP_R : TREE_TRUNK_R * (sc > 1.6 ? 1.15 : 1),
     bulletR: isStump ? 0 : canopyR * TREE_BULLET_K,
-    seed: ((x * 7919 + y * 104729) | 0) & 0xffff
+    seed: ((x * 7919 + y * 104729) | 0) & 0xffff,
+    /* 🎨 外观变体（0/1/2 三种树冠轮廓）—— 让树林不像是同一棵树复制粘贴 */
+    v: (((x * 31 + y * 17) | 0) >>> 0) % 3
   });
 }
 /* ── 树的贴图（每种 kind × 缩放档烘一次，之后每帧就是 1 次 drawImage） ── */
 const TREE_SPR = Object.create(null);
-function treeSprite(kind, sc) {
+function treeSprite(kind, sc, variant) {
   const q = Math.max(1.0, Math.round(sc * 10) / 10);
-  const key = kind + '|' + q;
+  const vv = (variant | 0) % 3;
+  const key = kind + '|' + q + '|' + vv;
   if (TREE_SPR[key] !== undefined) return TREE_SPR[key];
   if (typeof document === 'undefined' || !document.createElement) { TREE_SPR[key] = null; return null; }
   const W2 = Math.ceil(44 * q), H2 = Math.ceil(52 * q);
@@ -23690,16 +23693,27 @@ function treeSprite(kind, sc) {
     g.fillRect(Math.round(cx - 6 * q), Math.round(base - 2 * q), Math.round(4 * q), Math.round(3 * q));
     g.fillRect(Math.round(cx + 2 * q), Math.round(base - 2 * q), Math.round(4 * q), Math.round(3 * q));
     const cy4 = base - 22 * q;
-    g.fillStyle = '#22391f';
-    g.beginPath(); g.ellipse(cx - 8 * q, cy4 + 3 * q, 10 * q, 8.6 * q, 0, 0, Math.PI * 2); g.fill();
-    g.beginPath(); g.ellipse(cx + 8 * q, cy4 + 3 * q, 10 * q, 8.6 * q, 0, 0, Math.PI * 2); g.fill();
-    g.beginPath(); g.ellipse(cx, cy4 - 5 * q, 12.5 * q, 10 * q, 0, 0, Math.PI * 2); g.fill();
-    g.fillStyle = '#3f6733';
-    g.beginPath(); g.ellipse(cx - 2 * q, cy4 - 6 * q, 9 * q, 7.4 * q, 0, 0, Math.PI * 2); g.fill();
-    g.fillStyle = '#5c8f49';
-    g.beginPath(); g.ellipse(cx - 4.5 * q, cy4 - 8 * q, 5 * q, 4 * q, 0, 0, Math.PI * 2); g.fill();
-    g.fillStyle = '#7fb35f';
-    g.beginPath(); g.ellipse(cx - 6 * q, cy4 - 9.5 * q, 2.4 * q, 1.8 * q, 0, 0, Math.PI * 2); g.fill();
+    /* 三种轮廓：0 = 三球圆冠 · 1 = 高瘦四球 · 2 = 扁宽双翼 */
+    const blob = (bx, by, brx, bry, col) => {
+      g.fillStyle = col;
+      g.beginPath(); g.ellipse(cx + bx * q, cy4 + by * q, brx * q, bry * q, 0, 0, Math.PI * 2); g.fill();
+    };
+    if (vv === 1) {
+      blob(-7, 4, 8.6, 8, '#22391f'); blob(7, 4, 8.6, 8, '#22391f');
+      blob(0, -3, 10.5, 9, '#22391f'); blob(0, -9, 8, 6.5, '#22391f');
+      blob(-1.5, -5, 7.6, 6.4, '#3f6733'); blob(-0.5, -11, 5, 3.6, '#5c8f49');
+      blob(-2, -12.5, 2.2, 1.6, '#7fb35f');
+    } else if (vv === 2) {
+      blob(-11, 2, 9.5, 6.5, '#22391f'); blob(11, 2, 9.5, 6.5, '#22391f');
+      blob(0, 0, 13, 8.2, '#22391f');
+      blob(-1, -2.5, 10, 6.6, '#3f6733'); blob(-2, -4.5, 6, 4.2, '#5c8f49');
+      blob(-4, -6, 2.6, 1.9, '#7fb35f');
+    } else {
+      blob(-8, 3, 10, 8.6, '#22391f'); blob(8, 3, 10, 8.6, '#22391f');
+      blob(0, -5, 12.5, 10, '#22391f');
+      blob(-2, -6, 9, 7.4, '#3f6733'); blob(-4.5, -8, 5, 4, '#5c8f49');
+      blob(-6, -9.5, 2.4, 1.8, '#7fb35f');
+    }
   }
   TREE_SPR[key] = cv;
   return cv;
@@ -23712,10 +23726,13 @@ function drawWorldTrees(target) {
   const sm = c.imageSmoothingEnabled;
   c.imageSmoothingEnabled = false;
   for (const tr of worldTrees) {
-    /* 视野剔除（树冠大，留足余量；不然地图边缘的树每帧都白画） */
-    if (!tr.stump && (tr.x < camX - 80 || tr.x > camX + VW + 80 || tr.y < camY - 120 || tr.y > camY + VH + 120)) continue;
-    if (tr.kind === 'stump' && (tr.x < camX - 40 || tr.x > camX + VW + 40 || tr.y < camY - 60 || tr.y > camY + VH + 60)) continue;
-    const cv = treeSprite(tr.kind, tr.sc);
+    /* 视野剔除（树冠大，留足余量；不然地图边缘的树每帧都白画）。
+       ⚠️ 传了 target（光栅化预览要整张图）时**不剔**，否则预览里只有摄像机视野内那几棵。 */
+    if (!target) {
+      if (!tr.stump && (tr.x < camX - 80 || tr.x > camX + VW + 80 || tr.y < camY - 120 || tr.y > camY + VH + 120)) continue;
+      if (tr.kind === 'stump' && (tr.x < camX - 40 || tr.x > camX + VW + 40 || tr.y < camY - 60 || tr.y > camY + VH + 60)) continue;
+    }
+    const cv = treeSprite(tr.kind, tr.sc, tr.v);
     if (!cv) continue;
     c.drawImage(cv, Math.round(tr.x - cv.width / 2), Math.round(tr.y - cv.height + 3));
   }
