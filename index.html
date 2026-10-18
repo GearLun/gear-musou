@@ -2138,7 +2138,7 @@ const PX_SPEC = {
   mage:    { w: 18, h: 26, sc: 2, kind: 'human', cfg: { headR: 3.5, helm: 'wizard', weapon: 'staff' }, death: { mode: 'dissolve', spark: 10 } },
   brute:   { w: 22, h: 28, sc: 3, kind: 'human', cfg: { headR: 4.6, helm: 'horned', weapon: 'axe', armor: 1 }, death: { mode: 'slam', dust: 14 } },
   /* —— 骑兵（马 + 骑手）—— */
-  cavalry: { w: 28, h: 22, sc: 2, kind: 'horse', death: { mode: 'topple', dust: 10 } },
+  cavalry: { w: 32, h: 26, sc: 2, kind: 'horse', death: { mode: 'topple', dust: 10 } },
   /* —— Boss —— */
   general:  { w: 34, h: 38, sc: 3, kind: 'general', death: { mode: 'kneel', dust: 20, spark: 8 } },
   commander:{ w: 30, h: 34, sc: 3, kind: 'human2', cfg: { headR: 4.2, helm: 'plume', weapon: 'lance', armor: 1, cape: 1 }, death: { mode: 'kneel', dust: 16 } },
@@ -2148,7 +2148,7 @@ const PX_SPEC = {
   final6:   { w: 26, h: 34, sc: 3, kind: 'voidBlade', death: { mode: 'dissolve', spark: 16 } },
   final2:   { w: 34, h: 34, sc: 3, kind: 'gear', death: { mode: 'shatter', shards: 16 } },
   final:    { w: 32, h: 34, sc: 3, kind: 'demon', death: { mode: 'ash', dust: 22, spark: 12 } },
-  slimeKing:{ w: 40, h: 35, sc: 3, kind: 'slime', crown: 1, death: { mode: 'melt', goo: 18 } },
+  slimeKing:{ w: 42, h: 38, sc: 3, kind: 'slime', crown: 1, death: { mode: 'melt', goo: 18 } },
   slimeMini:{ w: 24, h: 20, sc: 2, kind: 'slime', death: { mode: 'melt', goo: 10 } },
   plunder:  { w: 28, h: 34, sc: 3, kind: 'plunder', death: { mode: 'dissolve', spark: 14 } },
   skull:    { w: 14, h: 14, sc: 2, kind: 'skull', death: { mode: 'shatter', shards: 7 } },
@@ -2781,9 +2781,10 @@ const PX_BODY = {
     pxEye(px, Math.round(cx - rx * 0.34), Math.round(cy - ry * 0.06), pal, !!0);
     pxEye(px, Math.round(cx + rx * 0.16), Math.round(cy - ry * 0.06), pal, !!0);
     pxLine(px, cx - 1, cy + ry * 0.30, cx + 1.4, cy + ry * 0.30, pxDeep(pal.b, 0.6), 1);
-    /* 王冠（超级史莱姆专属）：**必须完全落在画布内**（原来顶出上边界被裁成一根横杠） */
+    /* 王冠（超级史莱姆专属）：**必须完全落在画布内**
+       ⚠️ 尖角画在 `cy2-5`，所以 cy2 至少要 6（原来钳 3 → 尖角落到 -2，被裁掉 9 像素）。 */
     if (spec && spec.crown) {
-      const cy2 = Math.max(3, cy - ry + 3);
+      const cy2 = Math.max(6, cy - ry + 3);
       pxRect(px, cx - 5, cy2 - 2, 10, 2, pal.al);
       pxRect(px, cx - 5, cy2 - 2, 10, 1, '#fffbe0');
       for (let i = 0; i < 3; i++) {
@@ -3087,6 +3088,25 @@ function pxRingStroke(x, y, r) {
 
 /* 🃏 牌皇甩出的纸牌（像素贴图 + 缓存）：6×9 art px，2x 放大 = 12×18 世界像素。
    白底 + 花色边框 + 角标，比原来的平滑圆角矩形更有"像素卡牌"味道。 */
+/* 像素**抖动矩形面**：预警走廊 / 区块填充用。实心 `fillRect` + 半透明看着像"贴了一张色纸"，
+   铺成方块就有像素味，而且边缘自然出现阶梯。
+   `gi` = 采样步长（默认 4），`density` = 落块概率。 */
+function pxDitherRect(x, y, w, h, color, alpha, density, gi) {
+  if (!isFinite(x) || !isFinite(y) || !isFinite(w) || !isFinite(h) || w <= 0 || h <= 0) return;
+  const den = density === undefined ? 1 : Math.max(0, Math.min(1, density));
+  const st = gi || 4;
+  ctx.fillStyle = color;
+  if (alpha !== undefined) ctx.globalAlpha = alpha;
+  const x0 = pxSnap(x), y0 = pxSnap(y), x1 = pxSnap(x + w), y1 = pxSnap(y + h);
+  for (let yy = y0; yy < y1; yy += st) {
+    for (let xx = x0; xx < x1; xx += st) {
+      if (den < 1 && pxRand(xx * 3 + yy * 7 + w) > den) continue;
+      ctx.fillRect(xx, yy, PX_FX_G * 2, PX_FX_G * 2);
+    }
+  }
+  if (alpha !== undefined) ctx.globalAlpha = 1;
+}
+
 /* 像素**抖动椭圆面**：把一整片椭圆（水洼 / 熔岩 / 影子 / 冲击地痕）铺成 2px 方块。
    `density` 0~1 = 填充概率（<1 就是半透明颗粒感，比实心 fill 更有像素味）。
    面积大也便宜：按 4px 网格采样，一块最多 (rx/2)*(ry/2) 个方块。 */
@@ -23536,7 +23556,64 @@ function buildGround() {
         g.fillRect(Math.round(x), Math.round(y), 2, 1);
       }
     }
-    /* ⑤ 少量大件装饰（岩石 / 灌木 / 断柱）——**当作地图物件**，不当色块 */
+    /* ④b **成片高草丛**（宝可梦那种"草丛区"）——关键是**用密度衰减做软边界**：
+       只在椭圆内部按 `1-(r/R)^1.6` 的概率撒草叶（越靠边越稀），
+       所以它没有硬边、看不出"一块贴上去的色块"，但视觉上确实是一片更密的草。
+       ⚠️ 绝不能画成"实心椭圆 + 半透明" —— 那就会变成用户截图里那种大色块。 */
+    for (let pi = 0; pi < 15; pi++) {
+      const pcx = grR(160, W - 160), pcy = grR(160, H - 160);
+      const prx = grR(90, 210), pry = grR(60, 150);
+      const tries = 900;
+      for (let i = 0; i < tries; i++) {
+        const a2 = gr() * TAU, rr2 = Math.sqrt(gr());
+        const bx2 = pcx + Math.cos(a2) * prx * rr2, by2 = pcy + Math.sin(a2) * pry * rr2;
+        /* 边缘概率衰减：靠外的草叶大概率丢弃 → 软边界 */
+        if (gr() > 1 - Math.pow(rr2, 1.6)) continue;
+        const h2 = grR(5, 11);
+        g.strokeStyle = gr() < 0.55 ? 'rgba(46,66,34,0.62)' : 'rgba(96,130,68,0.50)';
+        g.lineWidth = 1;
+        g.beginPath();
+        g.moveTo(bx2, by2);
+        g.lineTo(bx2 + grR(-1.4, 1.4), by2 - h2);
+        g.stroke();
+        if (gr() < 0.4) {
+          g.beginPath();
+          g.moveTo(bx2 + grR(1, 2.2), by2);
+          g.lineTo(bx2 + grR(1.2, 3), by2 - h2 * grR(0.5, 0.85));
+          g.stroke();
+        }
+      }
+    }
+    /* ④c **树丛**（地图上的地标）——树冠用 3~4 个交叠的深绿球 + 树干 + 地面投影。
+       树是"物件"不是"色块"，所以轮廓必须是圆的、带亮面。 */
+    const treeAt = (tx, ty, sc2) => {
+      /* 投影 */
+      g.fillStyle = 'rgba(0,0,0,0.22)';
+      g.beginPath(); g.ellipse(tx, ty + 2 * sc2, 13 * sc2, 5 * sc2, 0, 0, TAU); g.fill();
+      /* 树干 */
+      g.fillStyle = '#4a3524';
+      g.fillRect(Math.round(tx - 2 * sc2), Math.round(ty - 9 * sc2), Math.max(2, Math.round(4 * sc2)), Math.round(11 * sc2));
+      g.fillStyle = '#63482f';
+      g.fillRect(Math.round(tx - 2 * sc2), Math.round(ty - 9 * sc2), Math.max(1, Math.round(2 * sc2)), Math.round(11 * sc2));
+      /* 树冠：三个交叠球（暗底 → 中色 → 亮面） */
+      const cx4 = tx, cy4 = ty - 14 * sc2;
+      g.fillStyle = '#2b4526';
+      g.beginPath(); g.ellipse(cx4 - 7 * sc2, cy4 + 2 * sc2, 9 * sc2, 8 * sc2, 0, 0, TAU); g.fill();
+      g.beginPath(); g.ellipse(cx4 + 7 * sc2, cy4 + 2 * sc2, 9 * sc2, 8 * sc2, 0, 0, TAU); g.fill();
+      g.beginPath(); g.ellipse(cx4, cy4 - 4 * sc2, 11 * sc2, 9 * sc2, 0, 0, TAU); g.fill();
+      g.fillStyle = '#3d6032';
+      g.beginPath(); g.ellipse(cx4 - 2 * sc2, cy4 - 5 * sc2, 8 * sc2, 6.5 * sc2, 0, 0, TAU); g.fill();
+      g.fillStyle = '#4f7a3f';
+      g.beginPath(); g.ellipse(cx4 - 4 * sc2, cy4 - 7 * sc2, 4.5 * sc2, 3.5 * sc2, 0, 0, TAU); g.fill();
+    };
+    for (let ci2 = 0; ci2 < 9; ci2++) {
+      const gx2 = grR(220, W - 220), gy2 = grR(200, H - 200);
+      const cnt = 2 + ((gr() * 3) | 0);
+      for (let i = 0; i < cnt; i++) {
+        treeAt(gx2 + grR(-46, 46), gy2 + grR(-30, 30), grR(0.8, 1.35));
+      }
+    }
+    /* ⑤ 少量小件装饰（岩石 / 灌木 / 断柱）——**当作地图物件**，不当色块 */
     for (let i = 0; i < 40; i++) {
       const x = grR(200, W - 200), y = grR(180, H - 180);
       const r0 = gr();
@@ -23627,6 +23704,34 @@ function buildGround() {
       const r0 = gr();
       const kind = r0 < 0.40 ? 'bone' : (r0 < 0.74 ? 'rock' : 'ruin');
       pxDecor(g, kind, x, y, kind === 'ruin' ? 8 : grR(7, 11), gr, grR);
+    }
+    /* ⑤b **枯树地标**（焦土上只剩余烬里的黑色枯枝）——给地图"场所感"，不再是均匀一片 */
+    for (let ci3 = 0; ci3 < 8; ci3++) {
+      const gx3 = grR(220, W - 220), gy3 = grR(200, H - 200);
+      const cnt = 2 + ((gr() * 3) | 0);
+      for (let i = 0; i < cnt; i++) {
+        const tx = gx3 + grR(-44, 44), ty = gy3 + grR(-28, 28);
+        const sc3 = grR(0.8, 1.3);
+        /* 投影 */
+        g.fillStyle = 'rgba(0,0,0,0.30)';
+        g.beginPath(); g.ellipse(tx, ty + 2, 10 * sc3, 4 * sc3, 0, 0, TAU); g.fill();
+        /* 主干（细、黑） */
+        g.strokeStyle = '#1a1512'; g.lineWidth = Math.max(2, 3 * sc3); g.lineCap = 'round';
+        g.beginPath(); g.moveTo(tx, ty); g.lineTo(tx + grR(-2, 2), ty - 16 * sc3); g.stroke();
+        /* 三根枯枝 */
+        for (let b = 0; b < 3; b++) {
+          const by3 = ty - (7 + b * 4) * sc3;
+          const dir = b % 2 ? 1 : -1;
+          g.lineWidth = Math.max(1, 2 * sc3);
+          g.beginPath();
+          g.moveTo(tx, by3);
+          g.lineTo(tx + dir * grR(6, 12) * sc3, by3 - grR(4, 9) * sc3);
+          g.stroke();
+        }
+        /* 一点余烬挂在枝头 */
+        g.fillStyle = 'rgba(255,110,50,0.5)';
+        g.fillRect(Math.round(tx - 1), Math.round(ty - 17 * sc3), 2, 2);
+      }
     }
     /* 中央惨淡幽光 + 重暗角（同样按地图对角线放大半径，别留死黑角） */
     const dkR0 = Math.hypot(W, H) * 0.22, dkR1 = Math.hypot(W, H) * 0.56;
@@ -29193,22 +29298,18 @@ function drawGame() {
       ctx.save();
       ctx.translate(e.x, e.y);
       ctx.rotate(e.lunge.ang);
-      /* 走廊底色（随读条变亮） */
-      ctx.globalAlpha = 0.10 + 0.16 * k;
-      ctx.fillStyle = '#ffd166';
-      ctx.fillRect(x0, -half, len, half * 2);
-      /* 从近到远推进的读条填充：填满即突刺 */
-      ctx.globalAlpha = 0.20 + 0.24 * k;
-      ctx.fillStyle = '#fff3c4';
-      ctx.fillRect(x0, -half * 0.55, len * k, half * 1.1);
-      /* 边框 + 命中端封口线 */
-      ctx.globalAlpha = 0.45 + 0.5 * k;
-      ctx.strokeStyle = 'rgba(255,243,196,' + (0.55 + 0.4 * k).toFixed(2) + ')';
-      ctx.lineWidth = 2;
-      ctx.strokeRect(x0, -half, len, half * 2);
-      ctx.beginPath();
-      ctx.moveTo(x0 + len, -half); ctx.lineTo(x0 + len, half);
-      ctx.stroke();
+      /* 🎨 走廊底色 → **抖动方块**（原来是一整块半透明矩形，像贴了张色纸） */
+      pxDitherRect(x0, -half, len, half * 2, '#ffd166', 0.10 + 0.16 * k, 0.55);
+      /* 从近到远推进的读条填充（这本身就是"蓄势"的过程） */
+      pxDitherRect(x0, -half * 0.55, len * k, half * 1.1, '#fff3c4', 0.22 + 0.24 * k, 0.8, 3);
+      /* 边框：改成沿边铺方块（阶梯边），不再用 strokeRect */
+      for (let xx = 0; xx <= len; xx += PX_FX_G * 2) {
+        pxBlock(x0 + xx, -half, 2, 'rgba(255,243,196,' + (0.55 + 0.4 * k).toFixed(2) + ')', 0.9);
+        pxBlock(x0 + xx, half, 2, 'rgba(255,243,196,' + (0.55 + 0.4 * k).toFixed(2) + ')', 0.9);
+      }
+      for (let yy = -half; yy <= half; yy += PX_FX_G * 2) {
+        pxBlock(x0 + len, yy, 2, '#fff3c4', 0.9);          // 命中端封口
+      }
       /* 刀锋前的矛头（凝聚中） */
       ctx.globalAlpha = 0.30 + 0.60 * k;
       ctx.fillStyle = '#ffd166';
@@ -29218,22 +29319,41 @@ function drawGame() {
       ctx.lineTo(e.r + 3, -6 - 4 * k);
       ctx.lineTo(e.r + 3, 6 + 4 * k);
       ctx.closePath(); ctx.fill();
-      /* 脚下读条进度环 */
-      ctx.globalAlpha = 0.35 + 0.55 * k;
-      ctx.strokeStyle = '#ffe9a8'; ctx.lineWidth = 3;
-      ctx.beginPath(); ctx.arc(0, 0, e.r + 7, -Math.PI / 2, -Math.PI / 2 + TAU * k); ctx.stroke();
+      /* 脚下读条进度环 → 阶梯弧 */
+      pxArcStroke(0, 0, e.r + 7, -Math.PI / 2, -Math.PI / 2 + TAU * k, '#ffe9a8', 3, 0.35 + 0.55 * k);
       ctx.restore();
       ctx.globalAlpha = 1;
     }
-    /* 兵卒突刺瞬间：走廊余光（告诉玩家"刚刚那一下就是这条道"） */
+    /* 兵卒突刺瞬间：**刀锋沿走廊推进**（这是"挥动过程"）——
+       原来只有一条逐渐淡出的静止矩形；现在走廊里有：
+       · 一道从身体射向尽头的亮刃（位置随进度前推，带拖尾）
+       · 刃后面跟着碎火花
+       这样才看得出"这一刀是往前捅出去的"。 */
     if (e.lunge && e.lunge.phase === 'dash') {
-      const k = Math.max(0, Math.min(1, e.lunge.t / GRUNT_DASH_T));
+      const k = Math.max(0, Math.min(1, e.lunge.t / GRUNT_DASH_T));   // 1 → 0（刚出手是 1）
+      const pr = 1 - k;                                              // 0 → 1 推进进度
       ctx.save();
       ctx.translate(e.x, e.y);
       ctx.rotate(e.lunge.ang);
-      ctx.globalAlpha = 0.20 * k;
-      ctx.fillStyle = '#ffe9a8';
-      ctx.fillRect(e.r * 0.35, -GRUNT_LANE_HALF, GRUNT_REACH - e.r * 0.35, GRUNT_LANE_HALF * 2);
+      const x0 = e.r * 0.35, laneLen = GRUNT_REACH - x0;
+      /* 走廊余痕（抖动，不再是实心矩形） */
+      pxDitherRect(x0, -GRUNT_LANE_HALF, laneLen, GRUNT_LANE_HALF * 2, '#ffe9a8', 0.20 * k, 0.45);
+      /* 刃头位置 */
+      const headX = x0 + laneLen * Math.min(1, 0.25 + pr * 1.15);
+      /* 拖尾：从起点到刃头，越靠刃头越宽越亮 */
+      const tailX = Math.max(x0, headX - 46);
+      for (let xx = tailX; xx <= headX; xx += PX_FX_G * 2) {
+        const u = (xx - tailX) / Math.max(1, headX - tailX);
+        const ww = 2 + u * 7;
+        pxBlock(xx, 0, ww, u > 0.72 ? '#ffffff' : '#ffd166', (0.25 + 0.7 * u) * k);
+      }
+      /* 刃头亮点 + 两侧火星 */
+      pxSpark(headX, 0, 6 + 4 * (1 - pr), '#ffffff', '#ffd166', 0.95 * k);
+      for (let i = 0; i < 4; i++) {
+        const sy = (i - 1.5) * 7;
+        const sx = headX - 8 - i * 6;
+        pxBlock(sx, sy, Math.max(2, 4 - i * 0.5), '#ffd166', 0.5 * k);
+      }
       ctx.restore();
       ctx.globalAlpha = 1;
     }
