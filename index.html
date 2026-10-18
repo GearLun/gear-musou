@@ -1977,6 +1977,18 @@ function pxHumanoid(px, f, mode, cfg, pal) {
 
   /* —— 躯干：上宽下窄的胸甲 —— */
   pxBall(px, cx, (shY + hipY) / 2, halfW, (hipY - shY) / 2 + 1.4, pal.l, pal.b, pal.d, pal.dd, false);
+  /* 👕 布料褶皱（无甲 / 非和服的角色）：短暗线 = 布料，而不是一块渐变球 */
+  if (!c.armor && !c.kimono) {
+    const tY0 = shY + 1.2, tY1 = hipY - 0.6;
+    /* 左侧一道折痕（从肩往腰斜） */
+    pxLine(px, cx - halfW * 0.62, tY0, cx - halfW * 0.22, tY1, pal.dd, 1);
+    /* 右侧一道（更短，避免左右太对称而呆板） */
+    pxLine(px, cx + halfW * 0.52, tY0 + 1.4, cx + halfW * 0.70, tY1 - 0.8, pal.dd, 1);
+    /* 衣摆分界：腰下一道横线（下摆挡住腿部上端，读起来像"衣服"） */
+    pxRect(px, Math.round(cx - halfW * 0.82), Math.round(hipY - 0.4), Math.round(halfW * 1.64), 1, pxDeep(pal.b, 0.34));
+    /* 腰带扣：1px 亮色，给腰一点"配饰" */
+    pxPut(px, Math.round(cx), Math.round(hipY - 0.4), pxCI(px, pal.al));
+  }
   if (c.armor) {   // 胸甲：金属片 + 中缝
     pxRect(px, cx - 1, shY + 1, 2, 4, pal.m);
     pxRect(px, cx - 1, shY + 1, 1, 4, pal.ml);
@@ -5467,6 +5479,7 @@ function voidSlamMark(cx, cy, r) {
 /* 诊断计数：虚空执剑者三套技能的出手次数（测试/读数用） */let dbgVoidHits = 0, dbgVoidFan = 0, dbgVoidQi = 0, dbgVoidDash = 0, dbgVoidSlam = 0, dbgVoidQiAng = 0;
 let dbgVoidQiAngs = [], dbgVoidDashPeak = 0;          // 最近一轮三剑气的三道角度 / 冲刺实测峰值速度
 let dbgArcherTreeDodge = 0;                           // 🏹 弓箭手因「箭被树挡住」而换位的次数（诊断 / 冒烟用）
+let dbgPondShimmer = 0;        // 🌊 波光画过的短线数（诊断：>0 说明水面真的在动）
 let dbgFoeUnstick = 0;                                // 🌀 敌人"卡住自救"次数（诊断 / 冒烟用）
 let dbgTreeSeparate = 0;                              // 🌳 普通敌人被树"推出"的次数（诊断 / 冒烟用；恒 0 = 没生效）
 let dbgVoidSlashFx = 0, dbgVoidSlamFx = 0;            // 斩击特效次数 / 落地特效次数（冒烟 S16 核对"特效真的出了"）
@@ -23123,7 +23136,7 @@ function labBodyClass(on) {
 function labSpawnBoss(type) {
   enemies = []; spawnQ = []; waveT = -1; orbs = [];
   dbgVoidHits = 0; dbgVoidFan = 0; dbgVoidQi = 0; dbgVoidDash = 0; dbgVoidSlam = 0;   // 虚空执剑者的诊断计数随新 Boss 归零
-  dbgVoidQiAngs = []; dbgVoidDashPeak = 0; dbgVoidSlashFx = 0; dbgVoidSlamFx = 0; voidImpacts = []; dbgArcherTreeDodge = 0; dbgTreeSeparate = 0; dbgFoeUnstick = 0;
+  dbgVoidQiAngs = []; dbgVoidDashPeak = 0; dbgVoidSlashFx = 0; dbgVoidSlamFx = 0; voidImpacts = []; dbgArcherTreeDodge = 0; dbgTreeSeparate = 0; dbgFoeUnstick = 0; dbgPondShimmer = 0;
   dbgSlimeJumps = 0; dbgSlimeSplits = 0; dbgSlimeSlamHits = 0;
   dbgSkullSpawns = 0; dbgSkullBooms = 0;
   dbgPlunderSkills = 0; dbgPlunderLaserHits = 0; dbgPlunderClaws = 0; dbgPlunderDowns = 0; dbgBlindMax = 0;
@@ -24119,6 +24132,8 @@ const TREE_CLEAR_H = 420;     // 空地半高（视区半高 360 + 60 余量）
 function treeInClearZone(x, y) {
   return Math.abs(x - W / 2) < TREE_CLEAR_W && Math.abs(y - H / 2) < TREE_CLEAR_H;
 }
+/* 🌊 水塘几何（每帧波光用）：{ cx, cy, rx, ry, sub:[{x,y,rx,ry}] } */
+let worldPonds = [];
 let worldTrees = [];          // { x, y, sc, kind:'tree'|'dead'|'stump', canopyR, solidR, bulletR, seed }
 /* 🔌 树木是否生效（测试里统一关掉，避免干扰"弹道机制"类断言；正常游玩恒为 true） */
 let TREES_ACTIVE = true;
@@ -24395,6 +24410,41 @@ function treeSprite(kind, sc, variant) {
   }
   TREE_SPR[key] = cv;
   return cv;
+}
+/* 🌊 水面波光：每帧一层高光短线（确定性，不吃随机流）
+   画在 ground 之后、所有单位之前 —— 它就是"水面上的反光"，不该盖住人。 */
+function drawPondShimmer() {
+  if (!worldPonds.length || lowSpecOn()) return;
+  const vx0 = camX - 60, vx1 = camX + VW + 60, vy0 = camY - 60, vy1 = camY + VH + 60;
+  for (const pd of worldPonds) {
+    const ex = pd.rx * 1.35, ey = pd.ry * 1.35;
+    if (pd.cx + ex < vx0 || pd.cx - ex > vx1 || pd.cy + ey < vy0 || pd.cy - ey > vy1) continue;
+    const subs = pd.sub.length ? pd.sub : [{ x: pd.cx, y: pd.cy, rx: pd.rx, ry: pd.ry }];
+    /* 两层：慢的大波光 + 快的碎光点 */
+    for (let layer = 0; layer < 2; layer++) {
+      const cnt = layer ? 9 : 6;
+      const spd = layer ? 0.42 : 0.17;
+      for (let i = 0; i < cnt; i++) {
+        const L = subs[(i + layer * 2) % subs.length];
+        /* 相位 0..1 循环：横向扫过子圆 */
+        const ph = (time * spd + i * 0.37 + layer * 0.5) % 1;
+        const nx = -0.82 + ph * 1.64;
+        const ny = Math.sin(i * 1.9 + time * (layer ? 1.5 : 0.6)) * 0.42;
+        if (nx * nx + ny * ny > 0.80) continue;          // 只在椭圆内部
+        const x = L.x + nx * L.rx;
+        const y = L.y + ny * L.ry;
+        /* 亮度：相位中点最亮，两端淡出 → 像光在扫 */
+        const a = Math.sin(ph * Math.PI) * (layer ? 0.42 : 0.30);
+        if (a < 0.02) continue;
+        const w = Math.round((layer ? 3 : 6) + Math.sin(ph * 6.28 + i) * 2);
+        ctx.globalAlpha = a;
+        ctx.fillStyle = layer ? '#eafaff' : '#bfeaf8';
+        ctx.fillRect(Math.round(x - w / 2), Math.round(y), Math.max(2, w), 1);
+        dbgPondShimmer++;
+      }
+    }
+    ctx.globalAlpha = 1;
+  }
 }
 /* 画所有树（**必须画在敌我单位之后、特效之前** → 站在叶下会被遮住） */
 function drawWorldTrees(target) {
@@ -24781,6 +24831,11 @@ function artPond(g, cx, cy, rx, ry, gr, grR) {
     g.ellipse(p.x, p.y, p.rx * k + (add || 0), p.ry * k + (add || 0) * 0.75, 0, 0, TAU);
     g.fill();
   };
+  /* 记下几何给"每帧波光"用（外接椭圆 + 每个子圆） */
+  worldPonds.push({
+    cx: cx, cy: cy, rx: rx, ry: ry,
+    sub: sub.map(p => ({ x: p.x, y: p.y, rx: p.rx, ry: p.ry }))
+  });
   /* 岸：湿泥 → 沙 → 四档水（由外到内越来越深） */
   for (const p of sub) ell(p, 1.16, ART_SHORE_MUD, 2);
   for (const p of sub) ell(p, 1.05, ART_SHORE_SAND, 1);
@@ -24922,6 +24977,7 @@ function buildGround() {
   const g = ground.getContext('2d');
   /* 🌳 树是**实体**（每帧动态画），不能烘进地面贴图 —— 所以每次重建地面都清空重来 */
   worldTrees = [];
+  worldPonds = [];
   if (!sceneDark) {
     /* —— 草原战场：**统一底色 + 细密纹理**（彻底重做）——
        ⚠️ 用户截图里的问题：地图被**几块大色块硬拼**在一起。根因是我上一版画了
@@ -30765,6 +30821,7 @@ function drawGame() {
   ctx.translate(-camX, -camY);   // 摄像机：世界坐标 → 屏幕
 
   ctx.drawImage(ground, 0, 0);
+  drawPondShimmer();       // 🌊 水面波光（每帧一层高光，不改水面形状）
   drawGooField();          // 🟢 超级史莱姆：黏糊糊场地（整张图糊一层黏液）
   drawPlunderRunes();      // 💡 光明掠夺者技能 3：地面法阵（蓄力 2 秒 → 召骷髅头）
   drawSprinterTrack();     // 🏃 超级跑者的跑道（贴着地图最外圈的赛道）
@@ -34518,7 +34575,8 @@ window.__musouVoidInfo = () => {      // 🗡️ 虚空执剑者读数（状态�
     qiArc: VOID.qiArc, qiSize: VOID.qiSize,   // 扇形总张角（120°）/ 剑气尺寸倍率
     dashSpd: VOID.dashSpd, dashPeak: +dbgVoidDashPeak.toFixed(1),  // 冲刺设定速度 / 实测峰值速度
     fxSlash: dbgVoidSlashFx, fxSlam: dbgVoidSlamFx, fxSlamMark: voidImpacts.length, archerTreeDodge: dbgArcherTreeDodge,
-  treeSeparate: dbgTreeSeparate,
+  treeSeparate: dbgTreeSeparate, pondShimmer: dbgPondShimmer,   // 🌊 水面波光短线数
+  ponds: (typeof worldPonds !== 'undefined' ? worldPonds.length : 0),
   // 斩击特效 / 落地特效计数
   };
 };
