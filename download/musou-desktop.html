@@ -989,6 +989,24 @@ let PART_MAX = 720;           // 粒子数上限
 let TEXT_MAX = 200;           // 飘字（伤害数字/提示）上限 —— 怪多时「每次受击一个字」会瞬间堆到几千
 let SHOT_MAX = 700;           // 敌方射弹上限（弹幕海时兜底，超出丢最老的）
 let fxForceHigh = false;      // ?fx=high：手机上也不减负（调试对照用）
+/* 🎚️ **特效采样密度倍率**（1 = 全质量；越小 = 每个特效铺的方块越少）
+   背景：像素特效是"用一堆 2px 方块拼出来"的 —— 实测单个特效的 canvas 调用次数：
+     pxDitherRect 417 · pxBeam 153 · groundCrack 123 · pxSweep 46 · pxRing 21 · cometTail 11
+   一帧最坏情况（弹幕上限 420 × 彗尾 11 = 4620，再加几十个挥砍/裂纹）在手机上必然掉帧。
+   所以这里给一个**统一倍率**，各特效函数按它放大采样步长 / 减少段数（只影响观感，不影响任何判定）。
+   ⚠️ 只在 `applyPerfProfile()` 里赋值 —— 一个数值只有一个定义点（铁律）。 */
+let FX_Q = 1;
+function applyPerfProfile() {
+  const low = lowSpecOn();
+  const touchLow = PERF_TOUCH && !fxForceHigh;
+  FX_SHADOW = !low && !touchLow;
+  RENDER_DPR_MAX = low ? 1.0 : (touchLow ? 1.25 : 2);
+  PART_MAX = low ? 160 : (touchLow ? 420 : 720);
+  TEXT_MAX = low ? 120 : (touchLow ? 220 : 200);
+  SHOT_MAX = low ? 420 : 700;
+  /* 特效密度：低配 0.42（方块数约剩 4 成）· 手机 0.66 · 桌面 1 */
+  FX_Q = low ? 0.42 : (touchLow ? 0.66 : 1);
+}
 /* 🖥️ **低配置电脑模式**（用户要求：「对低配置电脑不是特别友好…可以出一个低配置电脑模式，放在主页左下角」）
    —— 只关「画得贵」的东西，**不动任何数值/机制**（伤害、血量、刷怪、判定一律照旧，不阉割体验）：
       · 渲染分辨率上限 1.0（等于不放大：VW×VH 就 92 万像素，普通核显也吃得下）
@@ -1014,15 +1032,6 @@ try {
   fxForceHigh = /(^|[?&])fx=high(&|$)/.test(q);
   PERF_LOWSPEC_FORCED = /(^|[?&])lowspec=1(&|$)/.test(q);
 } catch (e) {}
-function applyPerfProfile() {
-  const low = lowSpecOn();
-  const touchLow = PERF_TOUCH && !fxForceHigh;
-  FX_SHADOW = !low && !touchLow;
-  RENDER_DPR_MAX = low ? 1.0 : (touchLow ? 1.25 : 2);
-  PART_MAX = low ? 160 : (touchLow ? 420 : 720);
-  TEXT_MAX = low ? 120 : (touchLow ? 220 : 200);
-  SHOT_MAX = low ? 420 : 700;
-}
 /* 低配档下要跳过的**纯视觉**大宗开销（都不影响判定）：
    · 全屏天气叠加（德尔塔气流/大太阳/始源之海那层整屏 fillRect + 风痕）
    · 角色脚下的高级特效（熔岩圈细分、粘液场地纹理条带等） */
@@ -2293,6 +2302,18 @@ function pxPlayerBody(cls, opts) {
   }
   /* 脚底：旧矢量版腿部画到 y≈+15，这里对齐同一地面线 */
   const footY = (o.footY === undefined ? 15 : o.footY);
+  /* 🌑 **地面投影**（原来完全没有 → 角色看起来"浮"在地上）。
+     画在身体之前、脚底位置：两块宽度递减的暗块拼成扁平椭圆（只 2 次 fillRect，极便宜），
+     远看是一团柔和影子。低配模式直接跳过（省画）。 */
+  if (o.shadow !== false && !lowSpecOn()) {
+    const sw = Math.round(spec.w * spec.sc * 0.32);
+    const sy2 = Math.round(footY - 1);
+    ctx.globalAlpha = 0.25; ctx.fillStyle = '#0a0f08';
+    ctx.fillRect(-sw, sy2 - 1, sw * 2, 3);
+    ctx.globalAlpha = 0.15;
+    ctx.fillRect(-sw + 2, sy2 + 2, sw * 2 - 4, 2);
+    ctx.globalAlpha = 1;
+  }
   ctx.save();
   ctx.imageSmoothingEnabled = false;
   if (faceLeft) { ctx.translate(-1, 0); ctx.scale(-1, 1); }
@@ -2950,7 +2971,7 @@ function pxBlock(x, y, s, color, alpha) {
 function pxRing(x, y, r, color, thickness, alpha) {
   if (!isFinite(x) || !isFinite(y) || !isFinite(r) || r <= 0) return;
   const step = Math.max(PX_FX_G * 2, (r * 0.30) | 0);       // 步长随半径，别画太密
-  const n = Math.max(8, Math.min(40, Math.round(TAU * r / step)));
+  const n = Math.max(8, Math.min(40, Math.round(TAU * r / step * FX_Q)));   // 🎚️ FX_Q
   const ss = pxSnapS(thickness || 2);
   ctx.fillStyle = color;
   if (alpha !== undefined) ctx.globalAlpha = alpha;
@@ -2971,7 +2992,7 @@ function pxArcStroke(x, y, r, a0, a1, color, width, alpha) {
   if (!isFinite(span) || Math.abs(span) < 1e-4) return;
   const ss = pxSnapS(width || 2);
   const arcLen = Math.abs(span) * r;
-  const n = Math.max(3, Math.min(48, Math.round(arcLen / Math.max(PX_FX_G, ss * 0.9))));
+  const n = Math.max(3, Math.min(48, Math.round(arcLen * FX_Q / Math.max(PX_FX_G, ss * 0.9))));   // 🎚️ FX_Q
   ctx.fillStyle = color;
   if (alpha !== undefined) ctx.globalAlpha = alpha;
   const ox = pxSnap(x), oy = pxSnap(y);
@@ -3012,7 +3033,8 @@ function pxSweep(cx, cy, a0, a1, rIn, rOut, t, colTail, colBody, colCore, alpha)
   const bandW = Math.max(2, rOut - rIn);
   const rMid = (rIn + rOut) / 2;
   const arcLen = Math.abs(span) * rMid;
-  const N = Math.max(5, Math.min(44, Math.round(arcLen / 4)));
+  /* 🎚️ 段数按 FX_Q 缩放（下限 5 段，保证刀光不会断成两点） */
+  const N = Math.max(5, Math.min(44, Math.round(arcLen * FX_Q / 4)));
   const al0 = alpha === undefined ? 1 : alpha;
   for (let i = 0; i <= N; i++) {
     const u = i / N;                                  // 0 = 尾（起点）· 1 = 刀锋
@@ -3096,7 +3118,7 @@ function pxRingStroke(x, y, r) {
 function pxDitherRect(x, y, w, h, color, alpha, density, gi) {
   if (!isFinite(x) || !isFinite(y) || !isFinite(w) || !isFinite(h) || w <= 0 || h <= 0) return;
   const den = density === undefined ? 1 : Math.max(0, Math.min(1, density));
-  const st = gi || 4;
+  const st = Math.max(3, Math.round((gi || 4) / FX_Q));   // 🎚️ FX_Q 越小 → 步长越大 → 块越少
   ctx.fillStyle = color;
   if (alpha !== undefined) ctx.globalAlpha = alpha;
   const x0 = pxSnap(x), y0 = pxSnap(y), x1 = pxSnap(x + w), y1 = pxSnap(y + h);
@@ -3118,7 +3140,7 @@ function pxDitherEllipse(x, y, rx, ry, color, alpha, density) {
   const den = density === undefined ? 1 : Math.max(0, Math.min(1, density));
   ctx.fillStyle = color;
   if (alpha !== undefined) ctx.globalAlpha = alpha;
-  const step = Math.max(PX_FX_G, Math.round(Math.min(rx, ry) * 0.5 / PX_FX_G) * PX_FX_G);
+  const step = Math.max(PX_FX_G, Math.round(Math.min(rx, ry) * 0.5 / PX_FX_G / FX_Q) * PX_FX_G);   // 🎚️ FX_Q
   const ox = pxSnap(x), oy = pxSnap(y);
   for (let dy = -ry; dy <= ry; dy += step) {
     const k = 1 - (dy / ry) * (dy / ry);
@@ -3323,7 +3345,8 @@ function pxBeam(x1, y1, x2, y2, w, colGlow, colCore, alpha, k) {
   const dx = x2 - x1, dy = y2 - y1;
   const len = Math.hypot(dx, dy);
   if (!isFinite(len) || len < 1) return;
-  const step = Math.max(3, Math.round(w * 0.55 / PX_FX_G) * PX_FX_G);
+  /* 🎚️ 采样步长按 FX_Q 放大（手机上块更少；FX_Q=1 时与原值完全一致） */
+  const step = Math.max(3, Math.round(w * 0.55 / PX_FX_G / FX_Q) * PX_FX_G);
   const n = Math.max(1, Math.round(len / step));
   const sGlow = pxSnapS(w), sMid = pxSnapS(Math.max(2, w * 0.62)), sCore = pxSnapS(Math.max(2, w * 0.30));
   for (let i = 0; i <= n; i++) {
@@ -24013,7 +24036,7 @@ function drawEnemy(e, col) {
     const acc = col || (hpAff ? '#a8f0a8' : (e.shiny ? '#fff6d0' : e.acc));
     const cv = pxSpriteOf(e.type, fi, mode, body, drk, acc, variant);
     /* 地面影 */
-    if (!e.airH) {
+    if (!e.airH && !lowSpecOn()) {   // 🖥️ 低配模式跳过敌人投影（同屏 240 只 × 2 次绘制）
       ctx.save();
       ctx.globalAlpha = 0.30;
       ctx.fillStyle = '#000';
@@ -30258,7 +30281,9 @@ function drawGame() {
       const ux = (s.vx || 0) / sp2, uy = (s.vy || 0) / sp2;
       const tc = s.col || (s.void ? '#9ad8ff' : '#ffe9a8');
       const tailLen = Math.min(78, 16 + sp2 * 0.075);
-      const N = 10;
+      /* 🎚️ 段数 = FX_Q × 自适应：弹幕超过 80 颗时再降一档（满屏弹幕才是真卡的时候） */
+      const qShots = FX_Q * (shots.length > 80 ? 0.7 : 1);
+      const N = Math.max(4, Math.round(10 * qShots));
       for (let k = 1; k <= N; k++) {
         const u = k / N;                                   // 0=贴着头 · 1=尾梢
         const d = tailLen * u;
@@ -30884,10 +30909,12 @@ function drawGame() {
     const gk = Math.min(1, gc.t / gc.life);
     const fade = 1 - gk * gk;
     const grow = 0.35 + 0.65 * Math.min(1, gk * 2.2);
-    for (let i = 0; i < gc.n; i++) {
-      const a = gc.ang0 + (i / gc.n) * TAU + (pxRand(gc.seed + i * 13) - 0.5) * 0.5;
+    /* 🎚️ 裂纹条数按 FX_Q 缩（下限 4 条，否则看不出是放射状） */
+    const gcN = Math.max(4, Math.round(gc.n * FX_Q));
+    for (let i = 0; i < gcN; i++) {
+      const a = gc.ang0 + (i / gcN) * TAU + (pxRand(gc.seed + i * 13) - 0.5) * 0.5;
       const maxR = gc.r * (0.55 + pxRand(gc.seed + i * 29) * 0.6) * grow;
-      const segs = Math.max(3, Math.round(maxR / 7));
+      const segs = Math.max(3, Math.round(maxR * FX_Q / 7));   // 🎚️ 每条的段数也缩
       for (let s2 = 1; s2 <= segs; s2++) {
         const u = s2 / segs;
         const rr2 = maxR * u;
