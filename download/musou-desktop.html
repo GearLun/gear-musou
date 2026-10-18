@@ -1931,6 +1931,19 @@ function pxHumanoid(px, f, mode, cfg, pal) {
   /* —— 头 —— */
   pxBall(px, cx, headY, headR, headR * 1.05, pal.sk, pal.sk, pal.skd, null, false);
 
+  /* 💇 **头发**（`c.hair`）：短寸头 —— 盖住头顶与后脑、露出脸。
+     用户报过「武器大师为什么是个光头？我不喜欢」：`helm:'none'` 的模型以前**完全没有头发**。
+     画在头盔**之前**（这样帽子/头盔能压住头发）。 */
+  if (c.hair) {
+    const hairC = '#1f1a14', hairL = '#3a3026';
+    /* 头顶：一个比头略小的半球（上缘对齐头顶，下缘在眉毛上方） */
+    pxEll(px, cx, headY - headR * 0.30, headR * 1.02, headR * 0.74, hairC);
+    pxEll(px, cx - headR * 0.22, headY - headR * 0.52, headR * 0.62, headR * 0.42, hairL);
+    /* 后脑 + 两侧鬓角（让脸有"被头发包住"的轮廓） */
+    pxRect(px, Math.round(cx - headR - 0.4), Math.round(headY - headR * 0.5), 1, Math.round(headR * 0.9), hairC);
+    pxRect(px, Math.round(cx + headR - 0.6), Math.round(headY - headR * 0.5), 1, Math.round(headR * 0.9), hairC);
+  }
+
   /* —— 头盔 / 头饰 —— */
   const hk = c.helm;
   if (hk) {
@@ -2058,9 +2071,25 @@ function pxHumanoid(px, f, mode, cfg, pal) {
       pxLine(px, hx - 0.4, hy - 4.4, hx - 0.4, hy + 4.4, pal.w, 1);       // 弦
       if (mode === 'atk') pxLine(px, hx + 1.0, hy, hx + 5.4, hy - 0.4, pal.w, 1);   // 箭
     } else if (wq === 'staff') {
-      pxLine(px, hx - 0.6, hy + 2, hx + 1.0, hy - 7 + tipLift, pxDeep(pal.a, 0.4), 1.3);
-      pxBall(px, hx + 1.0, hy - 7.6 + tipLift, 1.9, 1.9, pal.al, pal.a, pal.ad, null, false);   // 法球
-      pxPut(px, hx + 1, hy - 8, pxCI(px, '#ffffff'));
+      /* 🪄 法杖：**斜握**——杖底压到身后近地面、杖头挑到肩/头顶外侧，杖身穿过手掌。
+         ⚠️ 用户原话：「魔法杖像是他的dick，压根不是用手拿着的样子」——
+         原来是从手心往上画一根**竖直**杆子、顶端一个球，位置正好在胯边，完全是那个观感。
+         现在 21° 斜角 + 手持像素 + 杖头高过肩，一眼就是"握着法杖"。 */
+      const gx = hx, gy = hy;                                  // 握点（手）
+      const bx2 = hx - 3.2, by2 = hy + 6.5 + tipLift * 0.4;    // 杖底（身后下方）
+      const tx2 = hx + 2.6, ty2 = hy - 10.5 + tipLift;         // 杖头（肩上外侧）
+      /* 杖身：先深色描边再亮色木纹，看起来有粗细 */
+      pxLine(px, bx2, by2, tx2, ty2, pxDeep(pal.a, 0.55), 1.8);
+      pxLine(px, bx2 + 0.3, by2 - 0.3, tx2 - 0.2, ty2 + 0.2, pal.a, 1.1);
+      /* 杖身缠绳（两处），顺便让"杆"不像一根光溜溜的棒子 */
+      pxPut(px, Math.round(gx - 0.8), Math.round(gy + 2.2), pxCI(px, pal.ad));
+      pxPut(px, Math.round(gx - 1.6), Math.round(gy + 4.0), pxCI(px, pal.ad));
+      /* 杖头：托座 + 法球（球在杖头正上，不是悬在手边） */
+      pxRect(px, Math.round(tx2) - 1, Math.round(ty2) - 1, 3, 2, pal.ml);
+      pxBall(px, tx2, ty2 - 2.6, 2.1, 2.1, pal.al, pal.a, pal.ad, null, false);
+      pxPut(px, Math.round(tx2), Math.round(ty2 - 3.6), pxCI(px, '#ffffff'));
+      /* 握杖的手：盖在杖身上（手在最上层，才像"拿着"） */
+      pxBall(px, gx, gy, 1.7, 1.6, pal.sk || pal.l, pal.d, pal.dd, null, false);
     } else if (wq === 'katana') {
       /* 太刀（浪客）：细长微弯 + 白刃口 + 长柄 */
       const len2 = 11;
@@ -2140,11 +2169,16 @@ const PX_PSPEC = {
   ronin:   { w: 22, h: 30, sc: 2, col: '#2b3550', dark: '#10151f', acc: '#5b8fd8',
              cfg: { headR: 3.9, headDY: 4.5, helm: 'none', weapon: 'katana', cape: 1, hakama: 1, kimono: 1, topknot: 1 } },
   knight:  { w: 22, h: 24, sc: 2, col: '#8f9aa8', dark: '#3a4450', acc: '#e2b93f', cfg: { headR: 4.0, helm: 'knight', weapon: 'lance', shield: 1, armor: 1 } },
-  wm:      { w: 20, h: 24, sc: 2, col: '#8a6a4a', dark: '#3a2a1c', acc: '#c9a227', cfg: { headR: 3.9, helm: 'none', weapon: 'sword', armor: 1 } },
+  /* 🗡️ 武器大师：加 `hair:1`（用户报「武器大师为什么是个光头？我不喜欢」—— 之前 helm:'none' 就是纯光头） */
+  wm:      { w: 20, h: 26, sc: 2, col: '#8a6a4a', dark: '#3a2a1c', acc: '#c9a227',
+             cfg: { headR: 3.9, headDY: 1.2, helm: 'none', hair: 1, weapon: 'sword', armor: 1 } },
   archer:  { w: 22, h: 24, sc: 2, col: '#3f6f4f', dark: '#1f3a2b', acc: '#c8b070', cfg: { headR: 3.8, helm: 'hood', weapon: 'bow', cape: 1 } },
   gunner:  { w: 22, h: 24, sc: 2, col: '#4a5a3a', dark: '#232b1c', acc: '#d8a441', cfg: { headR: 3.8, helm: 'pot', weapon: 'gun', armor: 1 } },
   card:    { w: 22, h: 24, sc: 2, col: '#6a3f8f', dark: '#2a1740', acc: '#ffd166', cfg: { headR: 3.8, helm: 'jester', weapon: 'dagger', cape: 1 } },
-  trainer: { w: 20, h: 24, sc: 2, col: '#d94f4f', dark: '#6a1f1f', acc: '#f5f2e8', cfg: { headR: 3.9, helm: 'cap', weapon: 'none' } },
+  /* 🧢 训练家：小智配色 —— **蓝白夹克 + 红色鸭舌帽**（原来 col 是红、acc 是白 → 帽子变白、身体变红，
+     完全不像宝可梦训练家）。帽子的颜色取 acc，所以 acc 必须是红；身体取 col，所以 col 是蓝。 */
+  trainer: { w: 20, h: 24, sc: 2, col: '#2f6fc4', dark: '#16345e', acc: '#c0392b',
+             cfg: { headR: 3.9, helm: 'cap', weapon: 'none', hair: 1 } },
   mage:    { w: 22, h: 30, sc: 2, col: '#4a3a8f', dark: '#1e1740', acc: '#9adcff', cfg: { headR: 3.9, helm: 'wizard', weapon: 'staff', cape: 1 } }
 };
 /* 玩家当前属于哪个像素模型（弓箭手那 4 个分支各一份） */
@@ -23362,7 +23396,14 @@ function buildGround() {
   const grR = (a, b) => a + (b - a) * gr();
   const g = ground.getContext('2d');
   if (!sceneDark) {
-    /* —— 草原战场 —— */
+    /* —— 草原战场 ——
+       ⚠️ 第一件事必须是「**整张画布铺满不透明底色**」：后面所有绘制都叠在它上面。
+       用户报过「地图右下角缺失、完全是灾难」—— 根因就是**没有任何一层保证兜底**：
+       暗角是用半径 780 的圆形渐变铺的，而地图是 3200×1800（中心到角 ≈1835），
+       半径之外的区域只能拿到渐变的**最后一档颜色**，四个角于是变成一片死黑。
+       现在：① 先 fillRect 纯色兜底 ② 暗角改成按地图对角线匹配的椭圆衰减。 */
+    g.fillStyle = '#33412f';
+    g.fillRect(0, 0, W, H);
     const grad = g.createLinearGradient(0, 0, 0, H);
     grad.addColorStop(0, '#3a4a35'); grad.addColorStop(0.5, '#33412f'); grad.addColorStop(1, '#2b3828');
     g.fillStyle = grad; g.fillRect(0, 0, W, H);
@@ -23485,39 +23526,25 @@ function buildGround() {
       const kind = r0 < 0.45 ? 'rock' : (r0 < 0.75 ? 'bush' : 'ruin');
       pxDecor(g, kind, x, y, kind === 'ruin' ? 8 : grR(7, 11), gr, grR);
     }
-    const vig = g.createRadialGradient(W / 2, H / 2, 200, W / 2, H / 2, 780);
-    vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(10,14,8,0.5)');
+    /* 暗角：**半径必须覆盖地图对角线**（中心到角 ≈ hypot(1600,900)=1835）。
+       原来是固定 780 —— 半径之外全是渐变的最后一档（0.5 黑），四个角直接变成死黑块
+       （用户报的「地图右下角缺失、完全是灾难」就是这个）。 */
+    const vigR0 = Math.hypot(W, H) * 0.26, vigR1 = Math.hypot(W, H) * 0.54;
+    const vig = g.createRadialGradient(W / 2, H / 2, vigR0, W / 2, H / 2, vigR1);
+    vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(10,14,8,0.34)');
     g.fillStyle = vig; g.fillRect(0, 0, W, H);
     g.strokeStyle = 'rgba(24,30,20,0.9)'; g.lineWidth = 22;
     g.strokeRect(0, 0, W, H);
     g.strokeStyle = 'rgba(160,150,110,0.35)'; g.lineWidth = 2;
     g.strokeRect(11, 11, W - 22, H - 22);
   } else {
-    /* —— 黑暗战场（灭世魔君被讨伐后）—— */
+    /* —— 黑暗战场（灭世魔君被讨伐后）——
+       ⚠️ 同草原：**先铺满不透明底色兜底**，任何情况下都不留空区域。 */
+    g.fillStyle = '#0b0a0e';
+    g.fillRect(0, 0, W, H);
     const grad = g.createLinearGradient(0, 0, 0, H);
     grad.addColorStop(0, '#151318'); grad.addColorStop(0.55, '#0b0a0e'); grad.addColorStop(1, '#050408');
     g.fillStyle = grad; g.fillRect(0, 0, W, H);
-    /* 暗色焦土斑 */
-    for (let i = 0; i < 140; i++) {
-      const x = gr() * W, y = gr() * H;
-      g.fillStyle = 'rgba(0,0,0,' + grR(0.12, 0.3).toFixed(2) + ')';
-      g.beginPath();
-      g.ellipse(x, y, grR(18, 64), grR(10, 30), grR(0, 3), 0, TAU);
-      g.fill();
-    }
-    /* 熔岩裂缝（暗红微光） */
-    for (let i = 0; i < 46; i++) {
-      const x = grR(0, W), y = grR(0, H), segs = Math.floor(grR(4, 10));
-      let px = x, py = y;
-      g.lineCap = 'round';
-      for (let s = 0; s < segs; s++) {
-        const nx2 = px + grR(-26, 26), ny2 = py + grR(6, 26);
-        g.strokeStyle = 'rgba(255,' + Math.floor(grR(60, 90)) + ',40,' + grR(0.08, 0.2).toFixed(2) + ')';
-        g.lineWidth = grR(1, 2.4);
-        g.beginPath(); g.moveTo(px, py); g.lineTo(nx2, ny2); g.stroke();
-        px = nx2; py = ny2;
-      }
-    }
     /* —— 黑暗战场：**分区 + 层次**（和草原同一套思路）——
        ① 大块明暗（焦土起伏 / 远处火光）
        ② 1px 细噪点（tile 1:1）
@@ -23623,11 +23650,12 @@ function buildGround() {
       const kind = r0 < 0.40 ? 'bone' : (r0 < 0.72 ? 'rock' : 'ruin');
       pxDecor(g, kind, x, y, kind === 'ruin' ? 8 : grR(7, 11), gr, grR);
     }
-    /* 中央惨淡幽光 + 重暗角 */
-    const vig = g.createRadialGradient(W / 2, H / 2, 90, W / 2, H / 2, 700);
+    /* 中央惨淡幽光 + 重暗角（同样按地图对角线放大半径，别留死黑角） */
+    const dkR0 = Math.hypot(W, H) * 0.22, dkR1 = Math.hypot(W, H) * 0.56;
+    const vig = g.createRadialGradient(W / 2, H / 2, dkR0, W / 2, H / 2, dkR1);
     vig.addColorStop(0, 'rgba(90,80,120,0.10)');
-    vig.addColorStop(0.55, 'rgba(0,0,0,0)');
-    vig.addColorStop(1, 'rgba(0,0,0,0.72)');
+    vig.addColorStop(0.5, 'rgba(0,0,0,0)');
+    vig.addColorStop(1, 'rgba(0,0,0,0.52)');
     g.fillStyle = vig; g.fillRect(0, 0, W, H);
     /* 界墙（暗红锈蚀） */
     g.strokeStyle = 'rgba(10,6,8,0.95)'; g.lineWidth = 22;
@@ -29875,19 +29903,33 @@ function drawGame() {
 
   /* 箭矢（Boss 大弹 = 拖尾能量球） */
   for (const s of shots) {
-    /* 🎨 像素拖尾：所有弹幕统一先铺一串 **2px 栅格方块**（越靠后越小越淡）。
-       这是"攻击特效像素化"的公共层 —— 不管弹体本身怎么画，拖尾都带像素阶梯感。 */
+    /* 🎨 像素彗尾（远程职业的"过程感"）：法师火球 / 弓兵箭 / 枪械子弹 / 牌皇纸牌全部走这里。
+       原来是 3 个固定小方块 —— 太短、看不出速度。现在：
+       · 尾巴长度**跟速度成正比**（跑得快的弹体拖得更长）
+       · 10 段渐变：头部白热 → 中段本色 → 尾巴碎成小点
+       · 每段带一点**横向摆动**（`sin(time*26 - k*1.7)`），像火焰/气流被甩开，而不是一条死直线 */
     {
       const sp2 = Math.hypot(s.vx || 0, s.vy || 0) || 1;
       const ux = (s.vx || 0) / sp2, uy = (s.vy || 0) / sp2;
       const tc = s.col || (s.void ? '#9ad8ff' : '#ffe9a8');
-      for (let k = 1; k <= 3; k++) {
-        const d = k * 7;
-        ctx.globalAlpha = 0.34 - k * 0.09;
-        ctx.fillStyle = tc;
-        const ss = pxSnapS(Math.max(2, 6 - k * 1.4));
-        ctx.fillRect(pxSnap(s.x - ux * d) - ss / 2, pxSnap(s.y - uy * d) - ss / 2, ss, ss);
+      const tailLen = Math.min(78, 16 + sp2 * 0.075);
+      const N = 10;
+      for (let k = 1; k <= N; k++) {
+        const u = k / N;                                   // 0=贴着头 · 1=尾梢
+        const d = tailLen * u;
+        const wob = Math.sin(time * 26 - k * 1.7 + (s.x + s.y) * 0.013) * (1.2 + u * 2.6);
+        const tx3 = s.x - ux * d - uy * wob;
+        const ty3 = s.y - uy * d + ux * wob;
+        const ss = pxSnapS(Math.max(2, 8 * (1 - u * 0.78)));
+        ctx.globalAlpha = Math.pow(1 - u, 1.25) * 0.62;
+        ctx.fillStyle = u < 0.22 ? '#ffffff' : tc;
+        ctx.fillRect(pxSnap(tx3) - ss / 2, pxSnap(ty3) - ss / 2, ss, ss);
       }
+      /* 头部热斑（让弹体中心有个白点，读起来更"热"） */
+      ctx.globalAlpha = 0.5;
+      ctx.fillStyle = '#ffffff';
+      const hs = pxSnapS(Math.max(2, 5));
+      ctx.fillRect(pxSnap(s.x) - hs / 2, pxSnap(s.y) - hs / 2, hs, hs);
       ctx.globalAlpha = 1;
     }
     /* 🍃🔥💧 宝可梦的属性弹：直接画对应属性的旋转贴图（帧号跟着时间走 + 每颗错开相位）；
