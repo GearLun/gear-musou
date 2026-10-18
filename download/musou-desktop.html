@@ -14899,22 +14899,25 @@ const WM_QUAL_BANDS = [
      战斗数值借同体型的现成伙伴（它们只当来访者，不会上场打）。
    · **不**进 PET_CATCHES / PET_STARTER / PET_WAVE_EVO → 玩家收编不到它们。
    ============================================================ */
+/* 最后一列 = **是否进刷闪名单**：只有进化链的**起点**为 true。
+   ⚠️ 用户明确要求：「尾立/大尾立是同一进化链，只刷一次闪」→ 不能把进化形态也塞进名单
+   （否则闪光图鉴会出现两行、刷闪质变也会把同一个物种算两次）。 */
 const FOE_SHINY_DEF = [
-  /* id,            名字,        属性,       参照物种, 缩放 */
-  ['foe_sentret',   '尾立',      'NORMAL', 'eevee',    1.30],
-  ['foe_furret',    '大尾立',    'NORMAL', 'eevee',    1.75],
-  ['foe_poochyena', '土狼犬',    'DARK',   'eevee',    1.35],
-  ['foe_mightyena', '大狼犬',    'DARK',   'gible',    1.60],
-  ['foe_munchlax',  '小卡比兽',  'NORMAL', 'gible',    1.45],
-  ['foe_snorlax',   '卡比兽',    'NORMAL', 'kyogre',   1.35],
-  ['foe_avulpix',   '阿罗拉六尾', 'ICE',    'eevee',    1.30],
-  ['foe_aninetales','阿罗拉九尾', 'ICE',    'eevee',    1.80],
-  ['foe_vulpix',    '六尾',      'FIRE',   'eevee',    1.30],
-  ['foe_ninetales', '九尾',      'FIRE',   'eevee',    1.80],
-  ['foe_ponyta',    '小火马',    'FIRE',   'charcadet',1.45],
-  ['foe_rapidash',  '烈焰马',    'FIRE',   'charcadet',1.85]
+  /* id,            名字,        属性,      参照物种,    缩放,  进刷闪名单 */
+  ['foe_sentret',   '尾立',      'NORMAL', 'eevee',    1.30, true],
+  ['foe_furret',    '大尾立',    'NORMAL', 'eevee',    1.75, false],
+  ['foe_poochyena', '土狼犬',    'DARK',   'eevee',    1.35, true],
+  ['foe_mightyena', '大狼犬',    'DARK',   'gible',    1.60, false],
+  ['foe_munchlax',  '小卡比兽',  'NORMAL', 'gible',    1.45, true],
+  ['foe_snorlax',   '卡比兽',    'NORMAL', 'kyogre',   1.35, false],
+  ['foe_avulpix',   '阿罗拉六尾', 'ICE',    'eevee',    1.30, true],
+  ['foe_aninetales','阿罗拉九尾', 'ICE',    'eevee',    1.80, false],
+  ['foe_vulpix',    '六尾',      'FIRE',   'eevee',    1.30, true],
+  ['foe_ninetales', '九尾',      'FIRE',   'eevee',    1.80, false],
+  ['foe_ponyta',    '小火马',    'FIRE',   'charcadet',1.45, true],
+  ['foe_rapidash',  '烈焰马',    'FIRE',   'charcadet',1.85, false]
 ];
-for (const [fid, fname, fel, ref, fsc] of FOE_SHINY_DEF) {
+for (const [fid, fname, fel, ref, fsc, inShiny] of FOE_SHINY_DEF) {
   PET_FORM[fid] = [fid];                                   // 单段：不参与等级进化
   if (!PET_SPECIES[fid]) {
     PET_SPECIES[fid] = Object.assign({}, PET_SPECIES[ref] || PET_SPECIES.bulba, {
@@ -14926,7 +14929,8 @@ for (const [fid, fname, fel, ref, fsc] of FOE_SHINY_DEF) {
       name: fname, element: fel, scale: fsc, r: Math.round(11 * fsc / 1.67)
     });
   }
-  if (SHINY_SPECIES.indexOf(fid) < 0) SHINY_SPECIES.push(fid);
+  /* 只有进化链起点进刷闪名单（进化形态照样登记形态/物种表，只是不占名额） */
+  if (inShiny && SHINY_SPECIES.indexOf(fid) < 0) SHINY_SPECIES.push(fid);
 }
 
 function wmQualBand() {
@@ -24212,6 +24216,14 @@ function drawWorldTrees(target) {
   if (sm) c.imageSmoothingEnabled = true;
 }
 /* 🧪 树木系统的测试钩子（和 trees 系统写在一起） */
+/* 🧪 测试钩子：卡住自愈的配置与计数（判据必须"完全动不了 + 被障碍物顶住 + 非定身"） */
+window.__musouUnstickCfg = () => ({
+  on: TREES_BLOCK_FOES,
+  t: FOE_UNSTICK_T,
+  dist: FOE_UNSTICK_DIST,
+  minTgt: FOE_UNSTICK_MIN_TGT,
+  n: dbgFoeUnstick
+});
 window.__musouTrees = () => ({
   active: TREES_ACTIVE,
   n: worldTrees.length,
@@ -24730,12 +24742,21 @@ function drawFoePet(e, key) {
   const fi = Math.floor((time + (e.pxSeed || 0)) / dtR) % arr.length;
   const fr = arr[fi < 0 ? 0 : fi];
   if (!fr) return false;
-  /* 缩放：让贴图高度 ≈ 2.6 倍判定半径（和像素模型观感一致） */
   const sw = MR.sw, sh = MR.sh;
   if (!isFinite(sw) || !isFinite(sh) || sw <= 0 || sh <= 0) return false;   // 取错层就回退，绝不隐形
-  const k = Math.max(0.28, Math.min(1.15, (e.r * 2.6) / Math.max(1, sh)));
+  /* ⚠️⚠️ **体型归一必须用地面线 gy，不能用画布高度 sh**：
+     素材里每个动作的画布大小差很多（尾立 idle 24×72 / walk 32×40 / atk 64×72），
+     按 sh 算缩放就变成"一个动作一个体型"——用户报的「蓄力时体型又额外变小」就是这个。
+     gy = 角色脚底在画布上的 y，也就是它在画布里的**实际高度**；按它对归一，
+     不管哪个动作、哪个方向，画出来的身高都一致。 */
+  const gy = (MR.gy && MR.gy[d] !== undefined) ? MR.gy[d] : sh * 0.85;
+  if (!isFinite(gy) || gy <= 4) return false;
+  /* 目标身高 = 像素模型的实际绘制高度（h + 1px 描边留白）× 放大倍数
+     → 换成宝可梦外观后**体型和原来一致**（用户：「将体型全部换成正常体型」） */
+  const spec0 = PX_SPEC[e.type];
+  const targetH = spec0 ? (spec0.h + 2) * spec0.sc : Math.max(24, e.r * 2.6);
+  const k = targetH / gy;
   const dw = sw * k, dh = sh * k;
-  const gy = (MR.gy && MR.gy[d] !== undefined) ? MR.gy[d] : sh * 0.9;
   const dx = -dw / 2, dy = -gy * k;
   /* 🛡️ 最后一道保险：任何几何值不是有限数 → 回退像素模型（而不是画一个 NaN 矩形） */
   if (!isFinite(dx) || !isFinite(dy) || !isFinite(dw) || !isFinite(dh) || dw <= 0 || dh <= 0) return false;
@@ -29689,8 +29710,19 @@ function updateGame(dt, rawDt) {
     /* ⚠️ 只有「**想动**但动不了」才算卡住：
        spdNow = 0 的静止靶 / 炮台 / 假人是设计上就不动的，不能给它们闪避
        （冒烟当场抓到：法师无双测试里的静止靶被闪到玩家身边）。 */
-    const wantsMove = spdNow > 1 && !e.boss && !e.devDummy && (Math.abs(tx) + Math.abs(ty)) > 0.05;
-    if (wantsMove && movedD < Math.max(0.5, spdNow * dt * 0.30) && d > FOE_UNSTICK_MIN_TGT) {
+    /* ① **状态豁免**：定身 / 冻结 / 瘫痪 / 减速到 0 一律不算"卡住"。
+       用户原话：「有些效果会让敌人定身，我不希望定身效果生效的时候你误以为是被卡住于是触发自愈」。
+       （这些状态在主循环里本来就 `continue` 走不到这里，显式写出来是为了以后加新控制也不会误判。） */
+    const statusHold = (e.stun > 0) || (enemyFreezeT > 0) || ((e.paraT || 0) > 0) || (e.slowK !== undefined && e.slowK <= 0.001);
+    /* ② **必须是被障碍物顶住**：朝想去的位置再探 6px，被树/树桩挡住才允许自愈。
+       这样"被别的东西挡住"（比如被同伴挤住、被推挤）也不会误触发。 */
+    const probeX = e.x + tx * 6, probeY = e.y + ty * 6;
+    const blockedByObstacle = TREES_ACTIVE && worldTrees.length > 0 && treeBlocksMove(probeX, probeY, e.r || 10);
+    const wantsMove = spdNow > 1 && !e.boss && !e.devDummy && !statusHold && blockedByObstacle && (Math.abs(tx) + Math.abs(ty)) > 0.05;
+    /* ⚠️ 判据必须是「**真的动不了**」：单帧位移 < 0.12px（连 1px 都挪不动）。
+       以前用 max(0.5, spd*dt*0.3) —— 战将又慢又大，0.5px 的抖动就算"卡住"，
+       于是每秒触发一次自愈（用户报「战将一直触发卡住自愈」）。 */
+    if (wantsMove && movedD < 0.12 && d > FOE_UNSTICK_MIN_TGT) {
       e.stuckT = (e.stuckT || 0) + dt;
     } else {
       e.stuckT = 0;
@@ -33732,6 +33764,18 @@ window.__musouKnockTgt = (dx, dy, hp) => { // 测试钩子：可被击退的不�
   probeTgt.push(e);
   return probeTgt.length - 1;
 };
+/* 🌀 卡住自愈的行为测试：给真·敌人上定身 / 读卡住计时 */
+window.__musouFoeStun = (i, secs) => {
+  const e = enemies[i];
+  if (!e || e.dead) return false;
+  e.stun = Math.max(e.stun || 0, secs || 3);
+  return true;
+};
+window.__musouFoeInfo = (i) => {
+  const e = enemies[i];
+  if (!e || e.dead) return null;
+  return { type: e.type, x: Math.round(e.x), y: Math.round(e.y), stun: +(e.stun || 0).toFixed(2), stuckT: +(e.stuckT || 0).toFixed(2) };
+};
 window.__musouTgtX = (i) => (probeTgt[i] && !probeTgt[i].dead) ? probeTgt[i].x : -99999; // 测试钩子：探针目标 x（位移/吸附探针）
 window.__musouTgtSlow = (i) => { const e = probeTgt[i]; return e ? { t: +(e.slowT || 0).toFixed(2), k: (e.slowK === undefined ? 1 : e.slowK) } : null; }; // 测试钩子：探针的减速剩余时间与倍率（龙息/冰冻光束）
 window.__musouTgtHit = (i, dmg) => { const e = probeTgt[i]; if (!e || e.dead) return -1; hitEnemy(e, 0, 0, 0, dmg); return Math.round(e.hp); }; // 测试钩子：对探针目标打一次伤害（返回剩余血量；腾空无敌时数值不变）
@@ -33941,8 +33985,8 @@ window.__musouVoidInfo = () => {      // 🗡️ 虚空执剑者读数（状态�
     qiArc: VOID.qiArc, qiSize: VOID.qiSize,   // 扇形总张角（120°）/ 剑气尺寸倍率
     dashSpd: VOID.dashSpd, dashPeak: +dbgVoidDashPeak.toFixed(1),  // 冲刺设定速度 / 实测峰值速度
     fxSlash: dbgVoidSlashFx, fxSlam: dbgVoidSlamFx, fxSlamMark: voidImpacts.length, archerTreeDodge: dbgArcherTreeDodge,
-  treeSeparate: dbgTreeSeparate, foeUnstick: dbgFoeUnstick,              // 🌀 敌人卡住自救次数
-  treeBlockFoes: TREES_BLOCK_FOES, unstickT: FOE_UNSTICK_T, unstickDist: FOE_UNSTICK_DIST   // 斩击特效 / 落地特效计数
+  treeSeparate: dbgTreeSeparate,
+  // 斩击特效 / 落地特效计数
   };
 };
 window.__musouPlanteraInfo = () => {   // 🌸 世纪之花读数（形态 / 移速 / 藤蔓间隔与累计根数 / 触手）
