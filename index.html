@@ -2203,7 +2203,10 @@ const PX_PSPEC = {
   /* 👘 浪客：和服配色（深绀）+ 袴 + 着物交领 + 家纹 + 丁髷发髻（武士辨识度全靠这几样）
      ⚠️ 发髻在头顶要占 5px，所以画布加高到 30、头往下让 headDY:4.5（否则发髻被画布裁掉）。 */
   ronin:   { w: 22, h: 30, sc: 2, col: '#2b3550', dark: '#10151f', acc: '#5b8fd8',
-             cfg: { headR: 3.9, headDY: 4.5, helm: 'none', weapon: 'katana', cape: 1, hakama: 1, kimono: 1, topknot: 1 } },
+             /* ⚠️ `weapon: 'none'` —— 用户报过「浪客疑似有两把刀」：
+                模型手里这把 + `drawRoninPlayer` 里**跟随指针**的那把太刀重复了。
+                只保留跟随指针的那把（有挥砍手感、会变金刀），模型这把去掉。 */
+             cfg: { headR: 3.9, headDY: 4.5, helm: 'none', weapon: 'none', cape: 1, hakama: 1, kimono: 1, topknot: 1 } },
   knight:  { w: 22, h: 24, sc: 2, col: '#8f9aa8', dark: '#3a4450', acc: '#e2b93f', cfg: { headR: 4.0, helm: 'knight', weapon: 'lance', shield: 1, armor: 1 } },
   /* 🗡️ 武器大师：加 `hair:1`（用户报「武器大师为什么是个光头？我不喜欢」—— 之前 helm:'none' 就是纯光头） */
   wm:      { w: 20, h: 26, sc: 2, col: '#8a6a4a', dark: '#3a2a1c', acc: '#c9a227',
