@@ -1936,12 +1936,12 @@ function pxHumanoid(px, f, mode, cfg, pal) {
      画在头盔**之前**（这样帽子/头盔能压住头发）。 */
   if (c.hair) {
     const hairC = '#1f1a14', hairL = '#3a3026';
-    /* 头顶：一个比头略小的半球（上缘对齐头顶，下缘在眉毛上方） */
-    pxEll(px, cx, headY - headR * 0.30, headR * 1.02, headR * 0.74, hairC);
-    pxEll(px, cx - headR * 0.22, headY - headR * 0.52, headR * 0.62, headR * 0.42, hairL);
-    /* 后脑 + 两侧鬓角（让脸有"被头发包住"的轮廓） */
-    pxRect(px, Math.round(cx - headR - 0.4), Math.round(headY - headR * 0.5), 1, Math.round(headR * 0.9), hairC);
-    pxRect(px, Math.round(cx + headR - 0.6), Math.round(headY - headR * 0.5), 1, Math.round(headR * 0.9), hairC);
+    /* 头顶：只盖住**上三分之一**（原来 ry 太大，压到眉毛以下 → 眼睛被埋进头发里，整张脸看不见） */
+    pxEll(px, cx, headY - headR * 0.52, headR * 1.0, headR * 0.52, hairC);
+    pxEll(px, cx - headR * 0.22, headY - headR * 0.72, headR * 0.6, headR * 0.3, hairL);
+    /* 两侧鬓角（细一点，别把脸框死） */
+    pxRect(px, Math.round(cx - headR - 0.2), Math.round(headY - headR * 0.55), 1, Math.round(headR * 0.7), hairC);
+    pxRect(px, Math.round(cx + headR - 0.8), Math.round(headY - headR * 0.55), 1, Math.round(headR * 0.7), hairC);
   }
 
   /* —— 头盔 / 头饰 —— */
@@ -2011,9 +2011,9 @@ function pxHumanoid(px, f, mode, cfg, pal) {
       /* 两侧鬓发（贴着头的下半圈） */
       pxRect(px, Math.round(cx - headR - 0.6), Math.round(headY - 1), 1, Math.round(headR * 1.3), hairC);
       pxRect(px, Math.round(cx + headR - 0.4), Math.round(headY - 1), 1, Math.round(headR * 1.3), hairC);
-      /* 后脑发（上半圈暗色） */
-      pxEll(px, cx, headY - headR * 0.42, headR * 0.98, headR * 0.62, hairC);
-      pxEll(px, cx, headY - headR * 0.62, headR * 0.9, headR * 0.4, hairD);
+      /* 后脑发（上半圈暗色）—— 收窄上移，给脸留出空间 */
+      pxEll(px, cx, headY - headR * 0.62, headR * 0.96, headR * 0.46, hairC);
+      pxEll(px, cx, headY - headR * 0.78, headR * 0.86, headR * 0.3, hairD);
       /* 小辫（竖）+ 发髻（顶端圆球） */
       pxRect(px, cx - 1, Math.round(headY - headR - 2.4), 2, 3, hairC);
       pxEll(px, cx, headY - headR - 3.4, 1.9, 1.6, hairC);
@@ -2027,7 +2027,12 @@ function pxHumanoid(px, f, mode, cfg, pal) {
      ⚠️⚠️ **必须画在头盔之后**：原来眼睛画在头之后、头盔之前 → 除了 hood（兜帽）以外
      全被头盔盖掉了，角色看起来「没有眼睛」＝没有表情、不像生物（本轮踩过）。
      现在：有头盔的往下让到「帽檐下方」一行，露出来；兜帽/无盔的照常画在脸中央。 */
-  const eyeY = (hk && hk !== 'hood' && hk !== 'wizard') ? headY + 0.6 : headY - 1;
+  /* ⚠️ 有头发（hair / topknot）的角色，眼睛必须**避开头发覆盖区**：
+     原来固定 `headY - 1`，而头发椭圆盖到眉毛以下 → 眼睛被埋进头发里，脸看起来是"没五官的一坨"。
+     现在这类角色把眼睛下移到 `headY + 0.9`（脸的下半部），并保证不被头盔压住。 */
+  const hasHair = !!(c.hair || c.topknot);
+  const eyeY = (hk && hk !== 'hood' && hk !== 'wizard') ? (hasHair ? headY + 0.9 : headY + 0.6)
+              : (hasHair ? headY + 0.3 : headY - 1);
   /* 两眼间距：巨眼版留 1px 缝（2 宽），普通版留 2px 缝（1 宽） */
   const eyeDx = c.bigEye ? 2 : 2;
   pxEye(px, cx - eyeDx, eyeY, pal, !!c.bigEye);
