@@ -23464,7 +23464,14 @@ ground.width = W; ground.height = H;
    随机数一律走调用方传进来的局部 `gr`（**绝不能碰全局 Math.random**，见 AGENTS.md 6.5）。
    ============================================================ */
 function pxDecor(g, kind, x, y, s, gr, grR) {
-  const R = (w, h, col) => g.fillRect(Math.round(x + w) & ~1, Math.round(y + h) & ~1, w, h);
+  /* ⚠️⚠️ **这里曾经是地图"巨型色块"的根因（2026-10 修）**：
+     原来写的是 `const R = (w, h, col) => g.fillRect(x + w, y + h, w, h)` —— 签名是"相对偏移 + 尺寸"，
+     但**下面所有调用点都按 `R(绝对X, 绝对Y, 宽, 高)` 在用**，于是：
+       · 坐标被加了两次（x + 绝对x）→ 装饰物整体飘到 (2x, 2y)
+       · 尺寸变成了世界坐标（w = 绝对x、h = 绝对y）→ 一块石头画出 300×190 的巨型矩形
+     玩家看到的「地图是一坨色块 / 好几十个方块拼在一起」就是它。
+     现在 R = 纯绝对坐标矩形（就是调用点想要的语义），并统一对齐到 2px 栅格。 */
+  const R = (ax, ay, w, h) => g.fillRect(Math.round(ax) & ~1, Math.round(ay) & ~1, w, h);
   if (kind === 'rock') {
     /* 石堆：3~5 块，深色底 + 亮面 + 投影 */
     const n = 3 + ((gr() * 3) | 0);
@@ -23529,15 +23536,35 @@ function buildGround() {
        分区感靠"物件"（草丛/石头/花）而不是"色块"。 */
     g.fillStyle = '#4a6b3a';
     g.fillRect(0, 0, W, H);
-    /* ① 极低对比的大尺度明暗（只做"有光"的感觉，不能看出边界）：
-         用很多**小半径、极低 alpha** 的椭圆叠出来，避免大块色差。 */
-    for (let i = 0; i < 520; i++) {
-      const x = gr() * W, y = gr() * H;
-      const up = gr() < 0.5;
-      g.fillStyle = up ? 'rgba(150,180,120,0.028)' : 'rgba(20,32,16,0.030)';
-      g.beginPath();
-      g.ellipse(x, y, grR(60, 160), grR(40, 110), grR(0, 3), 0, TAU);
-      g.fill();
+    /* ① **大尺度明暗 = 一张小画布放大**（不是几百个大椭圆叠出来）。
+       ⚠️ 原来用 520 个 60~160px 的椭圆、alpha 0.028 叠明暗 —— 1:1 看就是一坨坨**带软边的圆形斑块**
+       （光栅化截图确认过）。椭圆再怎么调 alpha 都有边界，叠多了一定看出"盘子"。
+       现在：在 48×27 的小画布上画 ~40 个随机亮/暗圆 → **开启平滑放大**到整张地图
+       （一次 drawImage，双线性插值 → 完全无缝的有机明暗，像云影/地势起伏）。
+       色彩差异靠 alpha 很小（0.55 叠加），只出"有光"的感觉。 */
+    {
+      const NW = 48, NH = 27;
+      const nc = document.createElement('canvas');
+      nc.width = NW; nc.height = NH;
+      const ng = nc.getContext && nc.getContext('2d');
+      if (ng) {
+        ng.fillStyle = 'rgba(0,0,0,0)';
+        ng.fillRect(0, 0, NW, NH);
+        for (let i = 0; i < 44; i++) {
+          const up = gr() < 0.5;
+          ng.fillStyle = up ? 'rgba(170,200,140,0.55)' : 'rgba(26,42,20,0.55)';
+          ng.beginPath();
+          ng.ellipse(gr() * NW, gr() * NH, grR(4, 13), grR(3, 8), grR(0, 3), 0, TAU);
+          ng.fill();
+        }
+        /* 关键的平滑放大：小画布 → 全图，插值出来是连续的云影 */
+        const sm = g.imageSmoothingEnabled;
+        g.imageSmoothingEnabled = true;
+        g.globalAlpha = 0.16;
+        g.drawImage(nc, 0, 0, NW, NH, 0, 0, W, H);
+        g.globalAlpha = 1;
+        g.imageSmoothingEnabled = sm;
+      }
     }
     /* ② 1px 细噪点（32×32 tile 按 1:1 平铺；绝不放大） */
     {
@@ -23557,7 +23584,7 @@ function buildGround() {
     }
     /* ③ 均匀散布的小草叶（**全图均匀**，不做"草丛区域"那种大块）——
          每撮 2~3 根 1px 短草，深浅两色，密度足够但不扎眼。 */
-    for (let i = 0; i < 9000; i++) {
+    for (let i = 0; i < 16000; i++) {
       const x = gr() * W, y = gr() * H;
       const h = grR(3, 7);
       const dark = gr() < 0.62;
@@ -23681,20 +23708,20 @@ function buildGround() {
       g.fillRect(Math.round(tx - 2 * sc2), Math.round(ty - 9 * sc2), Math.max(1, Math.round(2 * sc2)), Math.round(11 * sc2));
       /* 树冠：三个交叠球（暗底 → 中色 → 亮面） */
       const cx4 = tx, cy4 = ty - 14 * sc2;
-      g.fillStyle = '#2b4526';
+      g.fillStyle = '#22391f';
       g.beginPath(); g.ellipse(cx4 - 7 * sc2, cy4 + 2 * sc2, 9 * sc2, 8 * sc2, 0, 0, TAU); g.fill();
       g.beginPath(); g.ellipse(cx4 + 7 * sc2, cy4 + 2 * sc2, 9 * sc2, 8 * sc2, 0, 0, TAU); g.fill();
       g.beginPath(); g.ellipse(cx4, cy4 - 4 * sc2, 11 * sc2, 9 * sc2, 0, 0, TAU); g.fill();
-      g.fillStyle = '#3d6032';
+      g.fillStyle = '#3f6733';
       g.beginPath(); g.ellipse(cx4 - 2 * sc2, cy4 - 5 * sc2, 8 * sc2, 6.5 * sc2, 0, 0, TAU); g.fill();
-      g.fillStyle = '#4f7a3f';
+      g.fillStyle = '#5c8f49';
       g.beginPath(); g.ellipse(cx4 - 4 * sc2, cy4 - 7 * sc2, 4.5 * sc2, 3.5 * sc2, 0, 0, TAU); g.fill();
     };
     for (let ci2 = 0; ci2 < 9; ci2++) {
       const gx2 = grR(220, W - 220), gy2 = grR(200, H - 200);
       const cnt = 2 + ((gr() * 3) | 0);
       for (let i = 0; i < cnt; i++) {
-        treeAt(gx2 + grR(-46, 46), gy2 + grR(-30, 30), grR(0.8, 1.35));
+        treeAt(gx2 + grR(-52, 52), gy2 + grR(-34, 34), grR(1.5, 2.4));
       }
     }
     /* ⑤ 少量小件装饰（岩石 / 灌木 / 断柱）——**当作地图物件**，不当色块 */
@@ -23841,13 +23868,17 @@ function buildGround() {
       const cnt = 2 + ((gr() * 3) | 0);
       for (let i = 0; i < cnt; i++) {
         const tx = gx3 + grR(-44, 44), ty = gy3 + grR(-28, 28);
-        const sc3 = grR(0.8, 1.3);
+        const sc3 = grR(1.3, 2.1);
         /* 投影 */
         g.fillStyle = 'rgba(0,0,0,0.30)';
         g.beginPath(); g.ellipse(tx, ty + 2, 10 * sc3, 4 * sc3, 0, 0, TAU); g.fill();
         /* 主干（细、黑） */
-        g.strokeStyle = '#1a1512'; g.lineWidth = Math.max(2, 3 * sc3); g.lineCap = 'round';
+        g.strokeStyle = '#3a2f26'; g.lineWidth = Math.max(2, 3 * sc3); g.lineCap = 'round';
         g.beginPath(); g.moveTo(tx, ty); g.lineTo(tx + grR(-2, 2), ty - 16 * sc3); g.stroke();
+        /* 受光侧描边：让枯树在焦土上也有剪影 */
+        g.strokeStyle = '#5a4a3c'; g.lineWidth = Math.max(1, 1.4 * sc3);
+        g.beginPath(); g.moveTo(tx + 1.2, ty); g.lineTo(tx + 1.2, ty - 16 * sc3); g.stroke();
+        g.strokeStyle = '#3a2f26';
         /* 三根枯枝 */
         for (let b = 0; b < 3; b++) {
           const by3 = ty - (7 + b * 4) * sc3;
