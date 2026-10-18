@@ -1975,13 +1975,35 @@ function pxHumanoid(px, f, mode, cfg, pal) {
       for (let i = 0; i < 3; i++) pxLine(px, cx - 1, headY - 3 - i * 0.5, cx - 1 - i * 0.8, headY - 4.6 - i * 0.9, pal.a, 1.2);
       pxLine(px, cx - 1, headY - 3, cx - 0.4, headY - 4.8, pal.al, 1);
     } else if (hk === 'wizard') {
-      /* 尖顶法师帽：塔尖 + 帽檐 + 星点（塔尖高度按画布夹住，别再顶出去） */
-      const tipY = Math.max(1.5, headY - 7.6);
-      pxPoly(px, [[cx - headR - 1.2, headY - 1.4], [cx + headR + 1.2, headY - 1.4], [cx + 0.4, tipY]], pal.a);
-      pxPoly(px, [[cx - headR - 1.2, headY - 1.4], [cx, headY - 1.4], [cx + 0.4, tipY]], pal.ad);
-      pxRect(px, cx - headR - 2, headY - 1.6, Math.round(headR * 2) + 4, 1.6, pal.ad);
-      pxPut(px, cx - 1, headY - 4, pxCI(px, pal.al));
-      pxPut(px, cx + 1, headY - 5, pxCI(px, pal.al));
+      /* 尖顶法师帽：塔尖 + 帽檐 + 星点。
+         · 普通（敌人法师）：帽檐 = headR+1.2、塔尖高 7.6
+         · c.bigHat（**玩家法师**）：帽大一圈、塔尖更高更弯、帽檐更宽 + 星月徽记 ——
+           用户要求「巫师帽可以做的更大，体型反而可以做的小巧一些」，靠这个把玩家和敌人区分开。 */
+      const big = !!c.bigHat;
+      const brimW = headR + (big ? 2.6 : 1.2);
+      const tipH = big ? 11.5 : 7.6;
+      const tipY = Math.max(1.2, headY - tipH);
+      const tipX = cx + (big ? 1.8 : 0.4);
+      /* 帽身（正三角 + 右侧暗面） */
+      pxPoly(px, [[cx - brimW, headY - 1.4], [cx + brimW, headY - 1.4], [tipX, tipY]], pal.a);
+      pxPoly(px, [[cx - brimW, headY - 1.4], [cx, headY - 1.4], [tipX, tipY]], pal.ad);
+      /* 帽檐（宽一点，两端微微上翘） */
+      pxRect(px, cx - brimW - (big ? 1.4 : 0.8), headY - 1.7, Math.round(brimW * 2) + (big ? 3 : 2), 1.8, pal.ad);
+      if (big) {
+        pxRect(px, cx - brimW - 1.4, headY - 2.2, 2, 1, pal.al);          // 左檐上翘高光
+        pxRect(px, cx + brimW - 0.6, headY - 2.2, 2, 1, pal.al);          // 右檐上翘高光
+        /* 帽箍（亮带） */
+        pxRect(px, Math.round(cx - brimW * 0.86), headY - 2.9, Math.round(brimW * 1.7), 1, pal.al);
+        /* 星月徽记：一弯月 + 两颗星 */
+        const my = Math.round(headY - 5.6), mx = Math.round(cx - 0.6);
+        pxEll(px, mx, my, 1.9, 1.9, pal.al);
+        pxEll(px, mx + 0.9, my - 0.2, 1.5, 1.5, pal.a);                   // 挖出月牙
+        pxPut(px, cx + 2, my + 2, pxCI(px, '#ffffff'));
+        pxPut(px, cx - 3, my + 3, pxCI(px, pal.al));
+      } else {
+        pxPut(px, cx - 1, headY - 4, pxCI(px, pal.al));
+        pxPut(px, cx + 1, headY - 5, pxCI(px, pal.al));
+      }
     } else if (hk === 'hood') {
       pxBall(px, cx, headY - 0.4, headR + 1.1, headR * 1.15, pal.l, pal.b, pal.d, pal.dd, false);
       pxRect(px, cx - 1, headY + 1.2, Math.round(headR * 2) - 1, 1, pal.dd);   // 兜帽阴影
@@ -2199,7 +2221,10 @@ const PX_MODE_FPS = { idle: 3.2, walk: 8.0, atk: 11.0 };
    朝向：`p.face` 指向左时水平翻转（像素画翻面不违和，成本为 0）。
    ============================================================ */
 const PX_PSPEC = {
-  warrior: { w: 20, h: 24, sc: 2, col: '#c9d2dc', dark: '#5a6572', acc: '#c0392b', cfg: { headR: 4.0, helm: 'band', weapon: 'sword', armor: 1 } },
+  /* ⚠️⚠️ **玩家模型不带武器**：各职业的武器由自己的 drawXxxPlayer 画（跟指针转 + 有挥砍过程）。
+     模型里再画一把 = 手上两把武器（用户报过「现在每个职业都有两把武器了」）。
+     唯一例外是法师：法杖就是模型本体，法球光效的锚点也靠它的几何反推。 */
+  warrior: { w: 20, h: 24, sc: 2, col: '#c9d2dc', dark: '#5a6572', acc: '#c0392b', cfg: { headR: 4.0, helm: 'band', weapon: 'none', armor: 1 } },
   /* 👘 浪客：和服配色（深绀）+ 袴 + 着物交领 + 家纹 + 丁髷发髻（武士辨识度全靠这几样）
      ⚠️ 发髻在头顶要占 5px，所以画布加高到 30、头往下让 headDY:4.5（否则发髻被画布裁掉）。 */
   ronin:   { w: 22, h: 30, sc: 2, col: '#2b3550', dark: '#10151f', acc: '#5b8fd8',
@@ -2207,18 +2232,25 @@ const PX_PSPEC = {
                 模型手里这把 + `drawRoninPlayer` 里**跟随指针**的那把太刀重复了。
                 只保留跟随指针的那把（有挥砍手感、会变金刀），模型这把去掉。 */
              cfg: { headR: 3.9, headDY: 4.5, helm: 'none', weapon: 'none', cape: 1, hakama: 1, kimono: 1, topknot: 1 } },
-  knight:  { w: 22, h: 24, sc: 2, col: '#8f9aa8', dark: '#3a4450', acc: '#e2b93f', cfg: { headR: 4.0, helm: 'knight', weapon: 'lance', shield: 1, armor: 1 } },
+  knight:  { w: 22, h: 24, sc: 2, col: '#8f9aa8', dark: '#3a4450', acc: '#e2b93f', cfg: { headR: 4.0, helm: 'knight', weapon: 'none', armor: 1 } },
   /* 🗡️ 武器大师：加 `hair:1`（用户报「武器大师为什么是个光头？我不喜欢」—— 之前 helm:'none' 就是纯光头） */
   wm:      { w: 20, h: 26, sc: 2, col: '#8a6a4a', dark: '#3a2a1c', acc: '#c9a227',
-             cfg: { headR: 3.9, headDY: 1.2, helm: 'none', hair: 1, weapon: 'sword', armor: 1 } },
-  archer:  { w: 22, h: 24, sc: 2, col: '#3f6f4f', dark: '#1f3a2b', acc: '#c8b070', cfg: { headR: 3.8, helm: 'hood', weapon: 'bow', cape: 1 } },
-  gunner:  { w: 22, h: 24, sc: 2, col: '#4a5a3a', dark: '#232b1c', acc: '#d8a441', cfg: { headR: 3.8, helm: 'pot', weapon: 'gun', armor: 1 } },
-  card:    { w: 22, h: 24, sc: 2, col: '#6a3f8f', dark: '#2a1740', acc: '#ffd166', cfg: { headR: 3.8, helm: 'jester', weapon: 'dagger', cape: 1 } },
+             cfg: { headR: 3.9, headDY: 1.2, helm: 'none', hair: 1, weapon: 'none', armor: 1 } },
+  archer:  { w: 22, h: 24, sc: 2, col: '#3f6f4f', dark: '#1f3a2b', acc: '#c8b070', cfg: { headR: 3.8, helm: 'hood', weapon: 'none', cape: 1 } },
+  gunner:  { w: 22, h: 24, sc: 2, col: '#4a5a3a', dark: '#232b1c', acc: '#d8a441', cfg: { headR: 3.8, helm: 'pot', weapon: 'none', armor: 1 } },
+  card:    { w: 22, h: 24, sc: 2, col: '#6a3f8f', dark: '#2a1740', acc: '#ffd166', cfg: { headR: 3.8, helm: 'jester', weapon: 'none', cape: 1 } },
   /* 🧢 训练家：小智配色 —— **蓝白夹克 + 红色鸭舌帽**（原来 col 是红、acc 是白 → 帽子变白、身体变红，
      完全不像宝可梦训练家）。帽子的颜色取 acc，所以 acc 必须是红；身体取 col，所以 col 是蓝。 */
   trainer: { w: 20, h: 24, sc: 2, col: '#2f6fc4', dark: '#16345e', acc: '#c0392b',
              cfg: { headR: 3.9, helm: 'cap', weapon: 'none', hair: 1 } },
-  mage:    { w: 22, h: 30, sc: 2, col: '#4a3a8f', dark: '#1e1740', acc: '#9adcff', cfg: { headR: 3.9, helm: 'wizard', weapon: 'staff', cape: 1 } }
+  /* 🧙 **玩家法师（重做）**：和敌人法师区分开 —— 用户原话「巫师帽可以做的更大，体型反而可以做的小巧一些」。
+     · bigHat: 帽子大一圈、塔尖更高、带星月徽记
+     · skinny: 身体收窄（halfW 4.0 → 3.2）
+     · headR 3.0：头小 → 衬托帽子更大
+     · h 32：给更高的帽尖留空间（改了这里要同步 pxMageStaffTip 的 headY 基准）
+     · weapon 保留 staff：杖是模型本体，法球光效的锚点靠它的几何反推 */
+  mage:    { w: 22, h: 32, sc: 2, col: '#4a3a8f', dark: '#1e1740', acc: '#9adcff',
+             cfg: { headR: 3.0, headDY: 0.6, helm: 'wizard', bigHat: 1, skinny: 1, weapon: 'staff', cape: 1 } }
 };
 /* 玩家当前属于哪个像素模型（弓箭手那 4 个分支各一份） */
 function pxPlayerClass() {
@@ -2259,17 +2291,25 @@ function pxPlayerSpriteOf(cls, frame, mode, variant) {
   return pxRaster(out, key);
 }
 /* 当前动作 / 帧号（和旧矢量版的 `p.walk` `p.swingT` 口径对齐，动画节奏不变） */
+/* 当前动作 / 帧号。
+   ⚠️⚠️ 两个历史 bug（用户报「战士走动没动作、其他职业走路鬼畜」）：
+   ① 走路帧原先用 p.walk 算 —— p.walk 是"按移速累加的相位"（每秒 +260 左右），
+      再乘 0.35/1.5708 后**一秒跳 58 帧** → 肢体疯狂抖动 = 鬼畜。
+   ② swingT 优先于走路：战士普攻 CD 只有 0.06 秒、挥砍动画 0.17 秒 →
+      swingT 永远 > 0，人被永久锁在 atk 帧，走路完全没有动作。
+   现在：**能走动就优先走路**（脚必须动），帧号按时间 + 移速给正常节奏（约 3.5~9 fps，
+   和敌人 walk 的 8fps 同一档）；站着才播挥砍 / 呼吸。 */
 function pxPlayerAnim() {
   const mv = Math.hypot(p.vx || 0, p.vy || 0);
   let mode = 'idle', f = 0;
-  if (p.swingT > 0) {
+  if (mv > 25) {
+    mode = 'walk';
+    const fps = 3.5 + Math.min(1, mv / 320) * 5.5;
+    f = Math.floor(time * fps) % 4;
+  } else if (p.swingT > 0) {
     mode = 'atk';
     const pr = Math.max(0, Math.min(1, 1 - p.swingT / 0.17));
     f = pr < 0.5 ? 0 : 1;
-  } else if (mv > 25) {
-    mode = 'walk';
-    f = Math.floor((p.walk || 0) * 0.35 / 1.5708) % 4;
-    if (f < 0) f += 4;
   } else {
     f = Math.floor(time * 3.2) % 2;
   }
@@ -2283,7 +2323,8 @@ function pxPlayerAnim() {
 function pxMageStaffTip() {
   const spec = PX_PSPEC.mage;
   const w = spec.w, h = spec.h, sc = spec.sc;
-  const halfW = 4.0;
+  /* halfW 必须和 pxHumanoid 同源：skinny 时是 3.2，否则 4.0 */
+  const halfW = spec.cfg.skinny ? 3.2 : 4.0;
   const cxA = Math.round(w * 0.47);
   const headY = 7.0;                                  // wizard 属于 tallHelm → headY 基准 7.0
   const shY = headY + (spec.cfg.headR || 3.5) + 1.2;
@@ -26360,17 +26401,9 @@ function drawRoninPlayer() {
   /* 🎨 本体：像素模型（浪客）—— 旧的袴/着物/发髻矢量拼人已替换。
      腰间的刀鞘与右手太刀（带祖传宝刀金光）继续由下面的代码画，保留手感。 */
   pxPlayerBody('ronin');
-  /* 腰间的空刀鞘（左腰，略斜） */
-  ctx.save();
-  ctx.translate(-Math.cos(p.face) * 4, 4);
-  ctx.rotate(p.face + 0.35);
-  ctx.fillStyle = '#101425';
-  rr(-16, -2.4, 30, 4.6, 2.2); ctx.fill();
-  ctx.strokeStyle = '#33406a'; ctx.lineWidth = 1;
-  rr(-16, -2.4, 30, 4.6, 2.2); ctx.stroke();
-  ctx.fillStyle = '#c9a227';                             // 鞘口金具
-  ctx.fillRect(12.4, -2.6, 2.4, 5);
-  ctx.restore();
+  /* 腰间的刀鞘：**已删除**（用户报「刀鞘贴图错位」，给了「要么修复要么删掉」的许可）。
+     它跟着朝向旋转、又叠在身体坐标上，看起来就是一条错位的紫条。
+     太刀握在手上已经足够说明是武士，所以整段移除。 */
   /* 右手握着太刀：刀身（带弧度）+ 鐔 + 菱形柄卷；闪避/无双时前压发亮 */
   ctx.save();
   ctx.translate(Math.cos(p.face) * 8, Math.sin(p.face) * 8 - 2);
@@ -35281,6 +35314,15 @@ window.__musouVoidGhostInfo = () => {
   return { alpha: VOID_GHOST_ALPHA, allFill: all.fill, bladeFill: blade.fill,
            bladeLeftOf: blade.minX > all.minX };
 };
+
+/* 🧪 测试钩子：玩家当前动作/帧（走路动画回归用） */
+window.__musouPlayerAnimInfo = () => { const a = pxPlayerAnim(); return { mode: a.mode, f: a.f }; };
+
+/* 🧪 测试钩子：各玩家职业的模型 cfg（武器/头盔等），回归用 */
+window.__musouPlayerSpecs = () => { const o = {}; for (const k in PX_PSPEC) o[k] = PX_PSPEC[k].cfg || {}; return o; };
+
+/* 🧪 测试钩子：直接设玩家速度（走路动画回归要"持续高速"） */
+window.__musouSetPVel = (vx, vy) => { p.vx = vx || 0; p.vy = vy || 0; };
 })();
 
 
