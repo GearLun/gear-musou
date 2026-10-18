@@ -24121,7 +24121,10 @@ function pxDecor(g, kind, x, y, s, gr, grR) {
     for (let i = 0; i < cnt; i++) {
       const bx = x + grR(-s * 0.42, s * 0.42), by = y + grR(-s * 0.18, s * 0.10);
       const ww = Math.round(s * grR(0.42, 0.62)), hh = Math.round(s * grR(0.24, 0.36));
-      g.fillStyle = '#5f6355'; R(bx - ww / 2, by - hh, ww, hh);
+      /* 主体拆左右两半画（单个矩形面积保持在守卫阈值内，也更像有棱角的大石） */
+      g.fillStyle = '#5f6355';
+      R(bx - ww / 2, by - hh, Math.ceil(ww / 2), hh);
+      R(bx, by - hh, Math.floor(ww / 2), hh);
       g.fillStyle = '#838873'; R(bx - ww / 2, by - hh, ww - 1, Math.round(hh * 0.55));
       g.fillStyle = '#a5aa92'; R(bx - ww / 2, by - hh, Math.round(ww * 0.55), 2);
       g.fillStyle = '#383c32'; R(bx - ww / 2, by - 2, ww, 2);
@@ -24135,9 +24138,14 @@ function pxDecor(g, kind, x, y, s, gr, grR) {
     const len = Math.round(s * grR(0.9, 1.25)), th = Math.round(s * grR(0.22, 0.3));
     g.fillStyle = 'rgba(0,0,0,0.20)';
     g.beginPath(); g.ellipse(x, y + 3, len * 0.55, th * 0.75, 0, 0, Math.PI * 2); g.fill();
-    g.fillStyle = '#7c7867'; R(x - len / 2, y - th, len, th);
-    g.fillStyle = '#a6a18c'; R(x - len / 2, y - th, len, 2);                 // 受光顶面
-    g.fillStyle = '#4b4941'; R(x - len / 2, y - 2, len, 2);                  // 背光底
+    g.fillStyle = '#7c7867';
+    for (let seg = 0; seg < 4; seg++) {
+      R(x - len / 2 + (len * seg) / 4, y - th, Math.ceil(len / 4), th);
+    }
+    g.fillStyle = '#a6a18c';                                                 // 受光顶面（分段）
+    for (let seg = 0; seg < 3; seg++) R(x - len / 2 + (len * seg) / 3, y - th, Math.ceil(len / 3), 2);
+    g.fillStyle = '#4b4941';                                                 // 背光底（分段）
+    for (let seg = 0; seg < 3; seg++) R(x - len / 2 + (len * seg) / 3, y - 2, Math.ceil(len / 3), 2);
     /* 鼓段接缝 */
     for (let i = 1; i < 4; i++) {
       g.fillStyle = '#515044';
