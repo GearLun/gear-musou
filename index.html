@@ -5495,6 +5495,7 @@ function voidSlamMark(cx, cy, r) {
 /* 诊断计数：虚空执剑者三套技能的出手次数（测试/读数用） */let dbgVoidHits = 0, dbgVoidFan = 0, dbgVoidQi = 0, dbgVoidDash = 0, dbgVoidSlam = 0, dbgVoidQiAng = 0;
 let dbgVoidQiAngs = [], dbgVoidDashPeak = 0;          // 最近一轮三剑气的三道角度 / 冲刺实测峰值速度
 let dbgArcherTreeDodge = 0;                           // 🏹 弓箭手因「箭被树挡住」而换位的次数（诊断 / 冒烟用）
+let sceneLightGrad = null, sceneLightW = 0, sceneLightH = 0;   // 🌅 全屏光影渐变缓存
 let dbgPondShimmer = 0;        // 🌊 波光画过的短线数（诊断：>0 说明水面真的在动）
 let dbgFoeUnstick = 0;                                // 🌀 敌人"卡住自救"次数（诊断 / 冒烟用）
 let dbgTreeSeparate = 0;                              // 🌳 普通敌人被树"推出"的次数（诊断 / 冒烟用；恒 0 = 没生效）
@@ -24346,16 +24347,18 @@ function treeAdd(x, y, sc, kind) {
     solidR: isStump ? STUMP_R : TREE_TRUNK_R * (sc > 1.6 ? 1.15 : 1),
     bulletR: isStump ? 0 : canopyR * TREE_BULLET_K,
     seed: ((x * 7919 + y * 104729) | 0) & 0xffff,
-    /* 🎨 外观变体（0/1/2 三种树冠轮廓）—— 让树林不像是同一棵树复制粘贴 */
-    v: (((x * 31 + y * 17) | 0) >>> 0) % 3
+    /* 🎨 外观变体：**8 种树冠轮廓 × 3 套配色**，让树林看不出复制粘贴 */
+    v: (((x * 31 + y * 17) | 0) >>> 0) % 8,
+    vt: (((x * 53 + y * 91) | 0) >>> 0) % 3,
   });
 }
 /* ── 树的贴图（每种 kind × 缩放档烘一次，之后每帧就是 1 次 drawImage） ── */
 const TREE_SPR = Object.create(null);
-function treeSprite(kind, sc, variant) {
+function treeSprite(kind, sc, variant, tint) {
   const q = Math.max(1.0, Math.round(sc * 10) / 10);
-  const vv = (variant | 0) % 3;
-  const key = kind + '|' + q + '|' + vv;
+  const vv = (variant | 0) % 8;
+  const tt = (tint | 0) % 3;
+  const key = kind + '|' + q + '|' + vv + '|' + tt;
   if (TREE_SPR[key] !== undefined) return TREE_SPR[key];
   if (typeof document === 'undefined' || !document.createElement) { TREE_SPR[key] = null; return null; }
   const W2 = Math.ceil(44 * q), H2 = Math.ceil(52 * q);
@@ -24408,8 +24411,15 @@ function treeSprite(kind, sc, variant) {
     g.beginPath(); g.ellipse(cx, base + 1, 13 * q, 5 * q, 0, 0, Math.PI * 2); g.fill();
     g.fillStyle = '#120d08';   // 树干描边
     g.fillRect(Math.round(cx - 3.4 * q), Math.round(base - 15.5 * q), Math.max(5, Math.round(6.8 * q)), Math.round(16 * q));
+    /* 树干倾斜：不同变体给不同斜度（同一片林子里树干都笔直 = 复制感） */
+    const lean = ((vv % 5) - 2) * 1.1;
     g.fillStyle = '#5a4229';
-    g.fillRect(Math.round(cx - 2.4 * q), Math.round(base - 15 * q), Math.max(3, Math.round(4.8 * q)), Math.round(15 * q));
+    g.beginPath();
+    g.moveTo(cx - 2.4 * q, base);
+    g.lineTo(cx - 2.4 * q + lean * q, base - 15 * q);
+    g.lineTo(cx + 2.4 * q + lean * q, base - 15 * q);
+    g.lineTo(cx + 2.4 * q, base);
+    g.closePath(); g.fill();
     g.fillStyle = '#7a5c3a';   // 受光侧树皮
     g.fillRect(Math.round(cx - 2.4 * q), Math.round(base - 15 * q), Math.max(1, Math.round(1.8 * q)), Math.round(15 * q));
     g.fillStyle = '#3f2e1c';   // 背光侧
@@ -24420,42 +24430,58 @@ function treeSprite(kind, sc, variant) {
     g.fillRect(Math.round(cx + 2 * q), Math.round(base - 2 * q), Math.round(4 * q), Math.round(3 * q));
     const cy4 = base - 23 * q;
     /* 叶色四阶：比草地暗一档，但远不到黑（原来 #22391f 会变成"黑团"） */
-    const LEAF_DD = '#25401f', LEAF_D = '#2f5127', LEAF_M = '#3f6b33', LEAF_L = '#548b41', LEAF_H = '#6da84f', LEAF_HH = '#8ac46a';
+    /* 深底 → 亮顶，跨度大才有泰拉瑞亚那种"硬"的感觉 */
+    const LEAF_DD = '#141d0e', LEAF_D = '#1c2c14', LEAF_M = '#29441d', LEAF_L = '#3b5e29', LEAF_H = '#527d36', LEAF_HH = '#74a34c';
     const blob = (bx, by, brx, bry, col) => {
       g.fillStyle = col;
       g.beginPath(); g.ellipse(cx + bx * q, cy4 + by * q, brx * q, bry * q, 0, 0, Math.PI * 2); g.fill();
     };
     /* 每棵树的三套轮廓：核心团 + 边缘小团（打毛轮廓 = 叶团起伏） */
+    /* 8 种树冠轮廓（宽/窄/高/扁/三团/四团/双翼/偏冠） */
     const cores = {
       0: [[-8, 3, 10, 8.6], [8, 3, 10, 8.6], [0, -5, 12.5, 10]],
       1: [[-7, 4, 8.6, 8], [7, 4, 8.6, 8], [0, -3, 10.5, 9], [0, -9, 8, 6.5]],
-      2: [[-11.5, 2, 9.5, 6.5], [11.5, 2, 9.5, 6.5], [0, 0, 13, 8.2]]
+      2: [[-11.5, 2, 9.5, 6.5], [11.5, 2, 9.5, 6.5], [0, 0, 13, 8.2]],
+      3: [[-5, 1, 9, 10.5], [6, -1, 9.4, 10], [0, -7, 9, 8]],
+      4: [[-9, 4, 8.4, 7], [9, 4, 8.4, 7], [0, -1, 10, 7.6], [-3, -8, 6.6, 5.4]],
+      5: [[-10, 0, 8.2, 9.4], [8, 2, 9.2, 8], [0, -8, 9.6, 7.2]],
+      6: [[-7, 5, 11, 6.4], [7, 5, 11, 6.4], [0, -2, 9, 6.6]],
+      7: [[-6, 2, 10.5, 9.4], [7, 0, 8.6, 8.4], [0, -7, 7.4, 6.6]]
     };
     const bumps = {
       0: [[-14, -2, 4.2, 3.4], [14, -1, 4.4, 3.6], [0, -15, 5, 4], [-6, -13, 4, 3.2], [7, -12, 3.6, 3]],
       1: [[-12, -1, 4, 3.2], [11, 0, 4.2, 3.4], [0, -15, 4.6, 3.6], [-5, -16, 3.4, 2.8], [6, -16.5, 3, 2.6]],
-      2: [[-16, -2, 4, 3.2], [16, -2, 4.2, 3.4], [0, -7, 5.4, 4.2], [-9, -6, 3.8, 3], [9, -6.5, 3.4, 2.8]]
+      2: [[-16, -2, 4, 3.2], [16, -2, 4.2, 3.4], [0, -7, 5.4, 4.2], [-9, -6, 3.8, 3], [9, -6.5, 3.4, 2.8]],
+      3: [[-10, -6, 3.6, 3.2], [10, -5, 3.8, 3.4], [-3, -15, 3.4, 3], [6, -14, 3, 2.8]],
+      4: [[-13, 1, 3.8, 3], [13, 1, 4, 3.2], [-5, -12, 3.6, 3], [5, -11, 3.2, 2.8], [0, -15, 3.6, 3]],
+      5: [[-14, -4, 4, 3.4], [11, -3, 3.6, 3], [-4, -14, 3.2, 2.8], [4, -13, 3.4, 3]],
+      6: [[-16, 2, 4.4, 3], [16, 2, 4.4, 3], [-8, -6, 4, 3.2], [8, -6, 4, 3.2], [0, -9, 3.8, 3]],
+      7: [[-12, -3, 3.8, 3.2], [13, -4, 4, 3.4], [0, -14, 4.2, 3.4], [-6, -11, 3.2, 2.8]]
     };
+    /* 3 套配色（深浅/冷暖略有差异）——同一片树林里有变化才不像复制品 */
+    const TINT = [
+      { dd: '#141d0e', d: '#1c2c14', m: '#29441d', l: '#3b5e29', h: '#527d36', hh: '#74a34c' },
+      { dd: '#111a10', d: '#192a16', m: '#26421f', l: '#385c2c', h: '#4e7a3a', hh: '#6f9f4e' },
+      { dd: '#151f10', d: '#1e2f14', m: '#2b471c', l: '#3f6226', h: '#578335', hh: '#7aa84a' }
+    ];
+    const TC = TINT[tt];
     /* ⓪ 描边（泰拉瑞亚式）：同一组叶团放大 1.7px 用近黑画一遍 */
     const OUT = '#0c1410';
     for (const o of bumps[vv]) blob(o[0], o[1], o[2] + 1.7, o[3] + 1.7, OUT);
     for (const o of cores[vv]) blob(o[0], o[1], o[2] + 1.7, o[3] + 1.7, OUT);
-    /* ① 暗底 + 打毛轮廓 */
-    for (const b of bumps[vv]) blob(b[0], b[1], b[2], b[3], LEAF_DD);
-    for (const b of cores[vv]) blob(b[0], b[1], b[2], b[3], LEAF_DD);
+    /* ① 暗底（只在核心团；凸起**不用近黑**，否则边缘会露一粒粒黑点） */
+    for (const b of cores[vv]) blob(b[0], b[1], b[2], b[3], TC.dd);
     /* ② 树冠下沿暗面（下方受不到光，这是"体积感"的关键） */
-    g.save();
-    g.globalAlpha = 1;
-    blob(0, 7.5, 11.5, 4.2, LEAF_D);
-    /* ③ 中间调铺一层（略偏左上，留出右下暗边） */
-    for (const b of cores[vv]) blob(b[0] - 0.8, b[1] - 1.6, b[2] * 0.90, b[3] * 0.88, LEAF_M);
+    blob(0, 7.5, 11.5, 4.2, TC.d);
+    /* ③ 中间调：核心团 + **凸起一起铺**（凸起因此并入树体，黑点消失） */
+    for (const b of bumps[vv]) blob(b[0] - 0.6, b[1] - 0.8, b[2] * 0.96, b[3] * 0.94, TC.m);
+    for (const b of cores[vv]) blob(b[0] - 0.8, b[1] - 1.6, b[2] * 0.90, b[3] * 0.88, TC.m);
     /* ④ 受光面（左上） */
-    for (const b of cores[vv]) blob(b[0] - 2.4, b[1] - 3.4, b[2] * 0.66, b[3] * 0.62, LEAF_L);
+    for (const b of cores[vv]) blob(b[0] - 2.4, b[1] - 3.4, b[2] * 0.66, b[3] * 0.62, TC.l);
     /* ⑤ 多处亮簇（只放在左上象限，光从左上来） */
-    blob(-5.5, -8.5, 4.6, 3.6, LEAF_H);
-    blob(-2, -11.5, 3.0, 2.4, LEAF_HH);
-    blob(-9.5, -4.5, 3.2, 2.6, LEAF_H);
-    g.restore();
+    blob(-5.5, -8.5, 4.6, 3.6, TC.h);
+    blob(-2, -11.5, 3.0, 2.4, TC.hh);
+    blob(-9.5, -4.5, 3.2, 2.6, TC.h);
     /* ⑥ 明暗叶簇：左上撒亮簇、右下撒暗簇（斑驳感 = 星露谷树冠的关键）
        用 2~4px 的小团而不是 1px 点 —— 1px 点在 90px 的树冠上读不出来 */
     const dabs = (n, side, cols) => {
@@ -24473,14 +24499,14 @@ function treeSprite(kind, sc, variant) {
         g.fillRect(Math.round(bx2), Math.round(by2), Math.max(1, sz - 1), 1);
       }
     };
-    dabs(13, -1, [LEAF_H, LEAF_HH]);
-    dabs(15, 1, [LEAF_D, LEAF_DD]);
+    dabs(13, -1, [TC.h, TC.hh]);
+    dabs(15, 1, [TC.d, TC.dd]);
     /* ⑦ 轮廓叶尖：沿上半圈点几撮凸起的叶团，破掉椭圆的顺滑感 */
     for (let i = 0; i < 9; i++) {
       const a3 = Math.PI * (1.08 + i * 0.105);        // 只走上半圈
       const bx3 = cx + Math.cos(a3) * 11.6 * q;
       const by3 = cy4 + Math.sin(a3) * 10.2 * q;
-      g.fillStyle = (i & 1) ? LEAF_M : LEAF_L;
+      g.fillStyle = (i & 1) ? TC.m : TC.l;
       g.fillRect(Math.round(bx3), Math.round(by3), Math.max(1, Math.round(2.2 * q)), Math.max(1, Math.round(1.6 * q)));
     }
   }
@@ -24536,7 +24562,17 @@ function drawWorldTrees(target) {
       if (!tr.stump && (tr.x < camX - 80 || tr.x > camX + VW + 80 || tr.y < camY - 120 || tr.y > camY + VH + 120)) continue;
       if (tr.kind === 'stump' && (tr.x < camX - 40 || tr.x > camX + VW + 40 || tr.y < camY - 60 || tr.y > camY + VH + 60)) continue;
     }
-    const cv = treeSprite(tr.kind, tr.sc, tr.v);
+    const cv = treeSprite(tr.kind, tr.sc, tr.v, tr.vt);
+    /* 投影：光从左上 → 影子朝右下、被拉长（和树一起画，先影后树） */
+    if (tr.kind === 'tree' && !tr.stump && cv) {
+      const sh = Math.min(1.25, tr.sc / 2.2);
+      c.globalAlpha = 0.20;
+      c.fillStyle = '#050a03';
+      c.beginPath();
+      c.ellipse(tr.x + 8 * sh, tr.y + 2, 16 * tr.sc * (0.85 + 0.3 * sh), 5.4 * tr.sc, 0.16, 0, Math.PI * 2);
+      c.fill();
+      c.globalAlpha = 1;
+    }
     if (!cv) continue;
     c.drawImage(cv, Math.round(tr.x - cv.width / 2), Math.round(tr.y - cv.height + 3));
   }
@@ -24694,9 +24730,13 @@ function artPaintTerrain(g, W, H) {
       /* 块状颗粒：3texel 一格的暗斑 + 稀疏亮砾（泰拉瑞亚土面最标志性的"点点"） */
       const gc = artHash(x / 3 | 0, y / 3 | 0, 91);
       let grain = 0;
-      if (gc < 0.22) grain -= 0.075;          // 暗土粒
+      if (gc < 0.22) grain -= 0.075;          // 暗土粒（6px 块）
       else if (gc > 0.955) grain += 0.16;      // 亮砾
       else if (gc > 0.90) grain += 0.05;
+      /* 1texel（2 世界像素）细颗粒：泰拉瑞亚土面在 1:1 下的那层斑点 */
+      const g2 = artHash(x, y, 97);
+      if (g2 < 0.11) grain -= 0.055;
+      else if (g2 > 0.975) grain += 0.075;
       const useDirt = dryN > 0.715;
       let v;
       if (useDirt) {
@@ -24765,8 +24805,9 @@ function artSprites() {
     for (let c2 = 0; c2 < 2; c2++) {
       const cv = mk(11, 13, (cg, w2, h2) => {
         /* 草丛配色贴着地形色阶走：太黑会把整张地图读成"麻点" */
-        const base = c2 ? '#40632c' : '#4e7636';
-        const tip = c2 ? '#6d9847' : '#8ab75c';
+        /* 贴住压暗后的地表：只比地面亮 1~2 档，太亮会变成"浅色小点"浮在深地上 */
+        const base = c2 ? '#243d1c' : '#2d4a22';
+        const tip = c2 ? '#3d6630' : '#54833a';
         const n = 3 + (v % 3);
         for (let i = 0; i < n; i++) {
           const bx = 5 + Math.round((artHash(v, i, 1) - 0.5) * 5);
@@ -24814,9 +24855,9 @@ function artSprites() {
     const cv = mk(6, 5, (cg) => {
       cg.fillStyle = 'rgba(40,38,30,0.5)';
       cg.fillRect(1, 3, 4, 1);
-      cg.fillStyle = v ? '#8e8a80' : '#7d7a70';
+      cg.fillStyle = v ? '#6b6862' : '#5c5a53';
       cg.fillRect(1, 1, 4, 2);
-      cg.fillStyle = v ? '#b6b2a6' : '#a8a498';
+      cg.fillStyle = v ? '#918e84' : '#807d74';
       cg.fillRect(1, 1, 2, 1);
     });
     if (cv) pebbles.push(cv);
@@ -32719,6 +32760,20 @@ function drawGame() {
     ctx.globalAlpha = Math.max(0, Math.min(1, a));
     ctx.fillStyle = vigLowHp; ctx.fillRect(0, 0, VW, VH);
     ctx.globalAlpha = 1;
+  }
+  /* 🌅 光影分级：左上暖光 / 右下冷影（缓存渐变，每帧一次 fillRect）
+     这是"廉价感"最有效的解药之一 —— 画面有了统一光向，物件才像在一个场景里。 */
+  if (!lowSpecOn()) {
+    if (!sceneLightGrad || sceneLightW !== VW || sceneLightH !== VH) {
+      sceneLightW = VW; sceneLightH = VH;
+      sceneLightGrad = ctx.createLinearGradient(0, 0, VW, VH);
+      sceneLightGrad.addColorStop(0, 'rgba(255,226,160,0.13)');
+      sceneLightGrad.addColorStop(0.42, 'rgba(255,226,160,0.02)');
+      sceneLightGrad.addColorStop(0.58, 'rgba(24,40,70,0.03)');
+      sceneLightGrad.addColorStop(1, 'rgba(18,32,62,0.16)');
+    }
+    ctx.fillStyle = sceneLightGrad;
+    ctx.fillRect(0, 0, VW, VH);
   }
   /* 💡 光明掠夺者·致盲：以角色为中心的视野圈，圈外**渐渐变黑**（盲得越久越黑、视野越小） */
   drawBlindness();
