@@ -2063,29 +2063,44 @@ function pxHumanoid(px, f, mode, cfg, pal) {
     const tipLift = (mode === 'atk') ? (f ? 3.2 : -1.6) : 0;
     /* ⚠️ 武器锚点要**夹在画布内**：手在身体右侧，往右伸的武器（弓/枪/刀）很容易伸出画布
        被裁成半截（本轮用 tools\_px-bounds.js 量出来的）。这里统一留 5px 余量。 */
-    const hx = Math.min(handX, px.w - 6), hy = handY;
+    /* ⚔ 锚点：手往外推 1.4px（离开躯干轮廓），再夹在画布内留 4px 余量。
+       以前是 Math.min(handX, px.w - 6) —— 敌人画布窄的时候会被夹回**躯干上**，
+       武器看着就是身体的一部分（用户："全是赤手空拳"）。 */
+    /* 右侧余量**按武器类型**给（各武器往右伸出的最大距离不同）：
+       顶到 PX_PAD 外圈就算被裁（tools\_px-bounds.js 会报）。 */
+    const ROOM_R = { sword: 5, dagger: 5, spear: 5, lance: 5, katana: 5, scythe: 9, staff: 7, axe: 7, bow: 7, gun: 9 }[wq] || 6;
+    const hx = Math.min(handX + 1.4, px.w - ROOM_R), hy = handY;
     if (wq === 'sword' || wq === 'dagger') {
-      const len = wq === 'dagger' ? Math.min(4, Math.max(2, (px.w - 1) - hx)) : Math.min(7, Math.max(3, (px.w - 1) - hx));
-      pxCapsule(px, hx, hy, hx + 1.0, hy - len + tipLift, 0.8, pal.ml);       // 刃
-      pxLine(px, hx, hy, hx + 1.0, hy - len + tipLift, pal.w, 1);             // 刃口高光
-      pxRect(px, hx - 1, hy, 3, 1, pal.ad);                                    // 护手
-      pxRect(px, hx, hy + 1, 1, 1, pal.ad);                                    // 柄
+      /* 长度按「手以上的可用高度」夹（hy 到画布顶留 2px）—— 不要按画布底边算，
+         那样会算出 4px 的短剑（本轮踩过：剑短得像手里捏了根牙签）。 */
+      const roomUp = Math.max(3, hy - 2);
+      const len = Math.min(wq === 'dagger' ? 6 : 10, roomUp);
+      /* 刃身 2px（深色衬底 + 亮色主色），再压 1px 白刃口 —— 1px 细线在手机上直接看不见 */
+      pxCapsule(px, hx, hy, hx + 1.2, hy - len + tipLift, 1.3, pxDeep(pal.m, 0.45));
+      pxLine(px, hx + 0.2, hy - 0.4, hx + 1.2, hy - len + 1 + tipLift, pal.ml, 1.4);
+      pxLine(px, hx + 0.6, hy - 0.8, hx + 1.4, hy - len + 1.6 + tipLift, pal.w, 1);   // 白刃口
+      pxRect(px, Math.round(hx) - 2, Math.round(hy) - 1, 5, 1, pal.ad);                 // 护手（加宽到 5）
+      pxRect(px, Math.round(hx) - 1, Math.round(hy), 2, 3, pxDeep(pal.a, 0.35));        // 握柄
+      pxRect(px, Math.round(hx), Math.round(hy) + 2, 1, 1, pal.al);                     // 柄头
     } else if (wq === 'spear' || wq === 'lance') {
       const len = wq === 'lance' ? 11 : 9;
       pxLine(px, hx - 1.2, hy + 1.6, hx + 1.4, hy - len + tipLift, pal.md, 1.2);   // 杆
       pxLine(px, hx + 0.6, hy - len + tipLift, hx + 1.8, hy - len + 2.4 + tipLift, pal.ml, 2);  // 枪尖
       pxLine(px, hx + 0.6, hy - len + tipLift, hx + 1.2, hy - len + 3 + tipLift, pal.w, 1);
     } else if (wq === 'axe') {
-      pxLine(px, hx - 1, hy + 1.4, hx + 1.2, hy - 6 + tipLift, pal.md, 1.2);
+      pxLine(px, hx - 1, hy + 2.4, hx + 1.4, hy - 7 + tipLift, pxDeep(pal.a, 0.45), 1.9);   // 柄（加粗加长）
       pxPoly(px, [[hx + 1, hy - 6 + tipLift], [hx + 4.4, hy - 5 + tipLift], [hx + 3.6, hy - 1.4 + tipLift], [hx + 1, hy - 2.4 + tipLift]], pal.ml);
+      pxLine(px, hx + 1.6, hy - 6.2 + tipLift, hx + 4.6, hy - 5.2 + tipLift, pal.w, 1);   // 白刃口
       pxLine(px, hx + 1.4, hy - 5.4 + tipLift, hx + 4.0, hy - 4.4 + tipLift, pal.w, 1);
     } else if (wq === 'scythe') {
       pxLine(px, hx - 1, hy + 2, hx + 1.4, hy - 8 + tipLift, pxDeep(pal.b, 0.5), 1.2);
       pxPoly(px, [[hx + 1.2, hy - 8 + tipLift], [hx + 7.0, hy - 7.2 + tipLift], [hx + 6.4, hy - 6.0 + tipLift], [hx + 1.4, hy - 6.2 + tipLift]], pal.ml);
     } else if (wq === 'bow') {
-      pxLine(px, hx - 0.4, hy - 4.4, hx + 1.6, hy, pal.ad, 1.4);          // 弓臂
-      pxLine(px, hx + 1.6, hy, hx - 0.4, hy + 4.4, pal.ad, 1.4);
-      pxLine(px, hx - 0.4, hy - 4.4, hx - 0.4, hy + 4.4, pal.w, 1);       // 弦
+      /* 弓的上下臂按画布夹住（下半截原来伸到脚底下面 1px → 被裁） */
+      const bH = Math.max(3.2, Math.min(5.6, hy - 1.5, (px.h - 1.5) - hy));
+      pxLine(px, hx - 0.4, hy - bH, hx + 2.4, hy, pxDeep(pal.a, 0.3), 2);   // 弓臂
+      pxLine(px, hx + 2.4, hy, hx - 0.4, hy + bH, pxDeep(pal.a, 0.3), 2);
+      pxLine(px, hx - 0.4, hy - bH, hx - 0.4, hy + bH, pal.w, 1);           // 弦
       if (mode === 'atk') pxLine(px, hx + 1.0, hy, hx + 5.4, hy - 0.4, pal.w, 1);   // 箭
     } else if (wq === 'staff') {
       /* 🪄 法杖：**斜握**——杖底压到身后近地面、杖头挑到肩/头顶外侧，杖身穿过手掌。
@@ -2143,16 +2158,16 @@ function pxHumanoid(px, f, mode, cfg, pal) {
    ============================================================ */
 const PX_SPEC = {
   /* —— 杂兵 —— */
-  grunt:   { w: 16, h: 20, sc: 2, kind: 'human', cfg: { helm: 'pot', weapon: 'sword', armor: 1 }, death: { mode: 'topple', dirt: 6 } },
-  runner:  { w: 14, h: 18, sc: 2, kind: 'human', cfg: { headR: 3.1, helm: 'hood', weapon: 'dagger', skinny: 1, cape: 1 }, death: { mode: 'spin', dust: 8 } },
-  archer:  { w: 18, h: 20, sc: 2, kind: 'human', cfg: { headR: 3.3, helm: 'hood', weapon: 'bow', cape: 1 }, death: { mode: 'topple', dirt: 5, drop: 'bow' } },
-  mage:    { w: 18, h: 26, sc: 2, kind: 'human', cfg: { headR: 3.5, helm: 'wizard', weapon: 'staff' }, death: { mode: 'dissolve', spark: 10 } },
-  brute:   { w: 22, h: 28, sc: 3, kind: 'human', cfg: { headR: 4.6, helm: 'horned', weapon: 'axe', armor: 1 }, death: { mode: 'slam', dust: 14 } },
+  grunt:   { w: 22, h: 20, sc: 2, kind: 'human', cfg: { helm: 'pot', weapon: 'sword', armor: 1 }, death: { mode: 'topple', dirt: 6 } },
+  runner:  { w: 20, h: 18, sc: 2, kind: 'human', cfg: { headR: 3.1, helm: 'hood', weapon: 'dagger', skinny: 1, cape: 1 }, death: { mode: 'spin', dust: 8 } },
+  archer:  { w: 28, h: 20, sc: 2, kind: 'human', cfg: { headR: 3.3, helm: 'hood', weapon: 'bow', cape: 1 }, death: { mode: 'topple', dirt: 5, drop: 'bow' } },
+  mage:    { w: 24, h: 26, sc: 2, kind: 'human', cfg: { headR: 3.5, helm: 'wizard', weapon: 'staff' }, death: { mode: 'dissolve', spark: 10 } },
+  brute:   { w: 28, h: 28, sc: 3, kind: 'human', cfg: { headR: 4.6, helm: 'horned', weapon: 'axe', armor: 1 }, death: { mode: 'slam', dust: 14 } },
   /* —— 骑兵（马 + 骑手）—— */
   cavalry: { w: 32, h: 26, sc: 2, kind: 'horse', death: { mode: 'topple', dust: 10 } },
   /* —— Boss —— */
   general:  { w: 34, h: 38, sc: 3, kind: 'general', death: { mode: 'kneel', dust: 20, spark: 8 } },
-  commander:{ w: 30, h: 34, sc: 3, kind: 'human2', cfg: { headR: 4.2, helm: 'plume', weapon: 'lance', armor: 1, cape: 1 }, death: { mode: 'kneel', dust: 16 } },
+  commander:{ w: 36, h: 34, sc: 3, kind: 'human2', cfg: { headR: 4.2, helm: 'plume', weapon: 'lance', armor: 1, cape: 1 }, death: { mode: 'kneel', dust: 16 } },
   final3:   { w: 34, h: 30, sc: 3, kind: 'worm', death: { mode: 'ash', dust: 24 } },
   final4:   { w: 34, h: 30, sc: 3, kind: 'plant', death: { mode: 'wilt', petals: 10 } },
   final5:   { w: 28, h: 26, sc: 3, kind: 'twin', death: { mode: 'shatter', shards: 12 } },
@@ -2169,6 +2184,9 @@ const PX_SPEC = {
 
 /* 缓存 key：type + 帧 + 动作 + 配色 + 变体 */
 const PX_MODE_FRAMES = { idle: 2, walk: 4, atk: 2 };
+/* 🗡️ 虚空执剑者「不可攻击」时的身体不透明度（用户原话："透明度拉到 80%"，即 alpha 0.2），
+   剑本身始终 1.0 —— 让"能不能打"一眼可读。 */
+const VOID_GHOST_ALPHA = 0.2;
 const PX_MODE_FPS = { idle: 3.2, walk: 8.0, atk: 11.0 };
 
 /* ============================================================
@@ -2331,7 +2349,9 @@ function pxSpriteOf(type, frame, mode, col, dark, acc, variant) {
   if (had !== undefined) return had;
   const pal = pxPalOf(col, dark, acc);
   const px = PXC(spec.w, spec.h);
-  pxModelDraw(px, spec, frame, mode, pal);
+  /* 'blade' = 只烘"剑"那一层（虚空执剑者幽灵态用）；'bladeFlash' 备用 */
+  const part = (variant === 'blade') ? 'blade' : '';
+  pxModelDraw(px, spec, frame, mode, pal, part);
   if (spec.kind !== 'slime') pxOutline(px, pal.k);   // 果冻怪不描边（半透明更 Q）
   let out = px;
   if (variant === 'flash') {
@@ -2664,10 +2684,15 @@ const PX_BODY = {
   },
 
   /* —— 🗡️ 虚空执剑者：兜帽虚影 + 悬浮圣剑 —— */
-  voidBlade(px, f, mode, pal) {
+  /* part: '' = 全画 · 'blade' = **只画剑**（幽灵态要单独把剑画成不透明） */
+  voidBlade(px, f, mode, pal, spec, part) {
+    const onlyBlade = part === 'blade';
     const A = pxAnimPh(f, mode);
     const cx = Math.round(px.w / 2) - 2, footY = px.h - 2 + A.bob;
     const headY = 5.6, hipY = footY - 7;
+    if (onlyBlade) {
+      /* 只画剑（+ 剑周的虚空裂纹），身体整段跳过 */
+    } else {
     /* 身体：外深内浅的虚影长袍 */
     pxPoly(px, [[cx - 4.4, headY + 2], [cx + 4.4, headY + 2], [cx + 6.4, footY], [cx - 6.4, footY]], pal.dd);
     pxPoly(px, [[cx - 3.4, headY + 3], [cx + 3.4, headY + 3], [cx + 4.4, footY - 1], [cx - 4.4, footY - 1]], pal.d);
@@ -2679,6 +2704,7 @@ const PX_BODY = {
     pxRect(px, cx + 1, headY, 1, 1, pal.a);
     pxPut(px, cx - 2, headY, pxCI(px, '#eaffff'));
     pxPut(px, cx + 1, headY, pxCI(px, '#eaffff'));
+    }   /* ← 身体部分结束（onlyBlade 时整段跳过） */
     /* 悬浮巨剑（右侧，斜置，剑格华丽） */
     const sx = cx + 8.6, sy = headY + 8 - (mode === 'atk' ? 3 : 0) + A.bob * 0.5;
     pxLine(px, sx, sy + 7, sx, sy - 7, pal.ml, 2.4);
@@ -2845,8 +2871,16 @@ const PX_BODY = {
       const rx2 = cx + Math.cos(a) * 8, ry2 = headY - 4 + Math.sin(a) * 2.6;
       pxRect(px, Math.round(rx2), Math.round(ry2), 1, 2, pal.al);
     }
-    /* 另一只手（垂着，指尖有一点点光） */
+    /* 另一只手：**握着一把钩镰**（原来只是垂着 + 指尖一点光，看着赤手空拳） */
     pxCapsule(px, cx - 4.6, headY + 4, cx - 6.4, headY + 9.4, 1.4, pal.d);
+    {
+      const gx = cx - 6.4, gy = headY + 9.4;
+      pxLine(px, gx - 0.6, gy + 3.6, gx + 0.6, gy - 5.2, pxDeep(pal.b, 0.45), 1.6);        // 长柄
+      pxLine(px, gx + 0.6, gy - 5.2, gx - 3.4, gy - 7.4, pal.ml, 1.6);                      // 镰颈
+      pxPoly(px, [[gx - 3.4, gy - 7.4], [gx - 7.4, gy - 6.0], [gx - 6.6, gy - 3.6], [gx - 3.0, gy - 5.0]], pxDeep(pal.m, 0.2));  // 镰刃
+      pxLine(px, gx - 3.8, gy - 7.0, gx - 7.0, gy - 5.8, pal.w, 1);                          // 白刃口
+      pxRect(px, Math.round(gx) - 1, Math.round(gy) - 1, 2, 2, pxDeep(pal.a, 0.4));          // 握把
+    }
     pxPut(px, Math.round(cx - 6.4), Math.round(headY + 10), pxCI(px, '#ffffff'));
   },
 
@@ -2902,6 +2936,14 @@ const PX_BODY = {
     pxRect(px, cx - 1, headY - 1, 5, 1.4, '#2a1a10');       // 护目镜带
     pxRect(px, cx + 0.6, headY - 1.2, 2, 1.6, pal.al);      // 镜片
     pxBall(px, cx + 0.8, headY - 2.4, 3.2, 1.6, pal.l, pal.b, pal.d, null, false);   // 头发/帽
+    /* ⚔ 反握短刃（跑者带刀）：刀背贴着前臂、刃口朝外，跑动时随手臂前后摆 */
+    {
+      const hx2 = cx + 5.4 + A.legPh * 1.6, hy2 = headY + 7.4;
+      pxRect(px, Math.round(hx2) - 1, Math.round(hy2) - 1, 3, 1, pxDeep(pal.a, 0.35));      // 护手
+      pxLine(px, hx2, hy2 - 0.4, hx2 + 2.6, hy2 - 4.6, pal.ml, 1.6);                      // 刃身
+      pxLine(px, hx2 + 0.6, hy2 - 0.8, hx2 + 2.8, hy2 - 4.2, pal.w, 1);                    // 白刃口
+      pxRect(px, Math.round(hx2) - 1, Math.round(hy2) + 1, 1, 2, pxDeep(pal.b, 0.5));      // 柄
+    }
   },
 
   /* —— 🐙 触手头（世纪之花的触手）：吸盘环 —— */
@@ -2927,11 +2969,11 @@ const PX_BODY = {
 };
 
 /* 按 kind 分发到对应建模器（人形走 pxHumanoid，其余走 PX_BODY） */
-function pxModelDraw(px, spec, f, mode, pal) {
+function pxModelDraw(px, spec, f, mode, pal, part) {
   const kind = spec.kind;
   if (kind === 'human') { pxHumanoid(px, f, mode, spec.cfg, pal); return; }
   const fn = PX_BODY[kind];
-  if (fn) { fn(px, f, mode, pal, spec); return; }
+  if (fn) { fn(px, f, mode, pal, spec, part); return; }
   pxHumanoid(px, f, mode, spec.cfg || {}, pal);
 }
 /* 确定性伪随机（0..1）：只给**渲染层**用。
@@ -24372,7 +24414,14 @@ function drawEnemy(e, col) {
     if (cv) {
       /* ⚠️ 这里在 `ctx.translate(e.x, e.y - air)` 之内 → 传**局部坐标**（0 = 脚底那条地面线），
          别再传世界坐标，否则会平移两次（贴图飞到屏幕外）。anchorY=0 → y 就是脚底。 */
-      pxBlit(cv, 0, e.r * 0.86, spec.sc, 1, 0, 0);
+      /* 🗡️ **虚空执剑者：不可攻击时身体 80% 透明、只有剑完全不透明**（用户要求）——
+         原来两个状态画得一模一样，玩家看不出"现在打不动"。 */
+      const ghost = !!(e.voidBoss && e.vShow !== 1);
+      pxBlit(cv, 0, e.r * 0.86, spec.sc, ghost ? VOID_GHOST_ALPHA : 1, 0, 0);
+      if (ghost) {
+        const bcv = pxSpriteOf(e.type, fi, mode, body, drk, acc, 'blade');
+        if (bcv) pxBlit(bcv, 0, e.r * 0.86, spec.sc, 1, 0, 0);
+      }
     }
     ctx.restore();
     return;
@@ -35211,7 +35260,25 @@ function petUserMul(id, sk) {
     return (typeof v === "number" && v > 0) ? v : null;
   } catch (e) { return null; }
 }
+/* 🧪 测试钩子：虚空执剑者的"不可攻击 = 身体 80% 透明 + 剑全可见"两态外观 */
+window.__musouVoidGhostInfo = () => {
+  const spec = PX_SPEC.final6;
+  const pal = pxPalOf('#3a3550', '#171426', '#9ad8ff');
+  const cnt = (part) => {
+    const px = PXC(spec.w, spec.h);
+    pxModelDraw(px, spec, 0, 'idle', pal, part);
+    let f2 = 0, minX = 999;
+    for (let y = 0; y < px.bh; y++) for (let x = 0; x < px.bw; x++) {
+      if (px.buf[y * px.bw + x]) { f2++; if (x - PX_PAD < minX) minX = x - PX_PAD; }
+    }
+    return { fill: f2, minX: minX };
+  };
+  const all = cnt(''), blade = cnt('blade');
+  return { alpha: VOID_GHOST_ALPHA, allFill: all.fill, bladeFill: blade.fill,
+           bladeLeftOf: blade.minX > all.minX };
+};
 })();
+
 
 
 
