@@ -23583,6 +23583,54 @@ function buildGround() {
         }
       }
     }
+    /* ④b2 **水塘 / 溪流**（宝可梦野外地图的地标，也是唯一"非绿"的颜色，能立刻打破单调）：
+       · 水面是**平色 + 细波纹**，不是渐变（渐变会看着像一坨污渍）
+       · 岸边一圈**深色湿泥 + 沙点**，再撒些芦苇 —— 让水塘"长在地里"而不是贴上去
+       · 形状用两三个交叠的椭圆并集，边缘按密度衰减撒沙点 → 软边 */
+    for (let wi2 = 0; wi2 < 4; wi2++) {
+      const wx2 = grR(300, W - 300), wy2 = grR(260, H - 260);
+      const wrx = grR(90, 190), wry = grR(55, 115);
+      const lobes = 2 + ((gr() * 2) | 0);
+      const pts = [];
+      for (let i = 0; i < lobes; i++) {
+        pts.push({ x: wx2 + grR(-wrx * 0.4, wrx * 0.4), y: wy2 + grR(-wry * 0.35, wry * 0.35),
+                   rx: wrx * grR(0.6, 0.9), ry: wry * grR(0.6, 0.9) });
+      }
+      /* ① 岸边湿泥（比水塘大一圈，深色） */
+      g.fillStyle = 'rgba(52,58,38,0.55)';
+      for (const p2 of pts) { g.beginPath(); g.ellipse(p2.x, p2.y, p2.rx + 9, p2.ry + 7, 0, 0, TAU); g.fill(); }
+      /* ② 水面（平色，两档：浅水 / 深水心） */
+      g.fillStyle = '#3f6f86';
+      for (const p2 of pts) { g.beginPath(); g.ellipse(p2.x, p2.y, p2.rx, p2.ry, 0, 0, TAU); g.fill(); }
+      g.fillStyle = '#2e5a72';
+      for (const p2 of pts) { g.beginPath(); g.ellipse(p2.x, p2.y, p2.rx * 0.72, p2.ry * 0.72, 0, 0, TAU); g.fill(); }
+      /* ③ 波纹（水平短亮线，固定相位 → 不闪） */
+      for (let i = 0; i < 90; i++) {
+        const p2 = pts[(gr() * pts.length) | 0];
+        const a3 = gr() * TAU, r3 = Math.sqrt(gr());
+        const bx3 = p2.x + Math.cos(a3) * p2.rx * r3 * 0.9;
+        const by3 = p2.y + Math.sin(a3) * p2.ry * r3 * 0.9;
+        g.strokeStyle = gr() < 0.5 ? 'rgba(168,214,232,0.5)' : 'rgba(112,166,190,0.45)';
+        g.lineWidth = 1;
+        const wlen = grR(3, 9);
+        g.beginPath(); g.moveTo(bx3, by3); g.lineTo(bx3 + wlen, by3); g.stroke();
+      }
+      /* ④ 岸边沙点 + 芦苇（密度衰减 → 软边） */
+      for (let i = 0; i < 260; i++) {
+        const p2 = pts[(gr() * pts.length) | 0];
+        const a4 = gr() * TAU, r4 = 0.9 + gr() * 0.35;
+        const bx4 = p2.x + Math.cos(a4) * p2.rx * r4, by4 = p2.y + Math.sin(a4) * p2.ry * r4;
+        if (gr() < 0.55) {
+          g.fillStyle = 'rgba(176,166,128,0.45)';
+          g.fillRect(Math.round(bx4), Math.round(by4), 1, 1);
+        } else {
+          const h4 = grR(5, 11);
+          g.strokeStyle = 'rgba(72,102,58,0.7)';
+          g.lineWidth = 1;
+          g.beginPath(); g.moveTo(bx4, by4); g.lineTo(bx4 + grR(-1.5, 1.5), by4 - h4); g.stroke();
+        }
+      }
+    }
     /* ④c **树丛**（地图上的地标）——树冠用 3~4 个交叠的深绿球 + 树干 + 地面投影。
        树是"物件"不是"色块"，所以轮廓必须是圆的、带亮面。 */
     const treeAt = (tx, ty, sc2) => {
@@ -23704,7 +23752,52 @@ function buildGround() {
       const kind = r0 < 0.40 ? 'bone' : (r0 < 0.74 ? 'rock' : 'ruin');
       pxDecor(g, kind, x, y, kind === 'ruin' ? 8 : grR(7, 11), gr, grR);
     }
-    /* ⑤b **枯树地标**（焦土上只剩余烬里的黑色枯枝）——给地图"场所感"，不再是均匀一片 */
+    /* ⑤a **熔岩池**（焦土的地标：暗红熔岩 + 冷却硬壳 + 亮橙芯）——
+       同水塘的软边做法：多椭圆并集 + 边缘密度衰减撒硬壳碎片，
+       这样它就是"地上的一汪岩浆"，不是贴上去的红块。 */
+    for (let li2 = 0; li2 < 5; li2++) {
+      const lx2 = grR(300, W - 300), ly2 = grR(260, H - 260);
+      const lrx = grR(80, 170), lry = grR(50, 105);
+      const lobes = 2 + ((gr() * 2) | 0);
+      const pts2 = [];
+      for (let i = 0; i < lobes; i++) {
+        pts2.push({ x: lx2 + grR(-lrx * 0.4, lrx * 0.4), y: ly2 + grR(-lry * 0.35, lry * 0.35),
+                    rx: lrx * grR(0.6, 0.9), ry: lry * grR(0.6, 0.9) });
+      }
+      /* ① 外圈余温（暗红） */
+      g.fillStyle = 'rgba(96,26,10,0.55)';
+      for (const p3 of pts2) { g.beginPath(); g.ellipse(p3.x, p3.y, p3.rx + 10, p3.ry + 8, 0, 0, TAU); g.fill(); }
+      /* ② 熔岩主体 */
+      g.fillStyle = '#5a1a0c';
+      for (const p3 of pts2) { g.beginPath(); g.ellipse(p3.x, p3.y, p3.rx, p3.ry, 0, 0, TAU); g.fill(); }
+      /* ③ 亮橙芯（偏下，像流动的） */
+      g.fillStyle = '#b8401a';
+      for (const p3 of pts2) { g.beginPath(); g.ellipse(p3.x, p3.y + 2, p3.rx * 0.66, p3.ry * 0.62, 0, 0, TAU); g.fill(); }
+      g.fillStyle = '#ff7a2c';
+      for (const p3 of pts2) { g.beginPath(); g.ellipse(p3.x, p3.y + 3, p3.rx * 0.34, p3.ry * 0.3, 0, 0, TAU); g.fill(); }
+      /* ④ 冷却硬壳（黑块浮在表面上） */
+      for (let i = 0; i < 90; i++) {
+        const p3 = pts2[(gr() * pts2.length) | 0];
+        const a5 = gr() * TAU, r5 = Math.sqrt(gr());
+        const bx5 = p3.x + Math.cos(a5) * p3.rx * r5 * 0.92;
+        const by5 = p3.y + Math.sin(a5) * p3.ry * r5 * 0.92;
+        g.fillStyle = 'rgba(' + (gr() < 0.5 ? '28,18,14' : '48,30,22') + ',' + grR(0.45, 0.8).toFixed(2) + ')';
+        g.fillRect(Math.round(bx5), Math.round(by5), 2 + ((gr() * 3) | 0), 2);
+      }
+      /* ⑤ 岸边焦壳碎片 + 零星火星 */
+      for (let i = 0; i < 200; i++) {
+        const p3 = pts2[(gr() * pts2.length) | 0];
+        const a6 = gr() * TAU, r6 = 0.92 + gr() * 0.3;
+        const bx6 = p3.x + Math.cos(a6) * p3.rx * r6, by6 = p3.y + Math.sin(a6) * p3.ry * r6;
+        if (gr() < 0.7) {
+          g.fillStyle = 'rgba(34,26,22,0.6)';
+          g.fillRect(Math.round(bx6), Math.round(by6), 1 + ((gr() * 2) | 0), 1);
+        } else {
+          g.fillStyle = 'rgba(255,120,50,0.55)';
+          g.fillRect(Math.round(bx6), Math.round(by6), 1, 1);
+        }
+      }
+    }
     for (let ci3 = 0; ci3 < 8; ci3++) {
       const gx3 = grR(220, W - 220), gy3 = grR(200, H - 200);
       const cnt = 2 + ((gr() * 3) | 0);
@@ -25053,6 +25146,25 @@ function drawTrainerPlayer() {
   /* 腰间的精灵球：挂在**腰侧**（原来画在 (-8.5, 9.4) = 脚外侧，看起来像贴在地上） */
   drawPokeball(-8.6, 2.2, 3.1);
   ctx.restore();
+  /* 🧢 指挥手势（**必须放在 drawTrainerPlayer 之外**：立绘本体不许出现朝向角 ——
+     帽檐/背包跟着鼠标转是用户报过两次的老 bug，冒烟 S42 静态钉死。但"指挥光点"是要跟朝向的，
+     所以单独成一个函数，从本函数末尾调。） */
+  drawTrainerCommand();
+}
+/* 🧢 训练家的**指挥手势**：在他伸出的手前方画三个绕转光点 + 一圈手部光晕。
+   训练家自己不攻击，但原来画面上没有任何"在下指令"的痕迹 —— 看起来就是个站着的普通人。 */
+function drawTrainerCommand() {
+  if (!isTrainer()) return;
+  const hx2 = p.x + Math.cos(p.face) * 26, hy2 = p.y + Math.sin(p.face) * 26 - 8;
+  for (let i = 0; i < 3; i++) {
+    const ph = time * 2.6 + i * (TAU / 3);
+    const rx2 = 7 + Math.sin(ph * 1.7) * 2.2;
+    const ox2 = hx2 + Math.cos(ph) * rx2;
+    const oy2 = hy2 + Math.sin(ph) * rx2 * 0.62;
+    const k3 = 0.5 + 0.5 * Math.sin(ph * 2.1 + i);
+    pxBlock(ox2, oy2, 2 + Math.round(k3 * 2), i === 0 ? '#ffffff' : '#ffd166', 0.45 + 0.45 * k3);
+  }
+  pxRing(hx2, hy2, 9 + Math.sin(time * 5) * 2, '#ffd166', 2, 0.22);
 }
 /* 现代枪械：全身军用迷彩的士兵 + AK（射击后坐与枪口火焰沿用放箭计时 p.bowT） */
 function drawGunnerPlayer() {
