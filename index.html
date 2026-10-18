@@ -1895,15 +1895,25 @@ const PX_MODEL = Object.create(null);
 /* 眼睛：**1px 竖瞳**（7px 宽的头里，2×2 眼白会把脸压满，看着像外星人 —— 用户明确说丑）。
    像素画里小角色就是「一竖点」最传神；只有巨眼生物（史莱姆 / 独眼）才走 big 版。
    ⚠️ 别再加眼白：`headR` 3.3~3.7 时头只有 7px 宽，两眼 + 眼白会占掉 4/7。 */
-function pxEye(px, x, y, pal, big) {
+function pxEye(px, x, y, pal, big, wide) {
   if (big) {
     /* 巨眼（史莱姆 / 眼球怪）：2×2 眼白 + 1px 深瞳 + 左上高光 */
     pxRect(px, x, y, 2, 2, pal.w);
     pxPut(px, x + 1, y + 1, pxCI(px, pal.e));
     pxPut(px, x, y, pxCI(px, '#ffffff'));
+    return;
+  }
+  if (wide) {
+    /* 标准像素眼：2×2 眼白 → 斜对的深瞳 → 右上 1px 高光
+       （这样 4 个像素里有 3 种色，才读得出"在看"） */
+    pxRect(px, x, y, 2, 2, pal.w);
+    pxPut(px, x, y, pxCI(px, pal.e));
+    pxPut(px, x + 1, y + 1, pxCI(px, pal.e));
+    pxPut(px, x + 1, y, pxCI(px, '#ffffff'));
   } else {
-    /* 普通角色：1 宽 × 2 高 的深色竖瞳（不画眼白） */
+    /* 小头（headR < 3.4）：1×2 竖瞳 + 1px 高光，别让眼睛占满脸 */
     pxRect(px, x, y, 1, 2, pal.e);
+    pxPut(px, x, y, pxCI(px, pal.w));
   }
 }
 
@@ -2015,6 +2025,11 @@ function pxHumanoid(px, f, mode, cfg, pal) {
     /* 头顶：只盖住**上三分之一**（原来 ry 太大，压到眉毛以下 → 眼睛被埋进头发里，整张脸看不见） */
     pxEll(px, cx, headY - headR * 0.52, headR * 1.0, headR * 0.52, hairC);
     pxEll(px, cx - headR * 0.22, headY - headR * 0.72, headR * 0.6, headR * 0.3, hairL);
+    /* 受光高光带（左上）：一条细亮弧 —— 头发才有"光泽"，不然是一团黑 */
+    pxEll(px, cx - headR * 0.34, headY - headR * 0.88, headR * 0.40, headR * 0.15, '#5a4c33');
+    /* 一撮翘起的发尖（破掉"光头罩"的圆滑感） */
+    pxPut(px, Math.round(cx + headR * 0.55), Math.round(headY - headR * 0.98), pxCI(px, hairC));
+    pxPut(px, Math.round(cx + headR * 0.95), Math.round(headY - headR * 1.20), pxCI(px, hairL));
     /* 两侧鬓角（细一点，别把脸框死） */
     pxRect(px, Math.round(cx - headR - 0.2), Math.round(headY - headR * 0.55), 1, Math.round(headR * 0.7), hairC);
     pxRect(px, Math.round(cx + headR - 0.8), Math.round(headY - headR * 0.55), 1, Math.round(headR * 0.7), hairC);
@@ -2133,8 +2148,9 @@ function pxHumanoid(px, f, mode, cfg, pal) {
               : (hasHair ? headY + 0.3 : headY - 1);
   /* 两眼间距：巨眼版留 1px 缝（2 宽），普通版留 2px 缝（1 宽） */
   const eyeDx = c.bigEye ? 2 : 2;
-  pxEye(px, cx - eyeDx, eyeY, pal, !!c.bigEye);
-  pxEye(px, cx + (c.bigEye ? 1 : 1), eyeY, pal, !!c.bigEye);
+  const eyeWide = headR >= 3.4;          // 头够大才用 2×2 眼
+  pxEye(px, cx - eyeDx, eyeY, pal, !!c.bigEye, eyeWide);
+  pxEye(px, cx + (c.bigEye ? 1 : 1), eyeY, pal, !!c.bigEye, eyeWide);
 
   /* —— 盾（左手）—— */
   if (c.shield) {
@@ -24302,38 +24318,79 @@ function treeSprite(kind, sc, variant) {
     g.fillStyle = 'rgba(255,110,50,0.75)';
     g.fillRect(Math.round(cx - 1), Math.round(base - 22 * q), 2, 2);
   } else {
-    /* 正常树：投影 + 树干 + 三球树冠（暗底→中色→亮面） */
-    g.fillStyle = 'rgba(0,0,0,0.24)';
-    g.beginPath(); g.ellipse(cx, base + 1, 14 * q, 5.5 * q, 0, 0, Math.PI * 2); g.fill();
-    g.fillStyle = '#4a3524';
+    /* 正常树：投影 + 树干 + 叶团树冠 */
+    g.fillStyle = 'rgba(0,0,0,0.15)';
+    g.beginPath(); g.ellipse(cx, base + 1, 13 * q, 5 * q, 0, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#5a4229';
     g.fillRect(Math.round(cx - 2.4 * q), Math.round(base - 15 * q), Math.max(3, Math.round(4.8 * q)), Math.round(15 * q));
-    g.fillStyle = '#63482f';
+    g.fillStyle = '#7a5c3a';   // 受光侧树皮
     g.fillRect(Math.round(cx - 2.4 * q), Math.round(base - 15 * q), Math.max(1, Math.round(1.8 * q)), Math.round(15 * q));
+    g.fillStyle = '#3f2e1c';   // 背光侧
+    g.fillRect(Math.round(cx + 1.2 * q), Math.round(base - 14 * q), Math.max(1, Math.round(1.2 * q)), Math.round(14 * q));
     /* 根系 */
     g.fillStyle = '#3a2a1c';
     g.fillRect(Math.round(cx - 6 * q), Math.round(base - 2 * q), Math.round(4 * q), Math.round(3 * q));
     g.fillRect(Math.round(cx + 2 * q), Math.round(base - 2 * q), Math.round(4 * q), Math.round(3 * q));
-    const cy4 = base - 22 * q;
-    /* 三种轮廓：0 = 三球圆冠 · 1 = 高瘦四球 · 2 = 扁宽双翼 */
+    const cy4 = base - 23 * q;
+    /* 叶色四阶：比草地暗一档，但远不到黑（原来 #22391f 会变成"黑团"） */
+    const LEAF_DD = '#25401f', LEAF_D = '#2f5127', LEAF_M = '#3f6b33', LEAF_L = '#548b41', LEAF_H = '#6da84f', LEAF_HH = '#8ac46a';
     const blob = (bx, by, brx, bry, col) => {
       g.fillStyle = col;
       g.beginPath(); g.ellipse(cx + bx * q, cy4 + by * q, brx * q, bry * q, 0, 0, Math.PI * 2); g.fill();
     };
-    if (vv === 1) {
-      blob(-7, 4, 8.6, 8, '#22391f'); blob(7, 4, 8.6, 8, '#22391f');
-      blob(0, -3, 10.5, 9, '#22391f'); blob(0, -9, 8, 6.5, '#22391f');
-      blob(-1.5, -5, 7.6, 6.4, '#3f6733'); blob(-0.5, -11, 5, 3.6, '#5c8f49');
-      blob(-2, -12.5, 2.2, 1.6, '#7fb35f');
-    } else if (vv === 2) {
-      blob(-11, 2, 9.5, 6.5, '#22391f'); blob(11, 2, 9.5, 6.5, '#22391f');
-      blob(0, 0, 13, 8.2, '#22391f');
-      blob(-1, -2.5, 10, 6.6, '#3f6733'); blob(-2, -4.5, 6, 4.2, '#5c8f49');
-      blob(-4, -6, 2.6, 1.9, '#7fb35f');
-    } else {
-      blob(-8, 3, 10, 8.6, '#22391f'); blob(8, 3, 10, 8.6, '#22391f');
-      blob(0, -5, 12.5, 10, '#22391f');
-      blob(-2, -6, 9, 7.4, '#3f6733'); blob(-4.5, -8, 5, 4, '#5c8f49');
-      blob(-6, -9.5, 2.4, 1.8, '#7fb35f');
+    /* 每棵树的三套轮廓：核心团 + 边缘小团（打毛轮廓 = 叶团起伏） */
+    const cores = {
+      0: [[-8, 3, 10, 8.6], [8, 3, 10, 8.6], [0, -5, 12.5, 10]],
+      1: [[-7, 4, 8.6, 8], [7, 4, 8.6, 8], [0, -3, 10.5, 9], [0, -9, 8, 6.5]],
+      2: [[-11.5, 2, 9.5, 6.5], [11.5, 2, 9.5, 6.5], [0, 0, 13, 8.2]]
+    };
+    const bumps = {
+      0: [[-14, -2, 4.2, 3.4], [14, -1, 4.4, 3.6], [0, -15, 5, 4], [-6, -13, 4, 3.2], [7, -12, 3.6, 3]],
+      1: [[-12, -1, 4, 3.2], [11, 0, 4.2, 3.4], [0, -15, 4.6, 3.6], [-5, -16, 3.4, 2.8], [6, -16.5, 3, 2.6]],
+      2: [[-16, -2, 4, 3.2], [16, -2, 4.2, 3.4], [0, -7, 5.4, 4.2], [-9, -6, 3.8, 3], [9, -6.5, 3.4, 2.8]]
+    };
+    /* ① 暗底 + 打毛轮廓 */
+    for (const b of bumps[vv]) blob(b[0], b[1], b[2], b[3], LEAF_DD);
+    for (const b of cores[vv]) blob(b[0], b[1], b[2], b[3], LEAF_DD);
+    /* ② 树冠下沿暗面（下方受不到光，这是"体积感"的关键） */
+    g.save();
+    g.globalAlpha = 1;
+    blob(0, 7.5, 11.5, 4.2, LEAF_D);
+    /* ③ 中间调铺一层（略偏左上，留出右下暗边） */
+    for (const b of cores[vv]) blob(b[0] - 0.8, b[1] - 1.6, b[2] * 0.90, b[3] * 0.88, LEAF_M);
+    /* ④ 受光面（左上） */
+    for (const b of cores[vv]) blob(b[0] - 2.4, b[1] - 3.4, b[2] * 0.66, b[3] * 0.62, LEAF_L);
+    /* ⑤ 多处亮簇（只放在左上象限，光从左上来） */
+    blob(-5.5, -8.5, 4.6, 3.6, LEAF_H);
+    blob(-2, -11.5, 3.0, 2.4, LEAF_HH);
+    blob(-9.5, -4.5, 3.2, 2.6, LEAF_H);
+    g.restore();
+    /* ⑥ 明暗叶簇：左上撒亮簇、右下撒暗簇（斑驳感 = 星露谷树冠的关键）
+       用 2~4px 的小团而不是 1px 点 —— 1px 点在 90px 的树冠上读不出来 */
+    const dabs = (n, side, cols) => {
+      for (let i = 0; i < n; i++) {
+        /* side = -1 左上 / +1 右下 */
+        const u = artHash(vv, i + side * 7, 81);
+        const w2 = artHash(vv, i + side * 7, 82);
+        const bx2 = cx + side * (1.5 + u * 9.5) * q;
+        const by2 = cy4 + side * (0.5 + w2 * 7.5) * q - 2.5 * q;
+        const sz = Math.max(1, Math.round((1.0 + artHash(vv, i, 83) * 1.6) * q));
+        g.fillStyle = cols[0];
+        g.fillRect(Math.round(bx2), Math.round(by2), sz, Math.max(1, Math.round(sz * 0.8)));
+        /* 一点更亮的芯，读起来像叶尖反光 */
+        g.fillStyle = cols[1];
+        g.fillRect(Math.round(bx2), Math.round(by2), Math.max(1, sz - 1), 1);
+      }
+    };
+    dabs(13, -1, [LEAF_H, LEAF_HH]);
+    dabs(15, 1, [LEAF_D, LEAF_DD]);
+    /* ⑦ 轮廓叶尖：沿上半圈点几撮凸起的叶团，破掉椭圆的顺滑感 */
+    for (let i = 0; i < 9; i++) {
+      const a3 = Math.PI * (1.08 + i * 0.105);        // 只走上半圈
+      const bx3 = cx + Math.cos(a3) * 11.6 * q;
+      const by3 = cy4 + Math.sin(a3) * 10.2 * q;
+      g.fillStyle = (i & 1) ? LEAF_M : LEAF_L;
+      g.fillRect(Math.round(bx3), Math.round(by3), Math.max(1, Math.round(2.2 * q)), Math.max(1, Math.round(1.6 * q)));
     }
   }
   TREE_SPR[key] = cv;
