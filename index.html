@@ -1975,18 +1975,6 @@ function pxHumanoid(px, f, mode, cfg, pal) {
 
   /* —— 躯干：上宽下窄的胸甲 —— */
   pxBall(px, cx, (shY + hipY) / 2, halfW, (hipY - shY) / 2 + 1.4, pal.l, pal.b, pal.d, pal.dd, false);
-  /* 👕 布料褶皱（无甲 / 非和服的角色）：短暗线 = 布料，而不是一块渐变球 */
-  if (!c.armor && !c.kimono) {
-    const tY0 = shY + 1.2, tY1 = hipY - 0.6;
-    /* 左侧一道折痕（从肩往腰斜） */
-    pxLine(px, cx - halfW * 0.62, tY0, cx - halfW * 0.22, tY1, pal.dd, 1);
-    /* 右侧一道（更短，避免左右太对称而呆板） */
-    pxLine(px, cx + halfW * 0.52, tY0 + 1.4, cx + halfW * 0.70, tY1 - 0.8, pal.dd, 1);
-    /* 衣摆分界：腰下一道横线（下摆挡住腿部上端，读起来像"衣服"） */
-    pxRect(px, Math.round(cx - halfW * 0.82), Math.round(hipY - 0.4), Math.round(halfW * 1.64), 1, pxDeep(pal.b, 0.34));
-    /* 腰带扣：1px 亮色，给腰一点"配饰" */
-    pxPut(px, Math.round(cx), Math.round(hipY - 0.4), pxCI(px, pal.al));
-  }
   if (c.armor) {
     /* 🛡 分段胸甲 + 肩甲（轮廓加宽 → 一眼是"重装"而不是布衣） */
     const chestH = Math.max(3, Math.round(hipY - shY) - 1);
@@ -2051,11 +2039,6 @@ function pxHumanoid(px, f, mode, cfg, pal) {
     /* 头顶：只盖住**上三分之一**（原来 ry 太大，压到眉毛以下 → 眼睛被埋进头发里，整张脸看不见） */
     pxEll(px, cx, headY - headR * 0.52, headR * 1.0, headR * 0.52, hairC);
     pxEll(px, cx - headR * 0.22, headY - headR * 0.72, headR * 0.6, headR * 0.3, hairL);
-    /* 受光高光带（左上）：一条细亮弧 —— 头发才有"光泽"，不然是一团黑 */
-    pxEll(px, cx - headR * 0.34, headY - headR * 0.88, headR * 0.40, headR * 0.15, '#5a4c33');
-    /* 一撮翘起的发尖（破掉"光头罩"的圆滑感） */
-    pxPut(px, Math.round(cx + headR * 0.55), Math.round(headY - headR * 0.98), pxCI(px, hairC));
-    pxPut(px, Math.round(cx + headR * 0.95), Math.round(headY - headR * 1.20), pxCI(px, hairL));
     /* 两侧鬓角（细一点，别把脸框死） */
     pxRect(px, Math.round(cx - headR - 0.2), Math.round(headY - headR * 0.55), 1, Math.round(headR * 0.7), hairC);
     pxRect(px, Math.round(cx + headR - 0.8), Math.round(headY - headR * 0.55), 1, Math.round(headR * 0.7), hairC);
@@ -2388,8 +2371,8 @@ function pxPlayerSpriteOf(cls, frame, mode, variant) {
   const pal = pxPalOf(tint ? tint.col : spec.col, tint ? tint.dark : spec.dark, tint ? tint.acc : spec.acc);
   const px = PXC(spec.w, spec.h);
   pxHumanoid(px, frame, mode, spec.cfg, pal);
-  /* ✨ 和敌人同一套质感抛光（轮廓光 + 底部环境遮蔽），必须在描边之前 */
-  pxRimLight(px, 0.30); pxFootAO(px, 0.20);
+  /* ✨ 只保留轮廓光（1× 下确实提神）；底部 AO 和褶皱在小尺寸上只是脏点 */
+  pxRimLight(px, 0.18);
   pxOutline(px, pal.k);
   let out = px;
   if (variant === 'flash') {
@@ -2507,7 +2490,7 @@ function pxSpriteOf(type, frame, mode, col, dark, acc, variant) {
   const part = (variant === 'blade') ? 'blade' : '';
   pxModelDraw(px, spec, frame, mode, pal, part);
   /* ✨ 质感抛光：轮廓光（上/左受光边提亮）+ 底部环境遮蔽 —— 必须在描边之前 */
-  if (part !== 'blade') { pxRimLight(px, 0.28); pxFootAO(px, 0.20); }
+  if (part !== 'blade') pxRimLight(px, 0.18);
   if (spec.kind !== 'slime') pxOutline(px, pal.k);   // 果冻怪不描边（半透明更 Q）
   let out = px;
   if (variant === 'flash') {
@@ -24415,35 +24398,59 @@ function treeSprite(kind, sc, variant, tint) {
     /* 正常树：投影 + 树干 + 叶团树冠 */
     g.fillStyle = 'rgba(0,0,0,0.15)';
     g.beginPath(); g.ellipse(cx, base + 1, 13 * q, 5 * q, 0, 0, Math.PI * 2); g.fill();
-    g.fillStyle = '#120d08';   // 树干描边
-    g.fillRect(Math.round(cx - 3.4 * q), Math.round(base - 15.5 * q), Math.max(5, Math.round(6.8 * q)), Math.round(16 * q));
     /* 树干倾斜：不同变体给不同斜度（同一片林子里树干都笔直 = 复制感） */
     const lean = ((vv % 5) - 2) * 1.1;
-    /* 树干三色：背光 / 主体 / 受光（一根纯色棍 = 廉价） */
-    g.fillStyle = '#3b2a1a';
+    /* 锥度：底部比顶部宽 40%（真树都是下粗上细，直筒柱一看就假） */
+    const twB = 2.5 * q, twT = 1.75 * q;
+    const tbX = cx + lean * q;      // 顶部中心
+    /* ① 描边（外扩 0.7px） */
+    g.fillStyle = "#0f0a06";
     g.beginPath();
-    g.moveTo(cx - 2.4 * q, base);
-    g.lineTo(cx - 2.4 * q + lean * q, base - 15 * q);
-    g.lineTo(cx + 2.4 * q + lean * q, base - 15 * q);
-    g.lineTo(cx + 2.4 * q, base);
+    g.moveTo(cx - twB - 0.7, base);
+    g.lineTo(tbX - twT - 0.7, base - 15.5 * q);
+    g.lineTo(tbX + twT + 0.7, base - 15.5 * q);
+    g.lineTo(cx + twB + 0.7, base);
     g.closePath(); g.fill();
-    g.fillStyle = '#6b5232';
+    /* ② 主体 */
+    g.fillStyle = "#6b5232";
     g.beginPath();
-    g.moveTo(cx - 1.6 * q, base);
-    g.lineTo(cx - 1.6 * q + lean * q, base - 15 * q);
-    g.lineTo(cx + 1.2 * q + lean * q, base - 15 * q);
-    g.lineTo(cx + 1.2 * q, base);
+    g.moveTo(cx - twB, base);
+    g.lineTo(tbX - twT, base - 15 * q);
+    g.lineTo(tbX + twT, base - 15 * q);
+    g.lineTo(cx + twB, base);
     g.closePath(); g.fill();
-    g.fillStyle = '#8f7048';
-    g.fillRect(Math.round(cx - 1.4 * q + lean * q * 0.5), Math.round(base - 14 * q), Math.max(1, Math.round(1.2 * q)), Math.round(12 * q));
-    g.fillStyle = '#7a5c3a';   // 受光侧树皮
-    g.fillRect(Math.round(cx - 2.4 * q), Math.round(base - 15 * q), Math.max(1, Math.round(1.8 * q)), Math.round(15 * q));
-    g.fillStyle = '#3f2e1c';   // 背光侧
-    g.fillRect(Math.round(cx + 1.2 * q), Math.round(base - 14 * q), Math.max(1, Math.round(1.2 * q)), Math.round(14 * q));
-    /* 根系 */
-    g.fillStyle = '#3a2a1c';
-    g.fillRect(Math.round(cx - 6 * q), Math.round(base - 2 * q), Math.round(4 * q), Math.round(3 * q));
-    g.fillRect(Math.round(cx + 2 * q), Math.round(base - 2 * q), Math.round(4 * q), Math.round(3 * q));
+    /* ③ 受光侧（左） */
+    g.fillStyle = "#8a6a42";
+    g.beginPath();
+    g.moveTo(cx - twB, base);
+    g.lineTo(tbX - twT, base - 15 * q);
+    g.lineTo(tbX - twT + 0.9 * q, base - 15 * q);
+    g.lineTo(cx - twB + 1.3 * q, base);
+    g.closePath(); g.fill();
+    /* ④ 背光侧（右） */
+    g.fillStyle = "#3f2e1c";
+    g.beginPath();
+    g.moveTo(cx + twB, base);
+    g.lineTo(tbX + twT, base - 15 * q);
+    g.lineTo(tbX + twT - 0.9 * q, base - 15 * q);
+    g.lineTo(cx + twB - 1.3 * q, base);
+    g.closePath(); g.fill();
+    /* ⑤ 树皮竖纹（两条短暗线，别拉通全长） */
+    g.fillStyle = "#4a3620";
+    g.fillRect(Math.round(cx - 0.9 * q + lean * q * 0.3), Math.round(base - 11 * q), Math.max(1, Math.round(0.9 * q)), Math.round(5 * q));
+    g.fillStyle = "#5d4530";
+    g.fillRect(Math.round(cx + 0.5 * q + lean * q * 0.6), Math.round(base - 7 * q), Math.max(1, Math.round(0.8 * q)), Math.round(4 * q));
+    /* ⑥ 树根张开（左右各一块外扩的暗块 + 受光顶边） */
+    g.fillStyle = "#0f0a06";
+    g.beginPath(); g.moveTo(cx - twB - 2.6 * q, base + 0.6 * q); g.lineTo(cx - twB + 0.2 * q, base - 3.2 * q);
+    g.lineTo(cx - twB + 0.2 * q, base + 0.6 * q); g.closePath(); g.fill();
+    g.beginPath(); g.moveTo(cx + twB + 2.6 * q, base + 0.6 * q); g.lineTo(cx + twB - 0.2 * q, base - 3.2 * q);
+    g.lineTo(cx + twB - 0.2 * q, base + 0.6 * q); g.closePath(); g.fill();
+    g.fillStyle = "#523c26";
+    g.beginPath(); g.moveTo(cx - twB - 2.0 * q, base + 0.2 * q); g.lineTo(cx - twB + 0.2 * q, base - 2.6 * q);
+    g.lineTo(cx - twB + 0.2 * q, base + 0.2 * q); g.closePath(); g.fill();
+    g.beginPath(); g.moveTo(cx + twB + 2.0 * q, base + 0.2 * q); g.lineTo(cx + twB - 0.2 * q, base - 2.6 * q);
+    g.lineTo(cx + twB - 0.2 * q, base + 0.2 * q); g.closePath(); g.fill();
     const cy4 = base - 23 * q;
     /* 叶色四阶：比草地暗一档，但远不到黑（原来 #22391f 会变成"黑团"） */
     /* 深底 → 亮顶，跨度大才有泰拉瑞亚那种"硬"的感觉 */
@@ -24482,49 +24489,88 @@ function treeSprite(kind, sc, variant, tint) {
       { dd: '#1c2614', d: '#28391c', m: '#3a5822', l: '#51782c', h: '#6b9940', hh: '#90bf5c' }
     ];
     const TC = TINT[tt];
-    /* ⓪ 描边（泰拉瑞亚式）：同一组叶团放大 1.7px 用近黑画一遍 */
+    /* ===== 阶梯方块树冠 =====
+       每棵树用一组"行带"描述剪影：半宽随高度变化，宽度突变 → 阶梯边。
+       轮廓参数按 8 个变体取不同曲线，保证形状真的不同。 */
+    const CH = Math.round(26 * q);            // 冠高
+    const CWr = Math.round(13.5 * q);         // 冠最大半宽
+    /* 8 种剪影：t=0 顶部 1 底部；返回该高度的半宽系数 0..1 */
+    const PROFILE = [
+      function (u) { return Math.sqrt(Math.max(0, 1 - Math.pow(u * 1.16 - 0.10, 2))) * 0.95; },   // 圆
+      function (u) { return Math.pow(Math.max(0, 1 - u), 0.55) * 1.0; },                          // 水滴（上尖下宽）
+      function (u) { return (0.62 + 0.38 * Math.sin(u * Math.PI)) * 0.98; },                      // 桶形
+      function (u) { return Math.sqrt(Math.max(0, 1 - Math.pow(u * 1.05 - 0.02, 2))) * 0.80 + 0.14; },
+      function (u) { return Math.pow(Math.max(0, 1 - u * 0.85), 0.8) * 0.92; },                    // 高瘦
+      function (u) { return Math.sqrt(Math.max(0, 1 - Math.pow(u * 1.32, 2))) * 1.05; },          // 扁宽
+      function (u) { return Math.pow(Math.max(0, 1 - u), 0.42) * 0.86 + 0.08; },
+      function (u) { return Math.sqrt(Math.max(0, 1 - Math.pow(u * 1.10 - 0.16, 2))) * 0.88; }
+    ];
+    const prof = PROFILE[vv % PROFILE.length];
+    const topY = base - 15 * q - CH;           // 冠顶
+    /* 逐行算半宽，量化成 2texel 的阶梯 */
+    const rows = [];
+    for (let r = 0; r <= CH; r++) {
+      const u = r / CH;
+      let w = prof(u) * CWr;
+      w = Math.round(w / 2) * 2;               // 🔑 量化：宽度突变 → 阶梯硬边
+      if (w < 2) w = 0;
+      rows.push(w);
+    }
+    /* ① 剪影（暗底） */
+    for (let r = 0; r <= CH; r++) {
+      const w = rows[r];
+      if (!w) continue;
+      g.fillStyle = TC.dd;
+      g.fillRect(Math.round(cx - w), Math.round(topY + r), Math.round(w * 2), 1);
+    }
+    /* ② 描边：每一行的左右端各 1px 更深；冠顶/冠底整行加深 */
     const OUT = '#101a0d';
-    for (const o of bumps[vv]) blob(o[0], o[1], o[2] + 1.2, o[3] + 1.2, OUT);
-    for (const o of cores[vv]) blob(o[0], o[1], o[2] + 1.2, o[3] + 1.2, OUT);
-    /* ① 暗底（只在核心团；凸起**不用近黑**，否则边缘会露一粒粒黑点） */
-    for (const b of cores[vv]) blob(b[0], b[1], b[2], b[3], TC.dd);
-    /* ② 树冠下沿暗面（下方受不到光，这是"体积感"的关键） */
-    blob(0, 7.5, 11.5, 4.2, TC.d);
-    /* ③ 中间调：核心团 + **凸起一起铺**（凸起因此并入树体，黑点消失） */
-    for (const b of bumps[vv]) blob(b[0] - 0.6, b[1] - 0.8, b[2] * 0.96, b[3] * 0.94, TC.m);
-    for (const b of cores[vv]) blob(b[0] - 0.8, b[1] - 1.6, b[2] * 0.96, b[3] * 0.94, TC.m);
-    /* ④ 受光面（左上） */
-    for (const b of cores[vv]) blob(b[0] - 2.2, b[1] - 3.0, b[2] * 0.82, b[3] * 0.78, TC.l);
-    /* ⑤ 多处亮簇（只放在左上象限，光从左上来） */
-    blob(-5.5, -8.5, 4.6, 3.6, TC.h);
-    blob(-2, -11.5, 3.0, 2.4, TC.hh);
-    blob(-9.5, -4.5, 3.2, 2.6, TC.h);
-    /* ⑥ 明暗叶簇：左上撒亮簇、右下撒暗簇（斑驳感 = 星露谷树冠的关键）
-       用 2~4px 的小团而不是 1px 点 —— 1px 点在 90px 的树冠上读不出来 */
-    const dabs = (n, side, cols) => {
-      for (let i = 0; i < n; i++) {
-        /* side = -1 左上 / +1 右下 */
-        const u = artHash(vv, i + side * 7, 81);
-        const w2 = artHash(vv, i + side * 7, 82);
-        const bx2 = cx + side * (1.5 + u * 9.5) * q;
-        const by2 = cy4 + side * (0.5 + w2 * 7.5) * q - 2.5 * q;
-        const sz = Math.max(1, Math.round((1.0 + artHash(vv, i, 83) * 1.6) * q));
-        g.fillStyle = cols[0];
-        g.fillRect(Math.round(bx2), Math.round(by2), sz, Math.max(1, Math.round(sz * 0.8)));
-        /* 一点更亮的芯，读起来像叶尖反光 */
-        g.fillStyle = cols[1];
-        g.fillRect(Math.round(bx2), Math.round(by2), Math.max(1, sz - 1), 1);
-      }
-    };
-    dabs(13, -1, [TC.h, TC.hh]);
-    dabs(15, 1, [TC.d, TC.dd]);
-    /* ⑦ 轮廓叶尖：沿上半圈点几撮凸起的叶团，破掉椭圆的顺滑感 */
-    for (let i = 0; i < 9; i++) {
-      const a3 = Math.PI * (1.08 + i * 0.105);        // 只走上半圈
-      const bx3 = cx + Math.cos(a3) * 11.6 * q;
-      const by3 = cy4 + Math.sin(a3) * 10.2 * q;
-      g.fillStyle = (i & 1) ? TC.m : TC.l;
-      g.fillRect(Math.round(bx3), Math.round(by3), Math.max(1, Math.round(2.2 * q)), Math.max(1, Math.round(1.6 * q)));
+    g.fillStyle = OUT;
+    for (let r = 0; r <= CH; r++) {
+      const w = rows[r];
+      if (!w) continue;
+      const yy = Math.round(topY + r);
+      g.fillRect(Math.round(cx - w), yy, 1, 1);
+      g.fillRect(Math.round(cx + w) - 1, yy, 1, 1);
+      if (r === 0) g.fillRect(Math.round(cx - w), yy, Math.round(w * 2), 1);
+      if (r === CH) g.fillRect(Math.round(cx - w), yy, Math.round(w * 2), 1);
+    }
+    /* ③ 中间调：整行内缩 2px，并往左上偏 1 行（光源在左上） */
+    for (let r = 1; r <= CH - 1; r++) {
+      const w = rows[r] - 2;
+      if (w < 2) continue;
+      g.fillStyle = TC.m;
+      g.fillRect(Math.round(cx - w), Math.round(topY + r), Math.round(w * 2), 1);
+    }
+    /* ④ 受光面：只占左上象限（上半 + 左半） */
+    for (let r = 1; r <= Math.round(CH * 0.62); r++) {
+      const w = rows[r] - 2;
+      if (w < 3) continue;
+      g.fillStyle = TC.l;
+      g.fillRect(Math.round(cx - w), Math.round(topY + r), Math.round(w), 1);
+    }
+    /* ⑤ 冠顶亮块（小块，跟形状走） */
+    for (let r = 1; r <= Math.round(CH * 0.26); r++) {
+      const w = rows[r];
+      if (w < 4) continue;
+      g.fillStyle = TC.h;
+      g.fillRect(Math.round(cx - w * 0.62), Math.round(topY + r), Math.round(w * 0.9), 1);
+    }
+    /* ⑥ 暗部：右下象限压一档（出体积） */
+    for (let r = Math.round(CH * 0.55); r <= CH - 1; r++) {
+      const w = rows[r] - 2;
+      if (w < 3) continue;
+      g.fillStyle = TC.d;
+      g.fillRect(Math.round(cx + 1), Math.round(topY + r), Math.round(w - 1), 1);
+    }
+    /* ⑦ 叶簇：沿剪影左右边缘点小方块，破掉平滑（阶梯感更明显） */
+    for (let r = 2; r <= CH - 2; r += 3) {
+      const w = rows[r];
+      if (!w) continue;
+      const side = (r % 2) ? 1 : -1;
+      const eh = 2 + ((artHash(vv, r, 61) * 2) | 0);
+      g.fillStyle = (side > 0) ? TC.m : TC.l;
+      g.fillRect(Math.round(cx + side * w) - (side > 0 ? 0 : 2), Math.round(topY + r), 2, eh);
     }
   }
   TREE_SPR[key] = cv;
@@ -24717,8 +24763,8 @@ function artRgb(hex) {
 }
 
 /* ---------- ① 地形底图：粗网格噪声 + 有序抖动（一次 putImageData） ---------- */
-function artPaintTerrain(g, W, H) {
-  const SC = 2;                                   // 1/2 分辨率生成，放大 2 倍（地表 texel = 2 屏幕像素）
+function artPaintTerrain(g, W, H, pathLines) {
+  const SC = 2;                                   // 1/2 分辨率生成，放大 2 倍（texel = 2 屏幕像素）
   const TW = Math.ceil(W / SC), TH = Math.ceil(H / SC);
   const tmp = document.createElement('canvas');
   tmp.width = TW; tmp.height = TH;
@@ -24727,73 +24773,125 @@ function artPaintTerrain(g, W, H) {
   const img = tg.createImageData(TW, TH);
   if (!img || !img.data) return false;
   const d = img.data;
-  /* 粗网格：大尺度地势 / 中尺度斑驳 / 阳光池 / 干土带 */
-  const F1 = artField(150, 84, 0.075, 0.075, 11, 3);
-  const F2 = artField(300, 168, 0.42, 0.42, 23, 3);   /* ⚠️ 26px 尺度：泰拉瑞亚的纹理就是这个量级 */
-  const FS = artField(90, 50, 0.11, 0.11, 57, 2);
-  const FD = artField(130, 73, 0.10, 0.10, 91, 3);
+  /* 粗网格场 */
+  const F1 = artField(150, 84, 0.075, 0.075, 11, 3);   // 大尺度地势
+  const F2 = artField(300, 168, 0.42, 0.42, 23, 3);    // 26px 斑驳
+  const FS = artField(90, 50, 0.11, 0.11, 57, 2);      // 阳光池
+  const FD = artField(120, 68, 0.085, 0.085, 91, 3);   // 干土：~110px 大片（小斑会变成满地杂物）
   const GT = ART_GRASS_TONES.map(artRgb);
   const DT = ART_DIRT_TONES.map(artRgb);
-  /* ===== 第一遍：算每个 texel 的色阶索引（不抖动，硬分档） ===== */
-  const idxMap = new Uint8Array(TW * TH);     // 0..5 = 色阶；+16 = 土
+
+  /* ===== 土路掩码（像素级，无抗锯齿）：0 无 / 1 路面 / 2 描边 ===== */
+  const pmask = new Uint8Array(TW * TH);
+  if (pathLines && pathLines.length) {
+    for (const pl of pathLines) {
+      const pts = pl.pts;
+      const rBase = (pl.w / SC) / 2;
+      const steps = 260;
+      let lx = null, ly = null;
+      for (let i = 0; i <= steps; i++) {
+        const q = artCatmull(pts, i / steps);
+        const rx2 = q[0] / SC, ry2 = q[1] / SC;
+        if (lx === null) { lx = rx2; ly = ry2; }
+        const segLen = Math.hypot(rx2 - lx, ry2 - ly);
+        const seg = Math.max(1, Math.ceil(segLen / Math.max(1, rBase * 0.35)));
+        for (let j = 1; j <= seg; j++) {
+          const cx2 = lx + (rx2 - lx) * (j / seg), cy2 = ly + (ry2 - ly) * (j / seg);
+          /* 宽度起伏（像被踩出来的路，不是水管） */
+          const wob = 0.78 + 0.44 * artNoise(cx2 * 0.03, cy2 * 0.03, 5);
+          const r = rBase * wob;
+          const x0 = Math.max(0, Math.floor(cx2 - r - 1)), x1 = Math.min(TW - 1, Math.ceil(cx2 + r + 1));
+          const y0 = Math.max(0, Math.floor(cy2 - r - 1)), y1 = Math.min(TH - 1, Math.ceil(cy2 + r + 1));
+          for (let yy = y0; yy <= y1; yy++) {
+            const dy2 = yy + 0.5 - cy2;
+            for (let xx = x0; xx <= x1; xx++) {
+              const dx2 = xx + 0.5 - cx2;
+              /* 边缘用哈希抖 ±1.5 个 texel 的面积 → 不规则毛边，但仍是硬像素 */
+              const wobEdge = (artHash(xx, yy, 7) - 0.5) * 3.0;
+              if (dx2 * dx2 + dy2 * dy2 <= r * r + wobEdge) pmask[yy * TW + xx] = 1;
+            }
+          }
+        }
+        lx = rx2; ly = ry2;
+      }
+    }
+    /* 描边：贴着路面、自己不是路面 → 外扩 1texel */
+    const body = pmask.slice();
+    for (let y = 0; y < TH; y++) {
+      for (let x = 0; x < TW; x++) {
+        const k = y * TW + x;
+        if (body[k]) continue;
+        if ((x > 0 && body[k - 1]) || (x < TW - 1 && body[k + 1]) ||
+            (y > 0 && body[k - TW]) || (y < TH - 1 && body[k + TW])) pmask[k] = 2;
+      }
+    }
+  }
+
+  /* ===== 第一遍：色阶索引 ===== */
+  const idxMap = new Uint8Array(TW * TH);     // 0..5 草 / +16 土 / +32 路面
   for (let y = 0; y < TH; y++) {
     const nv = y / (TH - 1);
     for (let x = 0; x < TW; x++) {
+      const k = y * TW + x;
       const nu = x / (TW - 1);
+      const pm = pmask[k];
+      const light = 1 - (nu * 0.46 + nv * 0.54);
+      /* 3texel 一格的暗块（可辨认的"土粒"，不是 1px 静噪） */
+      const gc = artHash(x / 3 | 0, y / 3 | 0, 91);
+      const clump = gc < 0.20 ? -0.07 : (gc > 0.965 ? 0.11 : 0);
+      if (pm === 2) { idxMap[k] = 32; continue; }          // 路缘：最暗土
+      if (pm === 1) {                                       // 路面
+        const med = artSample(F2, nu, nv);
+        let v = 0.30 + (med - 0.5) * 0.34 + light * 0.26 + clump;
+        v = 0.66 + (v - 0.46) * 1.7;
+        const i2 = Math.round(Math.max(0, Math.min(1, v)) * 5);
+        idxMap[k] = 16 + i2;
+        continue;
+      }
       const big = artSample(F1, nu, nv);
       const med = artSample(F2, nu, nv);
-      const light = 1 - (nu * 0.46 + nv * 0.54);          // 左上亮
       const sun = artSample(FS, nu, nv);
-      const sunBoost = sun > 0.74 ? (sun - 0.74) * 3.4 : 0;   // 收窄：大块亮面会读成"脏"
+      const sunBoost = sun > 0.74 ? (sun - 0.74) * 3.0 : 0;
       const dryN = artSample(FD, nu, nv);
-      /* 块状颗粒：3texel 一格的暗斑 + 稀疏亮砾（泰拉瑞亚土面最标志性的"点点"） */
-      const gc = artHash(x / 3 | 0, y / 3 | 0, 91);
-      let grain = 0;
-      if (gc < 0.22) grain -= 0.075;          // 暗土粒（6px 块）
-      else if (gc > 0.955) grain += 0.16;      // 亮砾
-      else if (gc > 0.90) grain += 0.05;
-      /* 1texel（2 世界像素）细颗粒：泰拉瑞亚土面在 1:1 下的那层斑点 */
-      const g2 = artHash(x, y, 97);
-      if (g2 < 0.11) grain -= 0.055;
-      else if (g2 > 0.975) grain += 0.075;
-      const useDirt = dryN > 0.715;
+      const useDirt = dryN > 0.80;   // 阈值抬高：只留少量大片裸土
       let v;
       if (useDirt) {
-        v = 0.26 + (dryN - 0.715) * 2.6 + (med - 0.5) * 0.26 + light * 0.22 + grain;
+        v = 0.24 + (dryN - 0.745) * 3.0 + (med - 0.5) * 0.24 + light * 0.22 + clump;
       } else {
-        v = 0.13 * big + 0.40 * med + 0.18 * light + 0.10 * sunBoost + 0.17 + grain;
+        v = 0.16 * big + 0.30 * med + 0.20 * light + 0.10 * sunBoost + 0.24 + clump;
       }
-      /* 色调拉伸：把窄分布铺满 6 档（否则整张图只用 2 档 = 平涂） */
       v = 0.70 + (v - 0.46) * 1.9;
-      let i2 = Math.round(Math.max(0, Math.min(1, v)) * 5);
-      idxMap[y * TW + x] = (useDirt ? 16 : 0) + i2;
+      const i2 = Math.round(Math.max(0, Math.min(1, v)) * 5);
+      idxMap[k] = (useDirt ? 16 : 0) + i2;
     }
   }
-  /* ===== 第二遍：写像素 —— 色阶交界处描成最暗档（硬边色块） ===== */
+
+  /* ===== 第二遍：写像素（土/草交界描边；同色系跨 2 档才描） ===== */
   for (let y = 0; y < TH; y++) {
     for (let x = 0; x < TW; x++) {
       const k = y * TW + x;
       const cur = idxMap[k];
+      if (cur === 32) {                                     // 路缘
+        const o2 = k * 4; const c0 = DT[0];
+        d[o2] = c0[0]; d[o2 + 1] = c0[1]; d[o2 + 2] = c0[2]; d[o2 + 3] = 255;
+        continue;
+      }
       const isDirt = cur >= 16, lv = isDirt ? cur - 16 : cur;
       const base = isDirt ? DT : GT;
-      /* 4 邻域里只要有一格色阶（或土/草属性）不同 → 这条边描深 */
-      let edge = false;
-      if (x > 0 && idxMap[k - 1] !== cur) edge = true;
-      else if (x < TW - 1 && idxMap[k + 1] !== cur) edge = true;
-      else if (y > 0 && idxMap[k - TW] !== cur) edge = true;
-      else if (y < TH - 1 && idxMap[k + TW] !== cur) edge = true;
-      /* 描边只在"跨越 2 档以上或土草交界"时生效，否则会糊成一团黑网 */
       let hardEdge = false;
-      if (edge) {
-        const nb = x > 0 && idxMap[k - 1] !== cur ? idxMap[k - 1]
-          : (x < TW - 1 && idxMap[k + 1] !== cur ? idxMap[k + 1]
-            : (y > 0 && idxMap[k - TW] !== cur ? idxMap[k - TW] : idxMap[k + TW]));
-        const nbDirt = nb >= 16, nbLv = nbDirt ? nb - 16 : nb;
-        /* 土/草交界一律描（这是真正的结构边）；同色系内跨 2 档才描，避免糊成黑网 */
-        hardEdge = (nbDirt !== isDirt) || Math.abs(nbLv - lv) >= 2;
+      if (x > 0 && idxMap[k - 1] >= 32 !== (cur >= 32)) hardEdge = true;
+      else {
+        let nb = -1;
+        if (x > 0 && idxMap[k - 1] !== cur) nb = idxMap[k - 1];
+        else if (x < TW - 1 && idxMap[k + 1] !== cur) nb = idxMap[k + 1];
+        else if (y > 0 && idxMap[k - TW] !== cur) nb = idxMap[k - TW];
+        else if (y < TH - 1 && idxMap[k + TW] !== cur) nb = idxMap[k + TW];
+        if (nb >= 0 && nb < 32) {
+          const nbDirt = nb >= 16, nbLv = nbDirt ? nb - 16 : nb;
+          hardEdge = (nbDirt !== isDirt) || Math.abs(nbLv - lv) >= 2;
+        }
       }
-      /* 🌿 草贴着土 → 记下来，稍后在这个位置长草叶（草沿） */
-      if (hardEdge && !isDirt && artDirtEdges.length < 9000 && ((k * 2654435761) >>> 20) % 3 === 0) {
+      if (hardEdge && !isDirt && artDirtEdges.length < 8000 && ((k * 2654435761) >>> 20) % 3 === 0) {
         artDirtEdges.push(x * SC + 1, y * SC + 1);
       }
       const c = hardEdge ? base[0] : base[Math.max(0, Math.min(5, lv))];
@@ -24803,10 +24901,9 @@ function artPaintTerrain(g, W, H) {
   }
   tg.putImageData(img, 0, 0);
   const sm = g.imageSmoothingEnabled;
-  g.imageSmoothingEnabled = false;                 // 像素放大：必须关平滑
+  g.imageSmoothingEnabled = false;
   g.drawImage(tmp, 0, 0, TW, TH, 0, 0, W, H);
   g.imageSmoothingEnabled = sm;
-
   return true;
 }
 
@@ -25043,7 +25140,15 @@ function artPond(g, cx, cy, rx, ry, gr, grR) {
 function artBuildGrassGround(g, W, H, gr, grR) {
   g.fillStyle = ART_BASE_GRASS;
   g.fillRect(0, 0, W, H);
-  if (!artPaintTerrain(g, W, H)) {
+  /* 土路折线先算出来 —— 它要和地形**同一次像素绘制**，否则会有抗锯齿软边 */
+  const PATH_PTS = [
+    [[-60, H * 0.26], [W * 0.15, H * 0.34], [W * 0.32, H * 0.21], [W * 0.49, H * 0.40], [W * 0.67, H * 0.30], [W * 0.84, H * 0.46], [W + 60, H * 0.40]],
+    [[W * 0.23, -60], [W * 0.30, H * 0.22], [W * 0.45, H * 0.42], [W * 0.40, H * 0.63], [W * 0.56, H * 0.81], [W * 0.51, H + 60]],
+    [[-60, H * 0.77], [W * 0.24, H * 0.68], [W * 0.46, H * 0.79], [W * 0.66, H * 0.69], [W * 0.85, H * 0.83], [W + 60, H * 0.73]],
+    [[W * 0.06, H * 0.52], [W * 0.30, H * 0.50], [W * 0.52, H * 0.54], [W * 0.74, H * 0.50], [W * 0.95, H * 0.55]]
+  ];
+  const pathLines = PATH_PTS.map(function (pt) { return { pts: pt, w: grR(38, 52) }; });
+  if (!artPaintTerrain(g, W, H, pathLines)) {
     g.fillStyle = '#496b37';
     g.fillRect(0, 0, W, H);
   }
@@ -25062,14 +25167,6 @@ function artBuildGrassGround(g, W, H, gr, grR) {
     }
   }
   const spr = artSprites();
-  /* 土路网络：3 条从地图边穿到另一边，交汇在中心空地附近（战斗区好走） */
-  const paths = [
-    [[-60, H * 0.26], [W * 0.15, H * 0.34], [W * 0.32, H * 0.21], [W * 0.49, H * 0.40], [W * 0.67, H * 0.30], [W * 0.84, H * 0.46], [W + 60, H * 0.40]],
-    [[W * 0.23, -60], [W * 0.30, H * 0.22], [W * 0.45, H * 0.42], [W * 0.40, H * 0.63], [W * 0.56, H * 0.81], [W * 0.51, H + 60]],
-    [[-60, H * 0.77], [W * 0.24, H * 0.68], [W * 0.46, H * 0.79], [W * 0.66, H * 0.69], [W * 0.85, H * 0.83], [W + 60, H * 0.73]],
-    [[W * 0.06, H * 0.52], [W * 0.30, H * 0.50], [W * 0.52, H * 0.54], [W * 0.74, H * 0.50], [W * 0.95, H * 0.55]]
-  ];
-  for (const pts of paths) artPath(g, pts, grR(36, 50), gr, grR, spr);
   /* 水塘：4 个，避开中心战斗空地 */
   const ponds = [];
   for (let i = 0; i < 4; i++) {
@@ -25195,19 +25292,26 @@ function buildGround() {
        所以"站在树叶下会被遮住"是天然的。这里只负责**撒点**并登记到 worldTrees。
        间距用抖动（grid+jitter）而不是纯随机，避免挤成一坨 / 留大片空地。 */
     {
-      const cellW = Math.round(W / 22), cellH = Math.round(H / 14);
-      for (let gy = 0; gy < 14; gy++) {
-        for (let gx = 0; gx < 22; gx++) {
-          if (gr() > 0.38) continue;                       // 38% 的格子长树（中心空地会吃掉一大块，这里补回密度）
-          const tx = gx * cellW + grR(cellW * 0.15, cellW * 0.85);
-          const ty = gy * cellH + grR(cellH * 0.2, cellH * 0.9);
+      /* 🌳 成林：用低频密度场决定"哪里有树林"，而不是均匀撒点。
+         均匀撒 = 稀疏的棉花球；成林 = 有疏有密，才像野外。 */
+      const TFOR = artField(96, 54, 0.055, 0.055, 211, 3);
+      const cellW = Math.round(W / 26), cellH = Math.round(H / 17);
+      for (let gy = 0; gy < 17; gy++) {
+        for (let gx = 0; gx < 26; gx++) {
+          const fx = (gx + 0.5) / 26, fy = (gy + 0.5) / 17;
+          const dens = artSample(TFOR, fx, fy);
+          /* dens 高 → 密林（0.92），低 → 几乎不长（0.06） */
+          const p = dens > 0.42 ? 0.90 : 0.06;
+          if (gr() > p) continue;
+          const tx = gx * cellW + grR(cellW * 0.12, cellW * 0.88);
+          const ty = gy * cellH + grR(cellH * 0.15, cellH * 0.92);
           /* 中心空地由 treeAdd 统一拦（判据只有一处） */
-          treeAdd(tx, ty, grR(1.5, 2.6), 'tree');
+          treeAdd(tx, ty, grR(2.2, 3.2), 'tree');
         }
       }
       /* 树桩：零星分布（数量约树的 1/3）*/
       for (let i = 0; i < 62; i++) {
-        treeAdd(grR(150, W - 150), grR(150, H - 120), grR(1.0, 1.7), 'stump');
+        treeAdd(grR(150, W - 150), grR(150, H - 120), grR(1.3, 2.1), 'stump');
       }
     }
     /* 树根暗影：每棵树脚下压一圈软阴影（物件才"长在地上"） */
