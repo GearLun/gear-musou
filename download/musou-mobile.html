@@ -19693,6 +19693,14 @@ function clearShotsInRange(x, y, R) {
   let n = 0;
   for (let i = shots.length - 1; i >= 0; i--) {
     const s = shots[i];
+    /* 🌳 敌方子弹也会被树冠挡住（用户要求"玩家的子弹和敌人的子弹"都被遮） */
+    if (!s.laser && !s.beam && treeBlocksBullet(s.x, s.y)) {
+      shots.splice(i, 1);
+      for (let k2 = 0; k2 < 3; k2++) {
+        addPart(s.x, s.y, Math.cos(k2 * 2.1) * 40, Math.sin(k2 * 2.1) * 40 - 20, 0.22, 2.2, '#3f5730', 0);
+      }
+      continue;
+    }
     if (s.dead) continue;
     const rr = R + (s.r || 8);   // 敌方弹体没有统一半径字段 → 给 8px 的宽容量（贴着圆的边也算斩到）
     const dx = s.x - x, dy = s.y - y;
@@ -23520,12 +23528,227 @@ function pxDecor(g, kind, x, y, s, gr, grR) {
   }
 }
 
+/* ============================================================
+   🌳 实体树木 / 树桩（2026-10 用户点名要的整套机制）
+   ============================================================
+   ① 数量多、体积大，另有**树桩**
+   ② 玩家/敌人**子弹被树遮挡** —— 撞到树冠就消失（不是穿过去）
+   ③ 玩家**不能走进树干**；站在树叶下时**树遮住玩家和敌人**
+   ④ **激光 / 近战技能不被遮挡** —— 它们画在树的**后面一层**
+   ⑤ 闪避**距离足够跨越**树木时直接穿过（近距离闪避照样被挡）
+   ⑥ **树桩挡路、但不挡子弹**（没有树冠）
+
+   分层（drawGame 里的顺序就是靠这个）：
+     地面 → 尸体 → 敌我单位 → **树（按 y 排序）** → 近战斩击 / 激光 / 弹幕 / 特效
+   数值：
+     · 树干碰撞 TREE_TRUNK_R（走不进去；和"树冠"是两回事，所以能站在叶子下被遮住）
+     · 子弹在树冠 TREE_BULLET_K 比例处消失（在视觉边缘内侧 → 看起来就是"钻进叶子没了"）
+     · 树桩只有碰撞、没有树冠 → 不挡子弹
+   ============================================================ */
+const TREE_TRUNK_R = 15;      // 树干碰撞半径（玩家走不进去）
+const TREE_BULLET_K = 0.95;   // 子弹在树冠的这个比例半径处被挡
+const STUMP_R = 13;           // 树桩碰撞半径
+const TREE_PASS_MIN = 34;     // 闪避要跨过树，至少得走出这么多像素（≈ 树干直径 + 身位）
+const TREE_CELL = 24;         // 碰撞网格边长（把树烘进网格，查一次数组就够，别每颗子弹遍历所有树）
+let worldTrees = [];          // { x, y, sc, kind:'tree'|'dead'|'stump', canopyR, solidR, bulletR, seed }
+/* 🔌 树木是否生效（测试里统一关掉，避免干扰"弹道机制"类断言；正常游玩恒为 true） */
+let TREES_ACTIVE = true;
+let treeSolidG = null, treeBulletG = null, treeGW = 0, treeGH = 0;
+/* 把树烘进两张占用网格（移动阻挡 / 子弹阻挡）—— 之后每帧只做 O(1) 查表 */
+function buildTreeGrids() {
+  treeGW = Math.ceil(W / TREE_CELL); treeGH = Math.ceil(H / TREE_CELL);
+  treeSolidG = new Uint8Array(treeGW * treeGH);
+  treeBulletG = new Uint8Array(treeGW * treeGH);
+  const stamp = (grid, cx, cy, r) => {
+    if (!(r > 0)) return;
+    const x0 = Math.max(0, Math.floor((cx - r) / TREE_CELL)), x1 = Math.min(treeGW - 1, Math.floor((cx + r) / TREE_CELL));
+    const y0 = Math.max(0, Math.floor((cy - r) / TREE_CELL)), y1 = Math.min(treeGH - 1, Math.floor((cy + r) / TREE_CELL));
+    for (let gy = y0; gy <= y1; gy++) {
+      for (let gx = x0; gx <= x1; gx++) {
+        /* 圆与格子矩形相交才标记（不然方格里会多出一圈看不见的墙） */
+        const rx0 = gx * TREE_CELL, ry0 = gy * TREE_CELL;
+        const nx2 = Math.max(rx0, Math.min(cx, rx0 + TREE_CELL));
+        const ny2 = Math.max(ry0, Math.min(cy, ry0 + TREE_CELL));
+        if ((nx2 - cx) * (nx2 - cx) + (ny2 - cy) * (ny2 - cy) <= r * r) grid[gy * treeGW + gx] = 1;
+      }
+    }
+  };
+  for (const tr of worldTrees) {
+    stamp(treeSolidG, tr.x, tr.y, tr.solidR || 0);
+    stamp(treeBulletG, tr.x, tr.y, tr.bulletR || 0);
+  }
+}
+function treeCellAt(grid, x, y) {
+  if (!grid) return 0;
+  const gx = Math.floor(x / TREE_CELL), gy = Math.floor(y / TREE_CELL);
+  if (gx < 0 || gy < 0 || gx >= treeGW || gy >= treeGH) return 0;
+  return grid[gy * treeGW + gx];
+}
+/* 移动阻挡（树干 / 树桩） */
+function treeBlocksMove(x, y, r) {
+  if (!TREES_ACTIVE) return false;
+  if (!treeSolidG || !worldTrees.length) return false;
+  const rr = r || 0;
+  if (treeCellAt(treeSolidG, x, y)) return true;
+  /* 半径大（Boss / 大件）时再探外圈，避免"贴边挤进去" */
+  if (rr > TREE_CELL * 0.5) {
+    const k = rr + TREE_CELL;
+    if (treeCellAt(treeSolidG, x - k, y) || treeCellAt(treeSolidG, x + k, y) ||
+        treeCellAt(treeSolidG, x, y - k) || treeCellAt(treeSolidG, x, y + k)) {
+      /* 外圈命中时做一次精确圆判定，别误挡 */
+      for (const tr of worldTrees) {
+        const sr = tr.solidR || 0;
+        if (!sr) continue;
+        const dx = tr.x - x, dy = tr.y - y;
+        if (dx * dx + dy * dy < (sr + rr) * (sr + rr)) return true;
+      }
+    }
+  }
+  return false;
+}
+/* 子弹阻挡（只有树冠；树桩没有树冠） */
+function treeBlocksBullet(x, y) {
+  if (!TREES_ACTIVE) return false;
+  return treeCellAt(treeBulletG, x, y) === 1;
+}
+/* 把地形里生成的树登记成实体（buildGround 里调用） */
+function treeAdd(x, y, sc, kind) {
+  if (x < 70 || y < 90 || x > W - 70 || y > H - 40) return;     // 别压边界 / 画出界
+  const isStump = kind === 'stump';
+  const isDead = kind === 'dead';
+  const canopyR = isStump ? 0 : (isDead ? 20 * sc : 26 * sc);
+  worldTrees.push({
+    x: x, y: y, sc: sc, kind: kind || 'tree',
+    canopyR: canopyR,
+    solidR: isStump ? STUMP_R : TREE_TRUNK_R * (sc > 1.6 ? 1.15 : 1),
+    bulletR: isStump ? 0 : canopyR * TREE_BULLET_K,
+    seed: ((x * 7919 + y * 104729) | 0) & 0xffff
+  });
+}
+/* ── 树的贴图（每种 kind × 缩放档烘一次，之后每帧就是 1 次 drawImage） ── */
+const TREE_SPR = Object.create(null);
+function treeSprite(kind, sc) {
+  const q = Math.max(1.0, Math.round(sc * 10) / 10);
+  const key = kind + '|' + q;
+  if (TREE_SPR[key] !== undefined) return TREE_SPR[key];
+  if (typeof document === 'undefined' || !document.createElement) { TREE_SPR[key] = null; return null; }
+  const W2 = Math.ceil(44 * q), H2 = Math.ceil(52 * q);
+  const cv = document.createElement('canvas');
+  cv.width = W2; cv.height = H2;
+  const g = cv.getContext && cv.getContext('2d');
+  if (!g) { TREE_SPR[key] = null; return null; }
+  const cx = W2 / 2, base = H2 - 3;
+  if (kind === 'stump') {
+    /* 树桩：断裂的截面 + 年轮 + 树皮 + 根部 ———— 挡路但不挡子弹 */
+    g.fillStyle = 'rgba(0,0,0,0.26)';
+    g.beginPath(); g.ellipse(cx, base + 1, 11 * q, 4 * q, 0, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#4a3524';
+    g.fillRect(Math.round(cx - 8 * q), Math.round(base - 12 * q), Math.round(16 * q), Math.round(13 * q));
+    g.fillStyle = '#3a2a1c';
+    g.fillRect(Math.round(cx - 8 * q), Math.round(base - 12 * q), Math.round(4 * q), Math.round(13 * q));
+    /* 截面 */
+    g.fillStyle = '#8a6a4a';
+    g.beginPath(); g.ellipse(cx, base - 12 * q, 8 * q, 3.4 * q, 0, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#a8825c';
+    g.beginPath(); g.ellipse(cx, base - 12.5 * q, 5.6 * q, 2.2 * q, 0, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = '#6b4f34'; g.lineWidth = Math.max(1, q);
+    g.beginPath(); g.ellipse(cx, base - 12.5 * q, 3.2 * q, 1.3 * q, 0, 0, Math.PI * 2); g.stroke();
+    /* 根 */
+    g.fillStyle = '#4a3524';
+    g.fillRect(Math.round(cx - 11 * q), Math.round(base - 2 * q), Math.round(5 * q), Math.round(3 * q));
+    g.fillRect(Math.round(cx + 6 * q), Math.round(base - 2 * q), Math.round(5 * q), Math.round(3 * q));
+    /* 一点苔藓 */
+    g.fillStyle = '#3f6733';
+    g.fillRect(Math.round(cx - 7 * q), Math.round(base - 9 * q), Math.round(3 * q), Math.round(3 * q));
+  } else if (kind === 'dead') {
+    /* 枯树（焦土）：黑枝 + 余烬 */
+    g.fillStyle = 'rgba(0,0,0,0.30)';
+    g.beginPath(); g.ellipse(cx, base + 1, 10 * q, 4 * q, 0, 0, Math.PI * 2); g.fill();
+    g.strokeStyle = '#3a2f26'; g.lineWidth = Math.max(2, 3 * q); g.lineCap = 'round';
+    g.beginPath(); g.moveTo(cx, base); g.lineTo(cx + 1.5 * q, base - 20 * q); g.stroke();
+    g.strokeStyle = '#5a4a3c'; g.lineWidth = Math.max(1, 1.4 * q);
+    g.beginPath(); g.moveTo(cx + 1.5 * q, base); g.lineTo(cx + 1.5 * q, base - 20 * q); g.stroke();
+    g.strokeStyle = '#3a2f26';
+    for (let b = 0; b < 3; b++) {
+      const by = base - (9 + b * 5) * q, dir = b % 2 ? 1 : -1;
+      g.lineWidth = Math.max(1, 2 * q);
+      g.beginPath(); g.moveTo(cx, by); g.lineTo(cx + dir * (9 + b * 3) * q, by - (6 + b * 2) * q); g.stroke();
+    }
+    g.fillStyle = 'rgba(255,110,50,0.75)';
+    g.fillRect(Math.round(cx - 1), Math.round(base - 22 * q), 2, 2);
+  } else {
+    /* 正常树：投影 + 树干 + 三球树冠（暗底→中色→亮面） */
+    g.fillStyle = 'rgba(0,0,0,0.24)';
+    g.beginPath(); g.ellipse(cx, base + 1, 14 * q, 5.5 * q, 0, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#4a3524';
+    g.fillRect(Math.round(cx - 2.4 * q), Math.round(base - 15 * q), Math.max(3, Math.round(4.8 * q)), Math.round(15 * q));
+    g.fillStyle = '#63482f';
+    g.fillRect(Math.round(cx - 2.4 * q), Math.round(base - 15 * q), Math.max(1, Math.round(1.8 * q)), Math.round(15 * q));
+    /* 根系 */
+    g.fillStyle = '#3a2a1c';
+    g.fillRect(Math.round(cx - 6 * q), Math.round(base - 2 * q), Math.round(4 * q), Math.round(3 * q));
+    g.fillRect(Math.round(cx + 2 * q), Math.round(base - 2 * q), Math.round(4 * q), Math.round(3 * q));
+    const cy4 = base - 22 * q;
+    g.fillStyle = '#22391f';
+    g.beginPath(); g.ellipse(cx - 8 * q, cy4 + 3 * q, 10 * q, 8.6 * q, 0, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.ellipse(cx + 8 * q, cy4 + 3 * q, 10 * q, 8.6 * q, 0, 0, Math.PI * 2); g.fill();
+    g.beginPath(); g.ellipse(cx, cy4 - 5 * q, 12.5 * q, 10 * q, 0, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#3f6733';
+    g.beginPath(); g.ellipse(cx - 2 * q, cy4 - 6 * q, 9 * q, 7.4 * q, 0, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#5c8f49';
+    g.beginPath(); g.ellipse(cx - 4.5 * q, cy4 - 8 * q, 5 * q, 4 * q, 0, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#7fb35f';
+    g.beginPath(); g.ellipse(cx - 6 * q, cy4 - 9.5 * q, 2.4 * q, 1.8 * q, 0, 0, Math.PI * 2); g.fill();
+  }
+  TREE_SPR[key] = cv;
+  return cv;
+}
+/* 画所有树（**必须画在敌我单位之后、特效之前** → 站在叶下会被遮住） */
+function drawWorldTrees(target) {
+  /* target 可传 —— 光栅化预览工具（tools\_rasterize-ground.js）要把树画进它自己的像素缓冲 */
+  const c = target || ctx;
+  if (!TREES_ACTIVE || !worldTrees.length) return;
+  const sm = c.imageSmoothingEnabled;
+  c.imageSmoothingEnabled = false;
+  for (const tr of worldTrees) {
+    /* 视野剔除（树冠大，留足余量；不然地图边缘的树每帧都白画） */
+    if (!tr.stump && (tr.x < camX - 80 || tr.x > camX + VW + 80 || tr.y < camY - 120 || tr.y > camY + VH + 120)) continue;
+    if (tr.kind === 'stump' && (tr.x < camX - 40 || tr.x > camX + VW + 40 || tr.y < camY - 60 || tr.y > camY + VH + 60)) continue;
+    const cv = treeSprite(tr.kind, tr.sc);
+    if (!cv) continue;
+    c.drawImage(cv, Math.round(tr.x - cv.width / 2), Math.round(tr.y - cv.height + 3));
+  }
+  if (sm) c.imageSmoothingEnabled = true;
+}
+/* 🧪 树木系统的测试钩子（和 trees 系统写在一起） */
+window.__musouTrees = () => ({
+  active: TREES_ACTIVE,
+  n: worldTrees.length,
+  trees: worldTrees.filter(x => x.kind !== 'stump').length,
+  stumps: worldTrees.filter(x => x.kind === 'stump').length,
+  sample: worldTrees.slice(0, 5).map(x => ({ x: Math.round(x.x), y: Math.round(x.y), kind: x.kind, solidR: x.solidR, bulletR: Math.round(x.bulletR) }))
+});
+window.__musouTreesOff = () => { TREES_ACTIVE = false; return true; };
+window.__musouDrawTrees = (target) => { drawWorldTrees(target); return worldTrees.length; };
+window.__musouCam = () => ({ camX, camY, VW, VH });
+window.__musouTreesOn = () => { TREES_ACTIVE = true; return true; };
+/* 找一颗"真实存在"的树 / 树桩，供行为断言用 */
+window.__musouTreePick = (kind) => {
+  const t2 = worldTrees.find(x => (kind ? x.kind === kind : x.kind !== 'stump'));
+  return t2 ? { x: t2.x, y: t2.y, solidR: t2.solidR, bulletR: t2.bulletR, kind: t2.kind } : null;
+};
+window.__musouTreeTest = (x, y) => ({
+  move: treeBlocksMove(x, y, 10),
+  bullet: treeBlocksBullet(x, y)
+});
 function buildGround() {
   /* 🎨 地表生成用**局部确定随机**：不吃全局 Math.random（见 tools\_fix-ground-rng.js 的说明） */
   let _gs = sceneDark ? 777001 : 424242;
   const gr = () => { _gs = (_gs * 1103515245 + 12345) & 0x7fffffff; return _gs / 0x7fffffff; };
   const grR = (a, b) => a + (b - a) * gr();
   const g = ground.getContext('2d');
+  /* 🌳 树是**实体**（每帧动态画），不能烘进地面贴图 —— 所以每次重建地面都清空重来 */
+  worldTrees = [];
   if (!sceneDark) {
     /* —— 草原战场：**统一底色 + 细密纹理**（彻底重做）——
        ⚠️ 用户截图里的问题：地图被**几块大色块硬拼**在一起。根因是我上一版画了
@@ -23694,33 +23917,26 @@ function buildGround() {
         }
       }
     }
-    /* ④c **树丛**（地图上的地标）——树冠用 3~4 个交叠的深绿球 + 树干 + 地面投影。
-       树是"物件"不是"色块"，所以轮廓必须是圆的、带亮面。 */
-    const treeAt = (tx, ty, sc2) => {
-      /* 投影 */
-      g.fillStyle = 'rgba(0,0,0,0.22)';
-      g.beginPath(); g.ellipse(tx, ty + 2 * sc2, 13 * sc2, 5 * sc2, 0, 0, TAU); g.fill();
-      /* 树干 */
-      g.fillStyle = '#4a3524';
-      g.fillRect(Math.round(tx - 2 * sc2), Math.round(ty - 9 * sc2), Math.max(2, Math.round(4 * sc2)), Math.round(11 * sc2));
-      g.fillStyle = '#63482f';
-      g.fillRect(Math.round(tx - 2 * sc2), Math.round(ty - 9 * sc2), Math.max(1, Math.round(2 * sc2)), Math.round(11 * sc2));
-      /* 树冠：三个交叠球（暗底 → 中色 → 亮面） */
-      const cx4 = tx, cy4 = ty - 14 * sc2;
-      g.fillStyle = '#22391f';
-      g.beginPath(); g.ellipse(cx4 - 7 * sc2, cy4 + 2 * sc2, 9 * sc2, 8 * sc2, 0, 0, TAU); g.fill();
-      g.beginPath(); g.ellipse(cx4 + 7 * sc2, cy4 + 2 * sc2, 9 * sc2, 8 * sc2, 0, 0, TAU); g.fill();
-      g.beginPath(); g.ellipse(cx4, cy4 - 4 * sc2, 11 * sc2, 9 * sc2, 0, 0, TAU); g.fill();
-      g.fillStyle = '#3f6733';
-      g.beginPath(); g.ellipse(cx4 - 2 * sc2, cy4 - 5 * sc2, 8 * sc2, 6.5 * sc2, 0, 0, TAU); g.fill();
-      g.fillStyle = '#5c8f49';
-      g.beginPath(); g.ellipse(cx4 - 4 * sc2, cy4 - 7 * sc2, 4.5 * sc2, 3.5 * sc2, 0, 0, TAU); g.fill();
-    };
-    for (let ci2 = 0; ci2 < 9; ci2++) {
-      const gx2 = grR(220, W - 220), gy2 = grR(200, H - 200);
-      const cnt = 2 + ((gr() * 3) | 0);
-      for (let i = 0; i < cnt; i++) {
-        treeAt(gx2 + grR(-52, 52), gy2 + grR(-34, 34), grR(1.5, 2.4));
+    /* ④c **树林（实体）**：数量多、体型大。树本身不烘进地面 —— 每帧按 y 排序画在角色**之后**，
+       所以"站在树叶下会被遮住"是天然的。这里只负责**撒点**并登记到 worldTrees。
+       间距用抖动（grid+jitter）而不是纯随机，避免挤成一坨 / 留大片空地。 */
+    {
+      const cellW = Math.round(W / 22), cellH = Math.round(H / 14);
+      for (let gy = 0; gy < 14; gy++) {
+        for (let gx = 0; gx < 22; gx++) {
+          if (gr() > 0.30) continue;                       // 30% 的格子长树 → 疏密有致
+          const tx = gx * cellW + grR(cellW * 0.15, cellW * 0.85);
+          const ty = gy * cellH + grR(cellH * 0.2, cellH * 0.9);
+          /* 出生点 / 地图中心附近留空，别一开局就被树怼脸 */
+          if (Math.hypot(tx - W / 2, ty - H / 2) < 210) continue;
+          treeAdd(tx, ty, grR(1.5, 2.6), 'tree');
+        }
+      }
+      /* 树桩：零星分布（数量约树的 1/3）*/
+      for (let i = 0; i < 46; i++) {
+        const tx = grR(150, W - 150), ty = grR(150, H - 120);
+        if (Math.hypot(tx - W / 2, ty - H / 2) < 150) continue;
+        treeAdd(tx, ty, grR(1.0, 1.7), 'stump');
       }
     }
     /* ⑤ 少量小件装饰（岩石 / 灌木 / 断柱）——**当作地图物件**，不当色块 */
@@ -23741,6 +23957,9 @@ function buildGround() {
     g.strokeRect(0, 0, W, H);
     g.strokeStyle = 'rgba(160,150,110,0.35)'; g.lineWidth = 2;
     g.strokeRect(11, 11, W - 22, H - 22);
+    /* 🌳 树撒完了 → 烘碰撞网格 + 按 y 排序（y 小的先画，后画的盖住前面的） */
+    worldTrees.sort((a, b) => a.y - b.y);
+    buildTreeGrids();
   } else {
     /* —— 黑暗战场（灭世魔君被讨伐后）——
        ⚠️ 同草原：**先铺满不透明底色兜底**，任何情况下都不留空区域。 */
@@ -23862,35 +24081,22 @@ function buildGround() {
       }
     }
     /* ⑤b **枯树地标**（焦土上只剩余烬里的黑色枯枝）——给地图"场所感"，不再是均匀一片 */
-    for (let ci3 = 0; ci3 < 8; ci3++) {
-      const gx3 = grR(220, W - 220), gy3 = grR(200, H - 200);
-      const cnt = 2 + ((gr() * 3) | 0);
-      for (let i = 0; i < cnt; i++) {
-        const tx = gx3 + grR(-44, 44), ty = gy3 + grR(-28, 28);
-        const sc3 = grR(1.3, 2.1);
-        /* 投影 */
-        g.fillStyle = 'rgba(0,0,0,0.30)';
-        g.beginPath(); g.ellipse(tx, ty + 2, 10 * sc3, 4 * sc3, 0, 0, TAU); g.fill();
-        /* 主干（细、黑） */
-        g.strokeStyle = '#3a2f26'; g.lineWidth = Math.max(2, 3 * sc3); g.lineCap = 'round';
-        g.beginPath(); g.moveTo(tx, ty); g.lineTo(tx + grR(-2, 2), ty - 16 * sc3); g.stroke();
-        /* 受光侧描边：让枯树在焦土上也有剪影 */
-        g.strokeStyle = '#5a4a3c'; g.lineWidth = Math.max(1, 1.4 * sc3);
-        g.beginPath(); g.moveTo(tx + 1.2, ty); g.lineTo(tx + 1.2, ty - 16 * sc3); g.stroke();
-        g.strokeStyle = '#3a2f26';
-        /* 三根枯枝 */
-        for (let b = 0; b < 3; b++) {
-          const by3 = ty - (7 + b * 4) * sc3;
-          const dir = b % 2 ? 1 : -1;
-          g.lineWidth = Math.max(1, 2 * sc3);
-          g.beginPath();
-          g.moveTo(tx, by3);
-          g.lineTo(tx + dir * grR(6, 12) * sc3, by3 - grR(4, 9) * sc3);
-          g.stroke();
+    /* ⑤b **枯树林（实体）**：和草原同一套（挡路 / 挡子弹 / 遮人），只是更细更黑 + 有树桩 */
+    {
+      const cellW = Math.round(W / 20), cellH = Math.round(H / 13);
+      for (let gy = 0; gy < 13; gy++) {
+        for (let gx = 0; gx < 20; gx++) {
+          if (gr() > 0.26) continue;
+          const tx = gx * cellW + grR(cellW * 0.15, cellW * 0.85);
+          const ty = gy * cellH + grR(cellH * 0.2, cellH * 0.9);
+          if (Math.hypot(tx - W / 2, ty - H / 2) < 210) continue;
+          treeAdd(tx, ty, grR(1.2, 2.2), 'dead');
         }
-        /* 一点余烬挂在枝头 */
-        g.fillStyle = 'rgba(255,110,50,0.5)';
-        g.fillRect(Math.round(tx - 1), Math.round(ty - 17 * sc3), 2, 2);
+      }
+      for (let i = 0; i < 40; i++) {
+        const tx = grR(150, W - 150), ty = grR(150, H - 120);
+        if (Math.hypot(tx - W / 2, ty - H / 2) < 150) continue;
+        treeAdd(tx, ty, grR(1.0, 1.6), 'stump');
       }
     }
     /* 中央惨淡幽光 + 重暗角（同样按地图对角线放大半径，别留死黑角） */
@@ -23907,6 +24113,9 @@ function buildGround() {
     g.strokeRect(11, 11, W - 22, H - 22);
     g.strokeStyle = 'rgba(120,46,40,0.14)'; g.lineWidth = 1;
     g.strokeRect(15, 15, W - 30, H - 30);
+    /* 🌳 枯树林同样要按 y 排序 + 烘碰撞网格（和草原同一套） */
+    worldTrees.sort((a, b) => a.y - b.y);
+    buildTreeGrids();
   }
 }
 function setSceneDark() {
@@ -28390,7 +28599,17 @@ function updateGame(dt, rawDt) {
 
   /* 位移与边界 */
   if (!p.roninDash && !p.petBlitz) {   // 一闪 / 闪焰冲锋期间坐标完全由它们接管（避免输入位移叠加漂移）
-    p.x += p.vx * dt; p.y += p.vy * dt;
+    const nx = p.x + p.vx * dt, ny = p.y + p.vy * dt;
+    /* 🌳 树木阻挡：走不进去（树干）。**闪避剩余位移足够跨过树 → 直接穿过**（用户要求） */
+    const dashLeft = (p.dashT > 0 ? Math.hypot(p.vx, p.vy) * p.dashT : 0);
+    const canPass = dashLeft >= TREE_PASS_MIN;
+    if (canPass || !treeBlocksMove(nx, ny, p.r)) {
+      p.x = nx; p.y = ny;
+    } else {
+      /* 轴分离滑动：斜着撞树时能贴着树干滑过去，不会整个人卡死 */
+      if (!treeBlocksMove(nx, p.y, p.r)) p.x = nx;
+      if (!treeBlocksMove(p.x, ny, p.r)) p.y = ny;
+    }
   }
   p.x = Math.max(30, Math.min(W - 30, p.x));
   p.y = Math.max(30, Math.min(H - 30, p.y));
@@ -28894,6 +29113,16 @@ function updateGame(dt, rawDt) {
 
   /* ---- 友方弹幕（无人机子弹 / 剑气斩 / 弓箭手箭矢 / 法师火球·闪电球） ---- */
   for (const b of pBullets) {
+    /* 🌳 子弹被树冠挡住（激光 / 近战不在此列 —— 它们走 lightBeams / slashes，不经过这里） */
+    if (!b.chi && treeBlocksBullet(b.x, b.y)) {
+      b.dead = true;
+      if (typeof addPart === 'function') {
+        for (let k2 = 0; k2 < 3; k2++) {
+          addPart(b.x, b.y, Math.cos(k2 * 2.1) * 40, Math.sin(k2 * 2.1) * 40 - 20, 0.22, 2.2, '#4a6b3a', 0);
+        }
+      }
+      continue;
+    }
     /* ⚡ 雷法师·闪电球：**自动追踪敌人** —— 每帧把飞行方向朝最近的存活敌人转一点（限速转向，像导弹那样画弧）。
        判定范围给得远（1600px）免得刚出手就找不着目标；没有敌人时保持原方向直线飞。 */
     if (b.bolt) {
@@ -29889,6 +30118,8 @@ function drawGame() {
   drawAllies();
   if (p.shinySet && p.alive) drawShinyAura();   // 局外·闪光套装：脚下金色光环
   drawPlayer();
+  /* 🌳 树画在**敌我单位之后**（所以站在树叶下会被遮住）、**近战/激光/弹幕之前** */
+  drawWorldTrees();
   if (p.shinySet && p.alive) drawShinyGear();   // 局外·闪光套装：头顶齿轮装饰（各职业套装共用标志）
   if (isRonin() && p.alive) drawRoninMark();    // 浪客：头顶月牙 + 腰间紫绶带（纯外观）
   if (isRonin() && p.alive) drawRoninWalls();   // 浪客·烈焰步：路径火墙
