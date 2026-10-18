@@ -2432,11 +2432,13 @@ const PX_DEATH_DUR = 0.30;          // 用户指定
 const PX_DEATH_DUR_BOSS = 0.46;     // Boss 稍长一点才看得清压迫感
 function pxCorpseAdd(e) {
   const spec = PX_SPEC[e.type];
-  if (!spec || !spec.death) return;
+  /* 🧢 训练家模式下的敌人是宝可梦外观 → 死亡动画也要用宝可梦贴图（用户反馈过两次） */
+  const petKey = (typeof foePetOf === 'function') ? foePetOf(e) : null;
+  if (!petKey && (!spec || !spec.death)) return;
   /* 遗体朝向：默认往「远离玩家」的方向倒（读起来像被打飞） */
   const dx = e.x - p.x, dy = e.y - p.y;
   const dir = (dx >= 0) ? 1 : -1;
-  const d = spec.death;
+  const d = (spec && spec.death) || { mode: 'topple' };   // 宝可梦外观没有像素模型的 death 配置 → 默认倒地
   const dur = e.boss ? PX_DEATH_DUR_BOSS : PX_DEATH_DUR;
   pxCorpses.push({
     type: e.type, mode: d.mode, x: e.x, y: e.y, r: e.r, air: e.airH || 0,
@@ -2445,7 +2447,11 @@ function pxCorpseAdd(e) {
     t: 0, dur: dur, dir: dir,
     /* ⚠️ 同样用确定性相位（不用 Math.random，见 pxRand 的注释） */
     seed: pxCorpses.length * 7.13 + Math.abs(e.x * 0.011) + Math.abs(e.y * 0.017),
-    hitAng: Math.atan2(dy, dx)
+    hitAng: Math.atan2(dy, dx),
+    /* 🐾 宝可梦外观的遗体：把贴图信息冻结在死亡那一刻（之后不再跟随敌人状态） */
+    petKey: petKey || null,
+    petDir: petKey ? foePetDir(e) : 0,
+    petV: e.shiny ? 1 : 0
   });
   /* 遗体数量上限：尸横遍野时不能让绘制爆掉（最老的先消失） */
   if (pxCorpses.length > 220) pxCorpses.splice(0, pxCorpses.length - 220);
@@ -2482,6 +2488,8 @@ function pxCorpseUpdate(dt) {
 function pxCorpseDraw() {
   if (!pxCorpses.length) return;
   for (const c of pxCorpses) {
+    /* 🐾 宝可梦外观的遗体：单独一条绘制路径（同一套倒地/渐黑/淡出，但贴图换成宝可梦） */
+    if (c.petKey) { pxCorpseDrawPet(c); continue; }
     const spec = PX_SPEC[c.type];
     if (!spec) continue;
     const k = Math.min(1, c.t / c.dur);                 // 0 → 1 进度
@@ -2515,6 +2523,58 @@ function pxCorpseDraw() {
     ctx.globalAlpha = 1;
     ctx.restore();
   }
+}
+/* 🐾 宝可梦外观的死亡演出：**冻结帧 + 倒地 + 渐黑 + 淡出**
+   （用户要求：「敌人死亡后不会直接消失，而是渐渐倒下变黑然后消失」——
+     换成宝可梦外观后，原版像素模型的死亡动画就用不上了）
+   ⚠️ 渐黑用 ctx.filter（不支持 filter 的浏览器退化成只淡出，绝不抛错、绝不空场）。 */
+let _pxFilterOK = -1;
+function pxFilterOK() {
+  if (_pxFilterOK < 0) {
+    try {
+      ctx.filter = 'brightness(0.8)';
+      _pxFilterOK = (ctx.filter && ctx.filter !== 'none') ? 1 : 0;
+      ctx.filter = 'none';
+    } catch (e) { _pxFilterOK = 0; }
+  }
+  return _pxFilterOK === 1;
+}
+function pxCorpseDrawPet(c) {
+  const M = PET_META[c.petKey], FR = PET_FR[c.petKey], img = petImg[c.petKey];
+  if (!M || !FR || !img || !petOK[c.petKey]) return;
+  const k = Math.min(1, c.t / c.dur);
+  /* 动作取 hurt（倒地前挨了最后一击的姿势），帧取中间那帧并**冻住**（遗体不该继续动） */
+  const vr = FR[c.petV] && (FR[c.petV].hurt || FR[c.petV].idle);
+  if (!vr) return;
+  const arr = vr[c.petDir] || vr[0];
+  if (!arr || !arr.length) return;
+  const fr = arr[Math.floor(arr.length / 2)];
+  if (!fr) return;
+  const MR = M.hurt || M.idle;
+  if (!MR) return;
+  const gy = (MR.gy && MR.gy[c.petDir] !== undefined) ? MR.gy[c.petDir] : MR.sh * 0.85;
+  if (!isFinite(gy) || gy <= 4) return;
+  const spec0 = PX_SPEC[c.type];
+  const targetH = (spec0 ? (spec0.h + 2) * spec0.sc : Math.max(24, c.r * 2.6)) * FOE_PET_SIZE_K;
+  const sc = targetH / gy;
+  const ease = k * k;
+  /* 倒地姿态：往远离玩家的方向歪下去 + 轻微下沉（和像素模型同一套手感） */
+  const rot = c.dir * 1.45 * ease;
+  const lift = -c.r * 0.10 * ease;
+  const alpha = k < 0.55 ? 1 : Math.max(0, 1 - (k - 0.55) / 0.45);
+  const darkK = Math.min(1, k * 1.25);                 // 渐黑（前 80% 就黑透）
+  const w = MR.sw * sc, h = MR.sh * sc;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.imageSmoothingEnabled = false;
+  ctx.translate(c.x, c.y - c.air + c.r * 0.86 + lift);
+  if (rot) ctx.rotate(rot);
+  const useF = pxFilterOK() && darkK > 0.02;
+  if (useF) ctx.filter = 'brightness(' + (1 - 0.82 * darkK).toFixed(3) + ')';
+  ctx.drawImage(img, fr[0], fr[1], fr[2], fr[3], -w / 2, -gy * sc, w, h);
+  if (useF) ctx.filter = 'none';
+  ctx.globalAlpha = 1;
+  ctx.restore();
 }
 /* ============================================================
    🧱 专属建模器（PX_BODY）
@@ -24703,6 +24763,8 @@ const FOE_PET = {
   cavalry: ['foe_ponyta', 'foe_rapidash']
 };
 const FOE_PET_EVO_WAVE = 15;      // 第 15 波**结束之后**全体进化 → 16 波起用 evo 形态
+/* 敌方宝可梦的整体体型系数（用户 2026-10：先按像素模型高度，之后要求「再减少 1/3」 → 2/3）*/
+const FOE_PET_SIZE_K = 2 / 3;
 /* 当前该用哪一段形态；不是训练家 / 不在名单里 → null（走原来的像素模型） */
 function foePetOf(e) {
   if (!e || !isTrainer()) return null;
@@ -24754,7 +24816,8 @@ function drawFoePet(e, key) {
   /* 目标身高 = 像素模型的实际绘制高度（h + 1px 描边留白）× 放大倍数
      → 换成宝可梦外观后**体型和原来一致**（用户：「将体型全部换成正常体型」） */
   const spec0 = PX_SPEC[e.type];
-  const targetH = spec0 ? (spec0.h + 2) * spec0.sc : Math.max(24, e.r * 2.6);
+  /* ⚠️ ×2/3：用户要求「所有普通敌人宝可梦的体型再减少 1/3，比我方的宝可梦大得多」 */
+  const targetH = (spec0 ? (spec0.h + 2) * spec0.sc : Math.max(24, e.r * 2.6)) * FOE_PET_SIZE_K;
   const k = targetH / gy;
   const dw = sw * k, dh = sh * k;
   const dx = -dw / 2, dy = -gy * k;
@@ -33765,6 +33828,13 @@ window.__musouKnockTgt = (dx, dy, hp) => { // 测试钩子：可被击退的不�
   return probeTgt.length - 1;
 };
 /* 🌀 卡住自愈的行为测试：给真·敌人上定身 / 读卡住计时 */
+/* 🐾 测试钩子：遗体队列（看"宝可梦外观的死亡是否走了宝可梦贴图"） */
+window.__musouCorpses = () => ({
+  n: pxCorpses.length,
+  petN: pxCorpses.filter(c => c.petKey).length,
+  keys: pxCorpses.filter(c => c.petKey).map(c => c.petKey),
+  modes: pxCorpses.map(c => c.mode)
+});
 window.__musouFoeStun = (i, secs) => {
   const e = enemies[i];
   if (!e || e.dead) return false;
