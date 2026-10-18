@@ -1903,16 +1903,13 @@ function pxEye(px, x, y, pal, big, wide) {
     return;
   }
   if (wide) {
-    /* 标准像素眼：2×2 眼白 → 斜对的深瞳 → 右上 1px 高光
-       （这样 4 个像素里有 3 种色，才读得出"在看"） */
-    pxRect(px, x, y, 2, 2, pal.w);
-    pxPut(px, x, y, pxCI(px, pal.e));
-    pxPut(px, x + 1, y + 1, pxCI(px, pal.e));
-    pxPut(px, x + 1, y, pxCI(px, '#ffffff'));
+    /* 锐利眼型：2px 宽 × 1px 高的深色眼缝 + 上方一道更深的眉线。
+       特意**不画眼白**——2×2 白眼球在 20~24px 的角色上会读成"含泪大眼"。 */
+    pxRect(px, x, y, 2, 1, pal.e);
+    pxRect(px, x, y - 1, 2, 1, pxCI(px, pxDeep(pal.e, 0.45)));
   } else {
-    /* 小头（headR < 3.4）：1×2 竖瞳 + 1px 高光，别让眼睛占满脸 */
-    pxRect(px, x, y, 1, 2, pal.e);
-    pxPut(px, x, y, pxCI(px, pal.w));
+    /* 小头（headR < 3.4）：1×1 深色眼点，不占脸 */
+    pxPut(px, x, y, pxCI(px, pal.e));
   }
 }
 
@@ -24420,13 +24417,23 @@ function treeSprite(kind, sc, variant, tint) {
     g.fillRect(Math.round(cx - 3.4 * q), Math.round(base - 15.5 * q), Math.max(5, Math.round(6.8 * q)), Math.round(16 * q));
     /* 树干倾斜：不同变体给不同斜度（同一片林子里树干都笔直 = 复制感） */
     const lean = ((vv % 5) - 2) * 1.1;
-    g.fillStyle = '#5a4229';
+    /* 树干三色：背光 / 主体 / 受光（一根纯色棍 = 廉价） */
+    g.fillStyle = '#3b2a1a';
     g.beginPath();
     g.moveTo(cx - 2.4 * q, base);
     g.lineTo(cx - 2.4 * q + lean * q, base - 15 * q);
     g.lineTo(cx + 2.4 * q + lean * q, base - 15 * q);
     g.lineTo(cx + 2.4 * q, base);
     g.closePath(); g.fill();
+    g.fillStyle = '#6b5232';
+    g.beginPath();
+    g.moveTo(cx - 1.6 * q, base);
+    g.lineTo(cx - 1.6 * q + lean * q, base - 15 * q);
+    g.lineTo(cx + 1.2 * q + lean * q, base - 15 * q);
+    g.lineTo(cx + 1.2 * q, base);
+    g.closePath(); g.fill();
+    g.fillStyle = '#8f7048';
+    g.fillRect(Math.round(cx - 1.4 * q + lean * q * 0.5), Math.round(base - 14 * q), Math.max(1, Math.round(1.2 * q)), Math.round(12 * q));
     g.fillStyle = '#7a5c3a';   // 受光侧树皮
     g.fillRect(Math.round(cx - 2.4 * q), Math.round(base - 15 * q), Math.max(1, Math.round(1.8 * q)), Math.round(15 * q));
     g.fillStyle = '#3f2e1c';   // 背光侧
@@ -24466,25 +24473,26 @@ function treeSprite(kind, sc, variant, tint) {
       7: [[-12, -3, 3.8, 3.2], [13, -4, 4, 3.4], [0, -14, 4.2, 3.4], [-6, -11, 3.2, 2.8]]
     };
     /* 3 套配色（深浅/冷暖略有差异）——同一片树林里有变化才不像复制品 */
+    /* 每套 6 档：最深只做阴影/描边，主色是 m/l —— 否则整棵树读成黑团 */
     const TINT = [
-      { dd: '#141d0e', d: '#1c2c14', m: '#29441d', l: '#3b5e29', h: '#527d36', hh: '#74a34c' },
-      { dd: '#111a10', d: '#192a16', m: '#26421f', l: '#385c2c', h: '#4e7a3a', hh: '#6f9f4e' },
-      { dd: '#151f10', d: '#1e2f14', m: '#2b471c', l: '#3f6226', h: '#578335', hh: '#7aa84a' }
+      { dd: '#1a2412', d: '#25361a', m: '#37551f', l: '#4d7329', h: '#67943c', hh: '#8cbb58' },
+      { dd: '#18220f', d: '#22331a', m: '#335220', l: '#4a702c', h: '#628f40', hh: '#84b25a' },
+      { dd: '#1c2614', d: '#28391c', m: '#3a5822', l: '#51782c', h: '#6b9940', hh: '#90bf5c' }
     ];
     const TC = TINT[tt];
     /* ⓪ 描边（泰拉瑞亚式）：同一组叶团放大 1.7px 用近黑画一遍 */
-    const OUT = '#0c1410';
-    for (const o of bumps[vv]) blob(o[0], o[1], o[2] + 1.7, o[3] + 1.7, OUT);
-    for (const o of cores[vv]) blob(o[0], o[1], o[2] + 1.7, o[3] + 1.7, OUT);
+    const OUT = '#101a0d';
+    for (const o of bumps[vv]) blob(o[0], o[1], o[2] + 1.2, o[3] + 1.2, OUT);
+    for (const o of cores[vv]) blob(o[0], o[1], o[2] + 1.2, o[3] + 1.2, OUT);
     /* ① 暗底（只在核心团；凸起**不用近黑**，否则边缘会露一粒粒黑点） */
     for (const b of cores[vv]) blob(b[0], b[1], b[2], b[3], TC.dd);
     /* ② 树冠下沿暗面（下方受不到光，这是"体积感"的关键） */
     blob(0, 7.5, 11.5, 4.2, TC.d);
     /* ③ 中间调：核心团 + **凸起一起铺**（凸起因此并入树体，黑点消失） */
     for (const b of bumps[vv]) blob(b[0] - 0.6, b[1] - 0.8, b[2] * 0.96, b[3] * 0.94, TC.m);
-    for (const b of cores[vv]) blob(b[0] - 0.8, b[1] - 1.6, b[2] * 0.90, b[3] * 0.88, TC.m);
+    for (const b of cores[vv]) blob(b[0] - 0.8, b[1] - 1.6, b[2] * 0.96, b[3] * 0.94, TC.m);
     /* ④ 受光面（左上） */
-    for (const b of cores[vv]) blob(b[0] - 2.4, b[1] - 3.4, b[2] * 0.66, b[3] * 0.62, TC.l);
+    for (const b of cores[vv]) blob(b[0] - 2.2, b[1] - 3.0, b[2] * 0.82, b[3] * 0.78, TC.l);
     /* ⑤ 多处亮簇（只放在左上象限，光从左上来） */
     blob(-5.5, -8.5, 4.6, 3.6, TC.h);
     blob(-2, -11.5, 3.0, 2.4, TC.hh);
