@@ -1749,6 +1749,69 @@ function pxOutline(px, c) {
   }
 }
 
+function pxMix3(hex, tr, tg, tb, k) {
+  if (typeof hex !== 'string' || hex[0] !== '#') return hex;
+  let h = hex.slice(1);
+  if (h.length === 3) h = h[0] + h[0] + h[1] + h[1] + h[2] + h[2];
+  if (h.length < 6) return hex;
+  const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
+  if (!isFinite(r) || !isFinite(g) || !isFinite(b)) return hex;
+  const m = (v, t) => Math.max(0, Math.min(255, Math.round(v + (t - v) * k)));
+  const to2 = (v) => v.toString(16).padStart(2, '0');
+  return '#' + to2(m(r, tr)) + to2(m(g, tg)) + to2(m(b, tb));
+}
+/* 轮廓光：上 / 左 边缘的像素向暖白提亮 */
+function pxRimLight(px, k) {
+  const w = px.bw, h = px.bh;
+  const src = px.buf.slice();
+  /* 只提亮"已经比较亮"的像素（暗部提亮会显脏）；用调色板里的颜色反查亮度 */
+  const isBright = (ci) => {
+    const c = px.pal[ci];
+    if (typeof c !== 'string' || c[0] !== '#') return false;
+    let hx = c.slice(1);
+    if (hx.length === 3) hx = hx[0] + hx[0] + hx[1] + hx[1] + hx[2] + hx[2];
+    if (hx.length < 6) return false;
+    const r = parseInt(hx.slice(0, 2), 16), g = parseInt(hx.slice(2, 4), 16), b = parseInt(hx.slice(4, 6), 16);
+    return (r * 0.299 + g * 0.587 + b * 0.114) > 92;
+  };
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      const i = y * w + x;
+      const ci = src[i];
+      if (!ci) continue;
+      /* 上或左是空的 → 这是受光轮廓 */
+      const upEmpty = !src[i - w], leftEmpty = !src[i - 1];
+      if (!upEmpty && !leftEmpty) continue;
+      if (!isBright(ci)) continue;
+      px.buf[i] = pxCI(px, pxMix3(px.pal[ci], 255, 250, 235, k === undefined ? 0.30 : k));
+    }
+  }
+}
+/* 底部环境遮蔽：贴地的 2~3 行压暗（越靠下越暗），让角色"坐"在地上 */
+function pxFootAO(px, k) {
+  const w = px.bw, h = px.bh;
+  /* 找最下面一行有不透明像素的位置 */
+  let bottom = -1;
+  for (let y = h - 1; y >= 0; y--) {
+    let any = false;
+    for (let x = 0; x < w; x++) if (px.buf[y * w + x]) { any = true; break; }
+    if (any) { bottom = y; break; }
+  }
+  if (bottom < 0) return;
+  const rows = 2;
+  for (let d2 = 0; d2 < rows; d2++) {
+    const y = bottom - d2;
+    if (y < 0) break;
+    const f = (k === undefined ? 0.26 : k) * (1 - d2 / rows);
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      const ci = px.buf[i];
+      if (!ci) continue;
+      px.buf[i] = pxCI(px, pxMix3(px.pal[ci], 22, 18, 26, f));
+    }
+  }
+}
+
 /* ---------- 光栅化（每个 key 只做一次） ---------- */
 function pxRaster(px, key) {
   const had = PX_CV[key];
@@ -2282,6 +2345,8 @@ function pxPlayerSpriteOf(cls, frame, mode, variant) {
   const pal = pxPalOf(tint ? tint.col : spec.col, tint ? tint.dark : spec.dark, tint ? tint.acc : spec.acc);
   const px = PXC(spec.w, spec.h);
   pxHumanoid(px, frame, mode, spec.cfg, pal);
+  /* ✨ 和敌人同一套质感抛光（轮廓光 + 底部环境遮蔽），必须在描边之前 */
+  pxRimLight(px, 0.30); pxFootAO(px, 0.20);
   pxOutline(px, pal.k);
   let out = px;
   if (variant === 'flash') {
@@ -2368,12 +2433,14 @@ function pxPlayerBody(cls, opts) {
      画在身体之前、脚底位置：两块宽度递减的暗块拼成扁平椭圆（只 2 次 fillRect，极便宜），
      远看是一团柔和影子。低配模式直接跳过（省画）。 */
   if (o.shadow !== false && !lowSpecOn()) {
-    const sw = Math.round(spec.w * spec.sc * 0.32);
-    const sy2 = Math.round(footY - 1);
-    ctx.globalAlpha = 0.25; ctx.fillStyle = '#0a0f08';
-    ctx.fillRect(-sw, sy2 - 1, sw * 2, 3);
-    ctx.globalAlpha = 0.15;
-    ctx.fillRect(-sw + 2, sy2 + 2, sw * 2 - 4, 2);
+    /* 双层椭圆：外圈柔 + 内核实（矩形块会露怯） */
+    const sw = Math.round(spec.w * spec.sc * 0.34);
+    const sy2 = footY - 1;
+    ctx.fillStyle = '#0a0f08';
+    ctx.globalAlpha = 0.16;
+    ctx.beginPath(); ctx.ellipse(0, sy2 + 1, sw * 1.15, 4.2, 0, 0, TAU); ctx.fill();
+    ctx.globalAlpha = 0.26;
+    ctx.beginPath(); ctx.ellipse(0, sy2 + 1, sw * 0.72, 2.6, 0, 0, TAU); ctx.fill();
     ctx.globalAlpha = 1;
   }
   ctx.save();
@@ -2396,6 +2463,8 @@ function pxSpriteOf(type, frame, mode, col, dark, acc, variant) {
   /* 'blade' = 只烘"剑"那一层（虚空执剑者幽灵态用）；'bladeFlash' 备用 */
   const part = (variant === 'blade') ? 'blade' : '';
   pxModelDraw(px, spec, frame, mode, pal, part);
+  /* ✨ 质感抛光：轮廓光（上/左受光边提亮）+ 底部环境遮蔽 —— 必须在描边之前 */
+  if (part !== 'blade') { pxRimLight(px, 0.28); pxFootAO(px, 0.20); }
   if (spec.kind !== 'slime') pxOutline(px, pal.k);   // 果冻怪不描边（半透明更 Q）
   let out = px;
   if (variant === 'flash') {
@@ -24312,13 +24381,481 @@ window.__musouCam = () => ({ camX, camY, VW, VH });
 window.__musouTreesOn = () => { TREES_ACTIVE = true; return true; };
 /* 找一颗"真实存在"的树 / 树桩，供行为断言用 */
 window.__musouTreePick = (kind) => {
-  const t2 = worldTrees.find(x => (kind ? x.kind === kind : x.kind !== 'stump'));
-  return t2 ? { x: t2.x, y: t2.y, solidR: t2.solidR, bulletR: t2.bulletR, kind: t2.kind } : null;
+  /* ⚠️ 挑"最孤立"的那一棵：树桩本身不挡子弹，但它旁边的树会挡 ——
+     随便取第一棵会让"树桩不该挡子弹"的断言偶发变红
+     （地表生成一改，树的布局整体移位就会踩到）。 */
+  const pool = worldTrees.filter(x => (kind ? x.kind === kind : x.kind !== 'stump'));
+  if (!pool.length) return null;
+  let best = null, bestD = -1;
+  for (const x of pool) {
+    let near = 1e9;
+    for (const o of worldTrees) {
+      if (o === x) continue;
+      const d = Math.hypot(o.x - x.x, o.y - x.y) - (o.bulletR || 0);
+      if (d < near) near = d;
+    }
+    if (near > bestD) { bestD = near; best = x; }
+  }
+  return best ? { x: best.x, y: best.y, solidR: best.solidR, bulletR: best.bulletR, kind: best.kind, clearD: +bestD.toFixed(1) } : null;
 };
+/* 用**玩家真实半径**判是否还卡在树里（推挤保证 = solidR + p.r + 0.5） */
+window.__musouTreeTestPlayer = () => ({
+  move: treeBlocksMove(p.x, p.y, p.r),
+  bullet: treeBlocksBullet(p.x, p.y),
+  pr: p.r
+});
 window.__musouTreeTest = (x, y) => ({
   move: treeBlocksMove(x, y, 10),
   bullet: treeBlocksBullet(x, y)
 });
+const ART_BASE_GRASS = '#456334';        // 兜底底色
+
+/* 草 6 阶（暗 → 亮）：偏黄绿的暖调，星露谷那种"有太阳"的绿 */
+const ART_GRASS_TONES = ['#456b31', '#527c3a', '#5f8c43', '#6d9c4c', '#7cab57', '#8db965'];
+/* 土 6 阶（暗 → 亮） */
+const ART_DIRT_TONES = ['#4b3a26', '#5b482e', '#6b5637', '#7c6543', '#8d754f', '#9e865f'];
+/* 水 4 阶（深 → 浅） */
+const ART_WATER_TONES = ['#2b5f78', '#317186', '#3a8398', '#4695a8'];
+const ART_WATER_FOAM = '#8fd2e4';
+const ART_SHORE_SAND = '#a9925f';
+const ART_SHORE_MUD = '#4a4a32';
+
+/* 4×4 有序抖动矩阵（Bayer）：像素画做连续渐变的标配 */
+const ART_BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+
+/* 确定性 2D 哈希（0..1） */
+function artHash(x, y, s) {
+  let h = Math.imul(x | 0, 374761393) ^ Math.imul(y | 0, 668265263) ^ Math.imul(s | 0, 1274126177);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967295;
+}
+/* 平滑值噪声 0..1 */
+function artNoise(x, y, s) {
+  const xi = Math.floor(x), yi = Math.floor(y);
+  const xf = x - xi, yf = y - yi;
+  const u = xf * xf * (3 - 2 * xf), v = yf * yf * (3 - 2 * yf);
+  const a = artHash(xi, yi, s), b = artHash(xi + 1, yi, s);
+  const c = artHash(xi, yi + 1, s), d = artHash(xi + 1, yi + 1, s);
+  const ab = a + (b - a) * u, cd = c + (d - c) * u;
+  return ab + (cd - ab) * v;
+}
+/* 分形叠加 0..1 */
+function artFbm(x, y, s, oct) {
+  let sum = 0, amp = 0.5, f = 1, norm = 0;
+  for (let i = 0; i < oct; i++) {
+    sum += artNoise(x * f, y * f, s + i * 37) * amp;
+    norm += amp; amp *= 0.5; f *= 2.07;
+  }
+  return sum / norm;
+}
+/* 粗网格场：一次算好，逐像素只做双线性采样（否则 1.4M 像素 × 10 八度会卡死） */
+function artField(fw, fh, sx, sy, seed, oct) {
+  const f = new Float32Array(fw * fh);
+  for (let y = 0; y < fh; y++) {
+    for (let x = 0; x < fw; x++) f[y * fw + x] = artFbm(x * sx, y * sy, seed, oct);
+  }
+  return { w: fw, h: fh, f: f };
+}
+function artSample(F, u, v) {
+  const x = u * (F.w - 1), y = v * (F.h - 1);
+  const xi = Math.min(F.w - 2, Math.max(0, Math.floor(x))), yi = Math.min(F.h - 2, Math.max(0, Math.floor(y)));
+  const xf = x - xi, yf = y - yi;
+  const a = F.f[yi * F.w + xi], b = F.f[yi * F.w + xi + 1];
+  const c = F.f[(yi + 1) * F.w + xi], d = F.f[(yi + 1) * F.w + xi + 1];
+  const ab = a + (b - a) * xf, cd = c + (d - c) * xf;
+  return ab + (cd - ab) * yf;
+}
+/* 按连续值从色板取一档，带有序抖动 → 平滑但保持像素颗粒 */
+function artToneAt(tones, v, x, y) {
+  const fi = Math.max(0, Math.min(1, v)) * (tones.length - 1);
+  const i0 = Math.floor(fi);
+  const fr = fi - i0;
+  const b = ART_BAYER4[(y & 3) * 4 + (x & 3)] / 16;
+  return tones[Math.min(tones.length - 1, i0 + (fr > b ? 1 : 0))];
+}
+function artRgb(hex) {
+  return [parseInt(hex.slice(1, 3), 16), parseInt(hex.slice(3, 5), 16), parseInt(hex.slice(5, 7), 16)];
+}
+
+/* ---------- ① 地形底图：粗网格噪声 + 有序抖动（一次 putImageData） ---------- */
+function artPaintTerrain(g, W, H) {
+  const SC = 2;                                   // 1/2 分辨率生成，放大 2 倍（地表 texel = 2 屏幕像素）
+  const TW = Math.ceil(W / SC), TH = Math.ceil(H / SC);
+  const tmp = document.createElement('canvas');
+  tmp.width = TW; tmp.height = TH;
+  const tg = tmp.getContext && tmp.getContext('2d');
+  if (!tg || !tg.createImageData) return false;
+  const img = tg.createImageData(TW, TH);
+  if (!img || !img.data) return false;
+  const d = img.data;
+  /* 粗网格：大尺度地势 / 中尺度斑驳 / 阳光池 / 干土带 */
+  const F1 = artField(150, 84, 0.075, 0.075, 11, 3);
+  const F2 = artField(300, 168, 0.155, 0.155, 23, 2);   /* 中频放慢一倍：70px 尺度的斑驳 */
+  const FS = artField(90, 50, 0.11, 0.11, 57, 2);
+  const FD = artField(130, 73, 0.10, 0.10, 91, 3);
+  const GT = ART_GRASS_TONES.map(artRgb);
+  const DT = ART_DIRT_TONES.map(artRgb);
+  for (let y = 0; y < TH; y++) {
+    const nv = y / (TH - 1);
+    for (let x = 0; x < TW; x++) {
+      const nu = x / (TW - 1);
+      const big = artSample(F1, nu, nv);
+      const med = artSample(F2, nu, nv);
+      const fine = artHash(x, y, 41);
+      /* 光照：左上暖亮 → 右下冷暗（方向光是"像个游戏"的关键） */
+      const light = 1 - (nu * 0.50 + nv * 0.50);
+      const sun = artSample(FS, nu, nv);
+      const sunBoost = sun > 0.60 ? (sun - 0.60) * 2.4 : 0;
+      const dryN = artSample(FD, nu, nv);
+      const bayer = ART_BAYER4[(y & 3) * 4 + (x & 3)] / 16;
+      /* 干土带：阈值 + 抖动 → 有机边界 */
+      const useDirt = dryN > 0.700 + bayer * 0.055;
+      let v = 0.38 * big + 0.13 * med + 0.07 * fine + 0.22 * light + 0.15 * sunBoost + 0.22;
+      let tones, pal;
+      if (useDirt) {
+        v = 0.30 + (dryN - 0.70) * 2.4 + (med - 0.5) * 0.30 + light * 0.16;
+        tones = ART_DIRT_TONES; pal = DT;
+      } else { tones = ART_GRASS_TONES; pal = GT; }
+      /* 直接按 index 取色（省掉字符串查表） */
+      const fi = Math.max(0, Math.min(1, v)) * (tones.length - 1);
+      const i0 = Math.floor(fi);
+      const c = pal[Math.min(tones.length - 1, i0 + ((fi - i0) > bayer ? 1 : 0))];
+      const o = (y * TW + x) * 4;
+      d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255;
+    }
+  }
+  tg.putImageData(img, 0, 0);
+  const sm = g.imageSmoothingEnabled;
+  g.imageSmoothingEnabled = false;                 // 像素放大：必须关平滑
+  g.drawImage(tmp, 0, 0, TW, TH, 0, 0, W, H);
+  g.imageSmoothingEnabled = sm;
+
+  return true;
+}
+
+/* ---------- ② 预烘小贴图：草丛 / 花 / 石 / 蘑菇（批量 drawImage，比上万次 fillRect 快得多） ---------- */
+let ART_SPR = null;
+function artSprites() {
+  if (ART_SPR) return ART_SPR;
+  const mk = (w, h, painter) => {
+    const cv = document.createElement('canvas');
+    cv.width = w; cv.height = h;
+    const cg = cv.getContext && cv.getContext('2d');
+    if (!cg) return null;
+    painter(cg, w, h);
+    return cv;
+  };
+  const tufts = [];
+  /* 6 种形态 × 2 种明暗 = 12 个草丛变体（11×13，底边贴地） */
+  for (let v = 0; v < 6; v++) {
+    for (let c2 = 0; c2 < 2; c2++) {
+      const cv = mk(11, 13, (cg, w2, h2) => {
+        /* 草丛配色贴着地形色阶走：太黑会把整张地图读成"麻点" */
+        const base = c2 ? '#40632c' : '#4e7636';
+        const tip = c2 ? '#6d9847' : '#8ab75c';
+        const n = 3 + (v % 3);
+        for (let i = 0; i < n; i++) {
+          const bx = 5 + Math.round((artHash(v, i, 1) - 0.5) * 5);
+          const hh = 5 + Math.round(artHash(v, i, 2) * 6);
+          const lean = Math.round((artHash(v, i, 3) - 0.5) * 4);
+          for (let k = 0; k < hh; k++) {
+            const t = k / Math.max(1, hh - 1);
+            const x = Math.round(bx + lean * t * t);
+            const y = h2 - 1 - k;
+            if (x < 0 || x >= w2 || y < 0) continue;
+            cg.fillStyle = t > 0.5 ? tip : base;
+            cg.fillRect(x, y, 1, 1);
+          }
+        }
+      });
+      if (cv) tufts.push(cv);
+    }
+  }
+  /* 4 种花簇（13×11） */
+  const flowers = [];
+  const FPAL = [['#e8e2b0', '#fffbe0'], ['#e0c24a', '#f7e58a'], ['#d98bb0', '#f5c0d8'], ['#9fb6e8', '#d0def7']];
+  for (let v = 0; v < 4; v++) {
+    const pal = FPAL[v];
+    const cv = mk(13, 11, (cg, w2, h2) => {
+      const n = 3 + (v % 3);
+      for (let i = 0; i < n; i++) {
+        const bx = 3 + Math.round(artHash(v, i, 5) * 7);
+        const by = 4 + Math.round(artHash(v, i, 6) * 5);
+        cg.fillStyle = 'rgba(58,84,38,0.85)';
+        cg.fillRect(bx, by, 1, 3);                            // 茎
+        cg.fillStyle = pal[0];
+        cg.fillRect(bx - 1, by - 1, 2, 2);                     // 花瓣
+        cg.fillRect(bx + 1, by, 1, 1);
+        cg.fillStyle = pal[1];
+        cg.fillRect(bx - 1, by - 1, 1, 1);                     // 受光花瓣
+        cg.fillStyle = '#7a6a22';
+        cg.fillRect(bx, by, 1, 1);                             // 花心
+      }
+    });
+    if (cv) flowers.push(cv);
+  }
+  /* 2 种小石子（5×4） */
+  const pebbles = [];
+  for (let v = 0; v < 2; v++) {
+    const cv = mk(6, 5, (cg) => {
+      cg.fillStyle = 'rgba(40,38,30,0.5)';
+      cg.fillRect(1, 3, 4, 1);
+      cg.fillStyle = v ? '#8e8a80' : '#7d7a70';
+      cg.fillRect(1, 1, 4, 2);
+      cg.fillStyle = v ? '#b6b2a6' : '#a8a498';
+      cg.fillRect(1, 1, 2, 1);
+    });
+    if (cv) pebbles.push(cv);
+  }
+  /* 2 种蘑菇（5×6） */
+  const mushrooms = [];
+  for (let v = 0; v < 2; v++) {
+    const cv = mk(5, 6, (cg) => {
+      cg.fillStyle = '#e6dcc4';
+      cg.fillRect(2, 3, 1, 3);
+      cg.fillStyle = v ? '#b8442e' : '#9c7c4e';
+      cg.fillRect(1, 1, 3, 2);
+      if (v) { cg.fillStyle = '#f0e0c8'; cg.fillRect(1, 1, 1, 1); cg.fillRect(3, 2, 1, 1); }
+    });
+    if (cv) mushrooms.push(cv);
+  }
+  /* 路面碎石点阵（稀疏 1~2px 点，贴上去只打散平面、不出矩形边界） */
+  const dirtTex = [];
+  for (let v = 0; v < 4; v++) {
+    const cv = mk(14, 11, (cg, w2, h2) => {
+      for (let i = 0; i < 22; i++) {
+        const x = Math.floor(artHash(v, i, 11) * w2);
+        const y = Math.floor(artHash(v, i, 12) * h2);
+        const r = artHash(v, i, 13);
+        cg.fillStyle = r < 0.45 ? ART_DIRT_TONES[1] : (r < 0.8 ? ART_DIRT_TONES[4] : ART_DIRT_TONES[5]);
+        cg.fillRect(x, y, r < 0.6 ? 1 : 2, 1);
+      }
+    });
+    if (cv) dirtTex.push(cv);
+  }
+  ART_SPR = { tufts: tufts, flowers: flowers, pebbles: pebbles, mushrooms: mushrooms, dirtTex: dirtTex };
+  return ART_SPR;
+}
+
+/* ---------- ③ 土路：平滑折线 + 三遍描边（快、且边缘干净） ---------- */
+function artCatmull(pts, t) {
+  const n = pts.length;
+  const seg = Math.min(n - 2, Math.floor(t * (n - 1)));
+  const u = t * (n - 1) - seg;
+  const p0 = pts[Math.max(0, seg - 1)], p1 = pts[seg], p2 = pts[seg + 1], p3 = pts[Math.min(n - 1, seg + 2)];
+  const u2 = u * u, u3 = u2 * u;
+  const f = (a, b, c, e) => 0.5 * ((2 * b) + (-a + c) * u + (2 * a - 5 * b + 4 * c - e) * u2 + (-a + 3 * b - 3 * c + e) * u3);
+  return [f(p0[0], p1[0], p2[0], p3[0]), f(p0[1], p1[1], p2[1], p3[1])];
+}
+function artPath(g, pts, w, gr, grR, spr) {
+  const steps = 220;
+  const line = [];
+  for (let i = 0; i <= steps; i++) line.push(artCatmull(pts, i / steps));
+  /* 三遍描边：暗色路基（略宽）→ 土面 → 中心被踩实的亮土 */
+  const stroke = (width, col, alpha) => {
+    g.globalAlpha = alpha === undefined ? 1 : alpha;
+    g.strokeStyle = col;
+    g.lineWidth = width;
+    g.lineCap = 'round';
+    g.lineJoin = 'round';
+    g.beginPath();
+    g.moveTo(line[0][0], line[0][1]);
+    for (let i = 1; i < line.length; i++) g.lineTo(line[i][0], line[i][1]);
+    g.stroke();
+    g.globalAlpha = 1;
+  };
+  stroke(w + 6, ART_DIRT_TONES[0], 0.55);
+  stroke(w + 2, ART_DIRT_TONES[1], 1);
+  stroke(w, ART_DIRT_TONES[3], 1);
+  stroke(w * 0.52, ART_DIRT_TONES[4], 0.85);
+  /* 路面质感：碎石点阵（横扫铺，打散"一整块纯色"） */
+  if (spr && spr.dirtTex && spr.dirtTex.length) {
+    const texCells = [];
+    for (let i = 0; i <= steps; i++) texCells.push(line[i]);
+    for (let i = 0; i < 620; i++) {
+      const p = texCells[(gr() * texCells.length) | 0];
+      const a2 = gr() * TAU, rr2 = Math.sqrt(gr()) * w * 0.42;
+      const cv = spr.dirtTex[(gr() * spr.dirtTex.length) | 0];
+      g.drawImage(cv, Math.round(p[0] + Math.cos(a2) * rr2 - cv.width / 2),
+                     Math.round(p[1] + Math.sin(a2) * rr2 - cv.height / 2));
+    }
+  }
+  /* 路面细节：小石子 + 暗渍 */
+  for (let i = 0; i < 300; i++) {
+    const t = gr();
+    const p = artCatmull(pts, t);
+    const a2 = gr() * TAU, rr2 = Math.sqrt(gr()) * w * 0.44;
+    const bx = Math.round(p[0] + Math.cos(a2) * rr2), by = Math.round(p[1] + Math.sin(a2) * rr2);
+    if (gr() < 0.62) {
+      g.fillStyle = gr() < 0.5 ? '#a08a62' : '#8b7550';
+      g.fillRect(bx, by, 1, 1);
+      if (gr() < 0.4) g.fillRect(bx + 1, by, 1, 1);
+    } else {
+      g.fillStyle = 'rgba(60,44,26,0.40)';
+      g.fillRect(bx, by, 2, 1);
+    }
+  }
+  /* 路肩被蹭出来的草：沿路两侧撒草丛 → 土路"长在地里"而不是贴上去 */
+  if (spr && spr.tufts.length) {
+    for (let i = 0; i < 340; i++) {
+      const p = artCatmull(pts, gr());
+      const side = gr() < 0.5 ? -1 : 1;
+      const off = w * (0.52 + gr() * 0.22) * side;
+      const cv = spr.tufts[(gr() * spr.tufts.length) | 0];
+      g.drawImage(cv, Math.round(p[0] + off - cv.width / 2), Math.round(p[1] + off * 0.2 - cv.height + 2));
+    }
+  }
+}
+
+/* ---------- ④ 水塘：岸线环 + 深度分档 + 波光 + 芦苇 ---------- */
+function artPond(g, cx, cy, rx, ry, gr, grR) {
+  const lobes = 2 + ((gr() * 2) | 0);
+  const sub = [];
+  for (let i = 0; i < lobes; i++) {
+    sub.push({
+      x: cx + grR(-rx * 0.32, rx * 0.32), y: cy + grR(-ry * 0.28, ry * 0.28),
+      rx: rx * grR(0.64, 0.92), ry: ry * grR(0.64, 0.92)
+    });
+  }
+  const ell = (p, k, col, add) => {
+    g.fillStyle = col;
+    g.beginPath();
+    g.ellipse(p.x, p.y, p.rx * k + (add || 0), p.ry * k + (add || 0) * 0.75, 0, 0, TAU);
+    g.fill();
+  };
+  /* 岸：湿泥 → 沙 → 四档水（由外到内越来越深） */
+  for (const p of sub) ell(p, 1.16, ART_SHORE_MUD, 2);
+  for (const p of sub) ell(p, 1.05, ART_SHORE_SAND, 1);
+  for (const p of sub) ell(p, 0.99, ART_WATER_TONES[3], 0);
+  for (const p of sub) ell(p, 0.84, ART_WATER_TONES[2], 0);
+  for (const p of sub) ell(p, 0.64, ART_WATER_TONES[1], 0);
+  for (const p of sub) ell(p, 0.42, ART_WATER_TONES[0], 0);
+  /* 波光：浅水里的短亮线（固定相位，不闪） */
+  for (let i = 0; i < 110; i++) {
+    const p = sub[(gr() * sub.length) | 0];
+    const a2 = gr() * TAU, rr2 = 0.55 + gr() * 0.42;
+    const bx = p.x + Math.cos(a2) * p.rx * rr2, by = p.y + Math.sin(a2) * p.ry * rr2;
+    g.fillStyle = gr() < 0.5 ? 'rgba(143,210,228,0.75)' : 'rgba(255,255,255,0.45)';
+    g.fillRect(Math.round(bx), Math.round(by), grR(2, 5) | 0, 1);
+  }
+  /* 岸边芦苇 / 草（密度衰减 → 软边） */
+  for (let i = 0; i < 170; i++) {
+    const a2 = gr() * TAU;
+    const rr2 = 1.02 + gr() * 0.22;
+    const p = sub[(gr() * sub.length) | 0];
+    const bx = p.x + Math.cos(a2) * p.rx * rr2, by = p.y + Math.sin(a2) * p.ry * rr2;
+    const h = grR(4, 11);
+    g.strokeStyle = gr() < 0.5 ? 'rgba(56,82,38,0.85)' : 'rgba(104,132,66,0.8)';
+    g.lineWidth = 1;
+    g.beginPath(); g.moveTo(bx, by); g.lineTo(bx + grR(-1.8, 1.8), by - h); g.stroke();
+    if (gr() < 0.28) {
+      g.fillStyle = '#6a5a32';
+      g.fillRect(Math.round(bx), Math.round(by - h), 1, 2);
+    }
+  }
+}
+
+/* ---------- ⑤ 主入口：地形 → 土路 → 水塘 → 草丛 → 花/小件 ---------- */
+function artBuildGrassGround(g, W, H, gr, grR) {
+  g.fillStyle = ART_BASE_GRASS;
+  g.fillRect(0, 0, W, H);
+  if (!artPaintTerrain(g, W, H)) {
+    g.fillStyle = '#496b37';
+    g.fillRect(0, 0, W, H);
+  }
+  const spr = artSprites();
+  /* 土路网络：3 条从地图边穿到另一边，交汇在中心空地附近（战斗区好走） */
+  const paths = [
+    [[-60, H * 0.26], [W * 0.15, H * 0.34], [W * 0.32, H * 0.21], [W * 0.49, H * 0.40], [W * 0.67, H * 0.30], [W * 0.84, H * 0.46], [W + 60, H * 0.40]],
+    [[W * 0.23, -60], [W * 0.30, H * 0.22], [W * 0.45, H * 0.42], [W * 0.40, H * 0.63], [W * 0.56, H * 0.81], [W * 0.51, H + 60]],
+    [[-60, H * 0.77], [W * 0.24, H * 0.68], [W * 0.46, H * 0.79], [W * 0.66, H * 0.69], [W * 0.85, H * 0.83], [W + 60, H * 0.73]],
+    [[W * 0.06, H * 0.52], [W * 0.30, H * 0.50], [W * 0.52, H * 0.54], [W * 0.74, H * 0.50], [W * 0.95, H * 0.55]]
+  ];
+  for (const pts of paths) artPath(g, pts, grR(36, 50), gr, grR, spr);
+  /* 水塘：4 个，避开中心战斗空地 */
+  const ponds = [];
+  for (let i = 0; i < 4; i++) {
+    let wx2 = grR(360, W - 360), wy2 = grR(320, H - 320);
+    if (Math.abs(wx2 - W / 2) < 480 && Math.abs(wy2 - H / 2) < 340) {
+      wx2 += (wx2 < W / 2 ? -560 : 560);
+      wx2 = Math.max(340, Math.min(W - 340, wx2));
+    }
+    ponds.push([wx2, wy2, grR(130, 240), grR(85, 160)]);
+  }
+  for (const p of ponds) artPond(g, p[0], p[1], p[2], p[3], gr, grR);
+  /* 判断是否落在水里（草丛/花不长在水上） */
+  const inWater = (x, y) => {
+    for (const p of ponds) {
+      const dx = (x - p[0]) / (p[2] * 1.02), dy = (y - p[1]) / (p[3] * 1.02);
+      if (dx * dx + dy * dy < 1) return true;
+    }
+    return false;
+  };
+  /* 基础草丛：抖动网格 + **低频密度场**（有密草皮区、也有干净的草地，
+     星露谷的草地就是这种"一撮一撮"的分区感；全图均匀撒 = 麻点） */
+  if (spr && spr.tufts.length) {
+    const ENV = artField(90, 50, 0.085, 0.085, 137, 3);
+    const CELL = 26;
+    for (let cy2 = 0; cy2 < H; cy2 += CELL) {
+      for (let cx2 = 0; cx2 < W; cx2 += CELL) {
+        /* 密度 = 0.10（保底）~ 0.62（密草皮），由低频噪声决定 */
+        const e = artSample(ENV, cx2 / W, cy2 / H);
+        const dens = 0.10 + Math.max(0, Math.min(1, (e - 0.34) * 2.0)) * 0.52;
+        if (gr() > dens) continue;
+        const x = cx2 + grR(2, CELL - 2), y = cy2 + grR(2, CELL - 2);
+        if (inWater(x, y)) continue;
+        const cv = spr.tufts[(gr() * spr.tufts.length) | 0];
+        g.drawImage(cv, Math.round(x - cv.width / 2), Math.round(y - cv.height + 2));
+      }
+    }
+    /* 成片高草（宝可梦那种"草丛区"）：边缘按密度衰减，绝不画实心椭圆 */
+    for (let pi = 0; pi < 14; pi++) {
+      const pcx = grR(200, W - 200), pcy = grR(180, H - 180);
+      const prx = grR(100, 230), pry = grR(70, 160);
+      for (let i = 0; i < 1000; i++) {
+        const a2 = gr() * TAU, rr2 = Math.sqrt(gr());
+        if (gr() > 1 - Math.pow(rr2, 1.7)) continue;
+        const bx = pcx + Math.cos(a2) * prx * rr2, by = pcy + Math.sin(a2) * pry * rr2;
+        if (inWater(bx, by)) continue;
+        const cv = spr.tufts[(gr() * spr.tufts.length) | 0];
+        g.drawImage(cv, Math.round(bx - cv.width / 2), Math.round(by - cv.height + 2));
+      }
+    }
+    /* 花簇 */
+    if (spr.flowers.length) {
+      for (let y = 0; y < H; y += 46) {
+        for (let x = 0; x < W; x += 46) {
+          if (gr() > 0.05) continue;
+          const bx = x + grR(6, 40), by = y + grR(6, 40);
+          if (inWater(bx, by)) continue;
+          const cv = spr.flowers[(gr() * spr.flowers.length) | 0];
+          g.drawImage(cv, Math.round(bx - cv.width / 2), Math.round(by - cv.height + 2));
+        }
+      }
+    }
+    /* 小件：石子 / 蘑菇（成组出现，像手摆的） */
+    for (let y = 0; y < H; y += 38) {
+      for (let x = 0; x < W; x += 38) {
+        const r = gr();
+        if (r > 0.15) continue;
+        const bx = x + grR(4, 34), by = y + grR(4, 34);
+        if (inWater(bx, by)) continue;
+        if (r < 0.08 && spr.pebbles.length) {
+          const cv = spr.pebbles[(gr() * spr.pebbles.length) | 0];
+          g.drawImage(cv, Math.round(bx - cv.width / 2), Math.round(by - cv.height + 2));
+          if (gr() < 0.55 && spr.pebbles.length) {
+            const cv2 = spr.pebbles[(gr() * spr.pebbles.length) | 0];
+            g.drawImage(cv2, Math.round(bx + grR(5, 10)), Math.round(by + grR(1, 6)));
+          }
+        } else if (spr.mushrooms.length) {
+          const cv = spr.mushrooms[(gr() * spr.mushrooms.length) | 0];
+          g.drawImage(cv, Math.round(bx - cv.width / 2), Math.round(by - cv.height + 2));
+        }
+      }
+    }
+  }
+}
+
 function buildGround() {
   /* 🎨 地表生成用**局部确定随机**：不吃全局 Math.random（见 tools\_fix-ground-rng.js 的说明） */
   let _gs = sceneDark ? 777001 : 424242;
@@ -24334,167 +24871,10 @@ function buildGround() {
          ② 一条 46px 宽的蜿蜒土路 → 像把地图切成几块
        现在全部删掉。宝可梦野外地图的本质是：**整体一个绿、纹理极细、点缀均匀**，
        分区感靠"物件"（草丛/石头/花）而不是"色块"。 */
-    g.fillStyle = '#4a6b3a';
-    g.fillRect(0, 0, W, H);
-    /* ① **大尺度明暗 = 一张小画布放大**（不是几百个大椭圆叠出来）。
-       ⚠️ 原来用 520 个 60~160px 的椭圆、alpha 0.028 叠明暗 —— 1:1 看就是一坨坨**带软边的圆形斑块**
-       （光栅化截图确认过）。椭圆再怎么调 alpha 都有边界，叠多了一定看出"盘子"。
-       现在：在 48×27 的小画布上画 ~40 个随机亮/暗圆 → **开启平滑放大**到整张地图
-       （一次 drawImage，双线性插值 → 完全无缝的有机明暗，像云影/地势起伏）。
-       色彩差异靠 alpha 很小（0.55 叠加），只出"有光"的感觉。 */
-    {
-      const NW = 48, NH = 27;
-      const nc = document.createElement('canvas');
-      nc.width = NW; nc.height = NH;
-      const ng = nc.getContext && nc.getContext('2d');
-      if (ng) {
-        ng.fillStyle = 'rgba(0,0,0,0)';
-        ng.fillRect(0, 0, NW, NH);
-        for (let i = 0; i < 44; i++) {
-          const up = gr() < 0.5;
-          ng.fillStyle = up ? 'rgba(170,200,140,0.55)' : 'rgba(26,42,20,0.55)';
-          ng.beginPath();
-          ng.ellipse(gr() * NW, gr() * NH, grR(4, 13), grR(3, 8), grR(0, 3), 0, TAU);
-          ng.fill();
-        }
-        /* 关键的平滑放大：小画布 → 全图，插值出来是连续的云影 */
-        const sm = g.imageSmoothingEnabled;
-        g.imageSmoothingEnabled = true;
-        g.globalAlpha = 0.16;
-        g.drawImage(nc, 0, 0, NW, NH, 0, 0, W, H);
-        g.globalAlpha = 1;
-        g.imageSmoothingEnabled = sm;
-      }
-    }
-    /* ② 1px 细噪点（32×32 tile 按 1:1 平铺；绝不放大） */
-    {
-      const T = 32;
-      const c2 = document.createElement('canvas');
-      c2.width = T; c2.height = T;
-      const pg = c2.getContext && c2.getContext('2d');
-      if (pg) {
-        for (let i = 0; i < 260; i++) {
-          const x = (gr() * T) | 0, y = (gr() * T) | 0;
-          pg.fillStyle = gr() < 0.5 ? 'rgba(160,190,130,0.20)' : 'rgba(44,62,34,0.24)';
-          pg.fillRect(x, y, 1, 1);
-        }
-        const pat = g.createPattern(c2, 'repeat');
-        if (pat) { g.fillStyle = pat; g.fillRect(0, 0, W, H); }
-      }
-    }
-    /* ③ 均匀散布的小草叶（**全图均匀**，不做"草丛区域"那种大块）——
-         每撮 2~3 根 1px 短草，深浅两色，密度足够但不扎眼。 */
-    for (let i = 0; i < 16000; i++) {
-      const x = gr() * W, y = gr() * H;
-      const h = grR(3, 7);
-      const dark = gr() < 0.62;
-      g.strokeStyle = dark ? 'rgba(48,68,36,' + grR(0.30, 0.55).toFixed(2) + ')'
-                           : 'rgba(122,152,92,' + grR(0.22, 0.42).toFixed(2) + ')';
-      g.lineWidth = 1;
-      g.beginPath();
-      g.moveTo(x, y);
-      g.lineTo(x + grR(-1.2, 1.2), y - h);
-      g.stroke();
-      if (gr() < 0.35) {
-        g.beginPath();
-        g.moveTo(x + grR(1, 2.5), y);
-        g.lineTo(x + grR(1.4, 3.4), y - h * grR(0.5, 0.8));
-        g.stroke();
-      }
-    }
-    /* ④ 稀疏点缀：小石子 / 小花（均匀分布，不聚成块） */
-    for (let i = 0; i < 420; i++) {
-      const x = gr() * W, y = gr() * H;
-      const r0 = gr();
-      if (r0 < 0.55) {
-        g.fillStyle = 'rgba(112,120,104,' + grR(0.30, 0.55).toFixed(2) + ')';
-        g.fillRect(Math.round(x), Math.round(y), 2, 2);
-        g.fillStyle = 'rgba(158,166,148,0.40)';
-        g.fillRect(Math.round(x), Math.round(y), 1, 1);
-      } else if (r0 < 0.86) {
-        g.fillStyle = gr() < 0.5 ? 'rgba(214,205,140,0.55)' : 'rgba(200,170,190,0.45)';
-        g.fillRect(Math.round(x), Math.round(y), 1, 1);
-      } else {
-        g.fillStyle = 'rgba(96,116,86,0.35)';
-        g.fillRect(Math.round(x), Math.round(y), 2, 1);
-      }
-    }
-    /* ④b **成片高草丛**（宝可梦那种"草丛区"）——关键是**用密度衰减做软边界**：
-       只在椭圆内部按 `1-(r/R)^1.6` 的概率撒草叶（越靠边越稀），
-       所以它没有硬边、看不出"一块贴上去的色块"，但视觉上确实是一片更密的草。
-       ⚠️ 绝不能画成"实心椭圆 + 半透明" —— 那就会变成用户截图里那种大色块。 */
-    for (let pi = 0; pi < 15; pi++) {
-      const pcx = grR(160, W - 160), pcy = grR(160, H - 160);
-      const prx = grR(90, 210), pry = grR(60, 150);
-      const tries = 900;
-      for (let i = 0; i < tries; i++) {
-        const a2 = gr() * TAU, rr2 = Math.sqrt(gr());
-        const bx2 = pcx + Math.cos(a2) * prx * rr2, by2 = pcy + Math.sin(a2) * pry * rr2;
-        /* 边缘概率衰减：靠外的草叶大概率丢弃 → 软边界 */
-        if (gr() > 1 - Math.pow(rr2, 1.6)) continue;
-        const h2 = grR(5, 11);
-        g.strokeStyle = gr() < 0.55 ? 'rgba(46,66,34,0.62)' : 'rgba(96,130,68,0.50)';
-        g.lineWidth = 1;
-        g.beginPath();
-        g.moveTo(bx2, by2);
-        g.lineTo(bx2 + grR(-1.4, 1.4), by2 - h2);
-        g.stroke();
-        if (gr() < 0.4) {
-          g.beginPath();
-          g.moveTo(bx2 + grR(1, 2.2), by2);
-          g.lineTo(bx2 + grR(1.2, 3), by2 - h2 * grR(0.5, 0.85));
-          g.stroke();
-        }
-      }
-    }
-    /* ④b2 **水塘 / 溪流**（宝可梦野外地图的地标，也是唯一"非绿"的颜色，能立刻打破单调）：
-       · 水面是**平色 + 细波纹**，不是渐变（渐变会看着像一坨污渍）
-       · 岸边一圈**深色湿泥 + 沙点**，再撒些芦苇 —— 让水塘"长在地里"而不是贴上去
-       · 形状用两三个交叠的椭圆并集，边缘按密度衰减撒沙点 → 软边 */
-    for (let wi2 = 0; wi2 < 4; wi2++) {
-      const wx2 = grR(300, W - 300), wy2 = grR(260, H - 260);
-      const wrx = grR(90, 190), wry = grR(55, 115);
-      const lobes = 2 + ((gr() * 2) | 0);
-      const pts = [];
-      for (let i = 0; i < lobes; i++) {
-        pts.push({ x: wx2 + grR(-wrx * 0.4, wrx * 0.4), y: wy2 + grR(-wry * 0.35, wry * 0.35),
-                   rx: wrx * grR(0.6, 0.9), ry: wry * grR(0.6, 0.9) });
-      }
-      /* ① 岸边湿泥（比水塘大一圈，深色） */
-      g.fillStyle = 'rgba(52,58,38,0.55)';
-      for (const p2 of pts) { g.beginPath(); g.ellipse(p2.x, p2.y, p2.rx + 9, p2.ry + 7, 0, 0, TAU); g.fill(); }
-      /* ② 水面（平色，两档：浅水 / 深水心） */
-      g.fillStyle = '#3f6f86';
-      for (const p2 of pts) { g.beginPath(); g.ellipse(p2.x, p2.y, p2.rx, p2.ry, 0, 0, TAU); g.fill(); }
-      g.fillStyle = '#2e5a72';
-      for (const p2 of pts) { g.beginPath(); g.ellipse(p2.x, p2.y, p2.rx * 0.72, p2.ry * 0.72, 0, 0, TAU); g.fill(); }
-      /* ③ 波纹（水平短亮线，固定相位 → 不闪） */
-      for (let i = 0; i < 90; i++) {
-        const p2 = pts[(gr() * pts.length) | 0];
-        const a3 = gr() * TAU, r3 = Math.sqrt(gr());
-        const bx3 = p2.x + Math.cos(a3) * p2.rx * r3 * 0.9;
-        const by3 = p2.y + Math.sin(a3) * p2.ry * r3 * 0.9;
-        g.strokeStyle = gr() < 0.5 ? 'rgba(168,214,232,0.5)' : 'rgba(112,166,190,0.45)';
-        g.lineWidth = 1;
-        const wlen = grR(3, 9);
-        g.beginPath(); g.moveTo(bx3, by3); g.lineTo(bx3 + wlen, by3); g.stroke();
-      }
-      /* ④ 岸边沙点 + 芦苇（密度衰减 → 软边） */
-      for (let i = 0; i < 260; i++) {
-        const p2 = pts[(gr() * pts.length) | 0];
-        const a4 = gr() * TAU, r4 = 0.9 + gr() * 0.35;
-        const bx4 = p2.x + Math.cos(a4) * p2.rx * r4, by4 = p2.y + Math.sin(a4) * p2.ry * r4;
-        if (gr() < 0.55) {
-          g.fillStyle = 'rgba(176,166,128,0.45)';
-          g.fillRect(Math.round(bx4), Math.round(by4), 1, 1);
-        } else {
-          const h4 = grR(5, 11);
-          g.strokeStyle = 'rgba(72,102,58,0.7)';
-          g.lineWidth = 1;
-          g.beginPath(); g.moveTo(bx4, by4); g.lineTo(bx4 + grR(-1.5, 1.5), by4 - h4); g.stroke();
-        }
-      }
-    }
+    /* NEW GROUND (Stardew-ish): terrain tones / dirt paths / ponds / tufts / flowers
+       all in artBuildGrassGround() above. Old version was flat fill + 1px noise +
+       16000 blades -> text preview measured 98% one colour, neighbour-variety only 2%. */
+    artBuildGrassGround(g, W, H, gr, grR);
     /* ④c **树林（实体）**：数量多、体型大。树本身不烘进地面 —— 每帧按 y 排序画在角色**之后**，
        所以"站在树叶下会被遮住"是天然的。这里只负责**撒点**并登记到 worldTrees。
        间距用抖动（grid+jitter）而不是纯随机，避免挤成一坨 / 留大片空地。 */
@@ -24514,6 +24894,15 @@ function buildGround() {
         treeAdd(grR(150, W - 150), grR(150, H - 120), grR(1.0, 1.7), 'stump');
       }
     }
+    /* 树根暗影：每棵树脚下压一圈软阴影（物件才"长在地上"） */
+    for (const tr of worldTrees) {
+      if (tr.kind === 'stump') continue;
+      const srx = 11 * (tr.scale || 1), sry = 4.5 * (tr.scale || 1);
+      g.globalAlpha = 0.16;
+      g.fillStyle = '#1d2416';
+      g.beginPath(); g.ellipse(tr.x, tr.y + 2, srx, sry, 0, 0, TAU); g.fill();
+      g.globalAlpha = 1;
+    }
     /* ⑤ 少量小件装饰（岩石 / 灌木 / 断柱）——**当作地图物件**，不当色块 */
     for (let i = 0; i < 40; i++) {
       const x = grR(200, W - 200), y = grR(180, H - 180);
@@ -24524,14 +24913,17 @@ function buildGround() {
     /* 暗角：**半径必须覆盖地图对角线**（中心到角 ≈ hypot(1600,900)=1835）。
        原来是固定 780 —— 半径之外全是渐变的最后一档（0.5 黑），四个角直接变成死黑块
        （用户报的「地图右下角缺失、完全是灾难」就是这个）。 */
-    const vigR0 = Math.hypot(W, H) * 0.26, vigR1 = Math.hypot(W, H) * 0.54;
+    /* 暗角：从 hypot*0.44 才开始压（地图角到中心 ≈ hypot/2 = 0.5，所以只压最外圈），
+       最深也只有 0.24 —— 原来 0.26~0.54 会把大半个地图压暗，实测平均明度被拉低 0.1 以上。 */
+    const vigR0 = Math.hypot(W, H) * 0.44, vigR1 = Math.hypot(W, H) * 0.66;
     const vig = g.createRadialGradient(W / 2, H / 2, vigR0, W / 2, H / 2, vigR1);
-    vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(10,14,8,0.34)');
+    vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(14,20,10,0.24)');
     g.fillStyle = vig; g.fillRect(0, 0, W, H);
-    g.strokeStyle = 'rgba(24,30,20,0.9)'; g.lineWidth = 22;
+    /* 边界：外侧一圈深色"密林感"，内侧一道暖褐细线（不再是一条近黑粗框） */
+    g.strokeStyle = 'rgba(30,40,22,0.55)'; g.lineWidth = 26;
     g.strokeRect(0, 0, W, H);
-    g.strokeStyle = 'rgba(160,150,110,0.35)'; g.lineWidth = 2;
-    g.strokeRect(11, 11, W - 22, H - 22);
+    g.strokeStyle = 'rgba(150,138,98,0.30)'; g.lineWidth = 3;
+    g.strokeRect(13, 13, W - 26, H - 26);
     /* 🌳 树撒完了 → 烘碰撞网格 + 按 y 排序（y 小的先画，后画的盖住前面的） */
     worldTrees.sort((a, b) => a.y - b.y);
     buildTreeGrids();
@@ -25000,10 +25392,13 @@ function drawEnemy(e, col) {
     const cv = pxSpriteOf(e.type, fi, mode, body, drk, acc, variant);
     /* 地面影 */
     if (!e.airH && !lowSpecOn()) {   // 🖥️ 低配模式跳过敌人投影（同屏 240 只 × 2 次绘制）
+      /* 双层接触阴影：外圈柔 + 内核实 → 角色是"站"在地上，不是"浮"着 */
       ctx.save();
-      ctx.globalAlpha = 0.30;
       ctx.fillStyle = '#000';
-      ctx.beginPath(); ctx.ellipse(0, e.r * 0.86, e.r * 0.90, e.r * 0.34, 0, 0, TAU); ctx.fill();
+      ctx.globalAlpha = 0.14;
+      ctx.beginPath(); ctx.ellipse(0, e.r * 0.86, e.r * 1.10, e.r * 0.42, 0, 0, TAU); ctx.fill();
+      ctx.globalAlpha = 0.30;
+      ctx.beginPath(); ctx.ellipse(0, e.r * 0.86, e.r * 0.74, e.r * 0.28, 0, 0, TAU); ctx.fill();
       ctx.restore();
     }
     if (cv) {
