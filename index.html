@@ -1989,10 +1989,26 @@ function pxHumanoid(px, f, mode, cfg, pal) {
     /* 腰带扣：1px 亮色，给腰一点"配饰" */
     pxPut(px, Math.round(cx), Math.round(hipY - 0.4), pxCI(px, pal.al));
   }
-  if (c.armor) {   // 胸甲：金属片 + 中缝
-    pxRect(px, cx - 1, shY + 1, 2, 4, pal.m);
-    pxRect(px, cx - 1, shY + 1, 1, 4, pal.ml);
-    pxRect(px, cx - halfW, hipY - 1, Math.round(halfW * 2), 1, pal.ad);   // 腰带
+  if (c.armor) {
+    /* 🛡 分段胸甲 + 肩甲（轮廓加宽 → 一眼是"重装"而不是布衣） */
+    const chestH = Math.max(3, Math.round(hipY - shY) - 1);
+    /* ① 肩甲：两侧各一块圆角亮片（画在躯干外沿，直接把肩膀顶宽 1px） */
+    const paY = shY + 0.4;
+    pxBall(px, cx - halfW - 0.6, paY, 2.4, 2.0, pal.ml, pal.m, pal.md, null, false);
+    pxBall(px, cx + halfW + 0.6, paY, 2.4, 2.0, pal.ml, pal.m, pal.md, null, false);
+    /* ② 胸甲主体（比躯干窄一点，露出布衣边 → 有"层"） */
+    const cw = Math.round(halfW * 1.5);
+    pxRect(px, Math.round(cx - cw / 2), Math.round(shY + 0.8), cw, chestH, pal.m);
+    /* ③ 分段：两道暗横线把胸甲切成三片 */
+    pxRect(px, Math.round(cx - cw / 2), Math.round(shY + 0.8 + chestH * 0.42), cw, 1, pal.md);
+    pxRect(px, Math.round(cx - cw / 2), Math.round(shY + 0.8 + chestH * 0.76), cw, 1, pal.md);
+    /* ④ 受光左边（金属才有的硬高光） */
+    pxRect(px, Math.round(cx - cw / 2), Math.round(shY + 0.8), 1, chestH, pal.ml);
+    /* ⑤ 中缝（甲片对襟） */
+    pxRect(px, Math.round(cx - 0.5), Math.round(shY + 0.8), 1, chestH, pal.md);
+    /* ⑥ 腰带 + 扣 */
+    pxRect(px, cx - halfW, hipY - 1, Math.round(halfW * 2), 1, pal.ad);
+    pxRect(px, Math.round(cx - 1), Math.round(hipY - 1), 2, 1, pal.al);
   }
   if (c.kimono) {
     /* 👘 **着物交领 + 羽织前襟 + 白帯 + 家纹**（浪客）：
@@ -24080,6 +24096,60 @@ function pxDecor(g, kind, x, y, s, gr, grR) {
     g.fillStyle = '#a8a48e'; R(x, y - hh, ww, 2);
     g.fillStyle = '#4d6b3f'; R(x, y - hh + 2, 2, 3);       // 苔藓
     g.fillStyle = '#3c5a30'; R(x + ww - 4, y - hh + 6, 2, 2);
+  } else if (kind === 'stones') {
+    /* 🗿 石圈：一圈矮立石（史前遗迹感，最经典的地标） */
+    const cnt = 5 + ((gr() * 3) | 0);
+    const rr = s * 0.75;
+    g.fillStyle = 'rgba(0,0,0,0.20)';
+    g.beginPath(); g.ellipse(x, y + 2, rr + 5, rr * 0.42 + 3, 0, 0, Math.PI * 2); g.fill();
+    for (let i = 0; i < cnt; i++) {
+      const a2 = (i / cnt) * Math.PI * 2 + grR(-0.16, 0.16);
+      const sx2 = x + Math.cos(a2) * rr, sy2 = y + Math.sin(a2) * rr * 0.42;
+      const hh = Math.round(7 + gr() * 7), ww = Math.round(4 + gr() * 3);
+      g.fillStyle = '#6e7062'; R(sx2 - ww / 2, sy2 - hh, ww, hh);
+      g.fillStyle = '#9a9c8b'; R(sx2 - ww / 2, sy2 - hh, 2, hh);          // 受光面
+      g.fillStyle = '#3f4138'; R(sx2 + ww / 2 - 1, sy2 - hh, 1, hh);      // 背光面
+      g.fillStyle = '#b8b9a6'; R(sx2 - ww / 2, sy2 - hh, ww, 1);          // 顶面
+      g.fillStyle = '#4d6b3f'; R(sx2 - ww / 2, sy2 - 1, ww, 1);           // 根部苔藓
+    }
+  } else if (kind === 'boulder') {
+    /* 🪨 巨石堆：2~3 块大岩，受光顶面 + 苔藓 + 强投影 */
+    const cnt = 2 + ((gr() * 2) | 0);
+    g.fillStyle = 'rgba(0,0,0,0.24)';
+    g.beginPath(); g.ellipse(x, y + 2, s * 0.85, s * 0.34, 0, 0, Math.PI * 2); g.fill();
+    for (let i = 0; i < cnt; i++) {
+      const bx = x + grR(-s * 0.42, s * 0.42), by = y + grR(-s * 0.18, s * 0.10);
+      const ww = Math.round(s * grR(0.42, 0.62)), hh = Math.round(s * grR(0.24, 0.36));
+      g.fillStyle = '#5f6355'; R(bx - ww / 2, by - hh, ww, hh);
+      g.fillStyle = '#838873'; R(bx - ww / 2, by - hh, ww - 1, Math.round(hh * 0.55));
+      g.fillStyle = '#a5aa92'; R(bx - ww / 2, by - hh, Math.round(ww * 0.55), 2);
+      g.fillStyle = '#383c32'; R(bx - ww / 2, by - 2, ww, 2);
+      /* 苔藓斑 */
+      g.fillStyle = '#4a6b3c';
+      R(bx - ww / 2 + 1, by - hh + 1, 2, 2);
+      if (ww > 12) R(bx + 1, by - hh + 3, 2, 2);
+    }
+  } else if (kind === 'fallen') {
+    /* 🏛 倒塌的石柱：横躺 + 鼓段接缝 + 断口 + 压在草里 */
+    const len = Math.round(s * grR(0.9, 1.25)), th = Math.round(s * grR(0.22, 0.3));
+    g.fillStyle = 'rgba(0,0,0,0.20)';
+    g.beginPath(); g.ellipse(x, y + 3, len * 0.55, th * 0.75, 0, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#7c7867'; R(x - len / 2, y - th, len, th);
+    g.fillStyle = '#a6a18c'; R(x - len / 2, y - th, len, 2);                 // 受光顶面
+    g.fillStyle = '#4b4941'; R(x - len / 2, y - 2, len, 2);                  // 背光底
+    /* 鼓段接缝 */
+    for (let i = 1; i < 4; i++) {
+      g.fillStyle = '#515044';
+      R(x - len / 2 + (len * i) / 4, y - th, 1, th);
+    }
+    /* 断口（右端参差） */
+    g.fillStyle = '#a8a48e';
+    R(x + len / 2 - 2, y - th, 2, Math.round(th * 0.6));
+    g.fillStyle = '#515044';
+    R(x + len / 2 - 1, y - 1, 1, 1);
+    /* 苔藓 + 压住它的草 */
+    g.fillStyle = '#4d6b3f'; R(x - len / 2 + 2, y - th + 1, 3, 2);
+    g.fillStyle = '#3c5a30'; R(x, y - 1, 4, 1);
   } else if (kind === 'bone') {
     /* 白骨（黑暗战场） */
     g.fillStyle = '#8e8a7c'; R(x, y, 6 + ((gr() * 3) | 0) * 2, 2);
@@ -24336,6 +24406,8 @@ function treeSprite(kind, sc, variant) {
     /* 正常树：投影 + 树干 + 叶团树冠 */
     g.fillStyle = 'rgba(0,0,0,0.15)';
     g.beginPath(); g.ellipse(cx, base + 1, 13 * q, 5 * q, 0, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#120d08';   // 树干描边
+    g.fillRect(Math.round(cx - 3.4 * q), Math.round(base - 15.5 * q), Math.max(5, Math.round(6.8 * q)), Math.round(16 * q));
     g.fillStyle = '#5a4229';
     g.fillRect(Math.round(cx - 2.4 * q), Math.round(base - 15 * q), Math.max(3, Math.round(4.8 * q)), Math.round(15 * q));
     g.fillStyle = '#7a5c3a';   // 受光侧树皮
@@ -24364,6 +24436,10 @@ function treeSprite(kind, sc, variant) {
       1: [[-12, -1, 4, 3.2], [11, 0, 4.2, 3.4], [0, -15, 4.6, 3.6], [-5, -16, 3.4, 2.8], [6, -16.5, 3, 2.6]],
       2: [[-16, -2, 4, 3.2], [16, -2, 4.2, 3.4], [0, -7, 5.4, 4.2], [-9, -6, 3.8, 3], [9, -6.5, 3.4, 2.8]]
     };
+    /* ⓪ 描边（泰拉瑞亚式）：同一组叶团放大 1.7px 用近黑画一遍 */
+    const OUT = '#0c1410';
+    for (const o of bumps[vv]) blob(o[0], o[1], o[2] + 1.7, o[3] + 1.7, OUT);
+    for (const o of cores[vv]) blob(o[0], o[1], o[2] + 1.7, o[3] + 1.7, OUT);
     /* ① 暗底 + 打毛轮廓 */
     for (const b of bumps[vv]) blob(b[0], b[1], b[2], b[3], LEAF_DD);
     for (const b of cores[vv]) blob(b[0], b[1], b[2], b[3], LEAF_DD);
@@ -24519,14 +24595,14 @@ window.__musouTreeTest = (x, y) => ({
 const ART_BASE_GRASS = '#456334';        // 兜底底色
 
 /* 草 6 阶（暗 → 亮）：偏黄绿的暖调，星露谷那种"有太阳"的绿 */
-const ART_GRASS_TONES = ['#456b31', '#527c3a', '#5f8c43', '#6d9c4c', '#7cab57', '#8db965'];
+const ART_GRASS_TONES = ['#16281a', '#22391f', '#2f5026', '#3f6a30', '#54873f', '#6fa851'];
 /* 土 6 阶（暗 → 亮） */
-const ART_DIRT_TONES = ['#4b3a26', '#5b482e', '#6b5637', '#7c6543', '#8d754f', '#9e865f'];
+const ART_DIRT_TONES = ['#241a12', '#32251a', '#433224', '#574230', '#6d553d', '#8a6e4e'];
 /* 水 4 阶（深 → 浅） */
-const ART_WATER_TONES = ['#2b5f78', '#317186', '#3a8398', '#4695a8'];
+const ART_WATER_TONES = ['#16323f', '#1d4354', '#25586d', '#316f86'];
 const ART_WATER_FOAM = '#8fd2e4';
-const ART_SHORE_SAND = '#a9925f';
-const ART_SHORE_MUD = '#4a4a32';
+const ART_SHORE_SAND = '#7a6440';
+const ART_SHORE_MUD = '#28301c';
 
 /* 4×4 有序抖动矩阵（Bayer）：像素画做连续渐变的标配 */
 const ART_BAYER4 = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
@@ -24598,37 +24674,67 @@ function artPaintTerrain(g, W, H) {
   const d = img.data;
   /* 粗网格：大尺度地势 / 中尺度斑驳 / 阳光池 / 干土带 */
   const F1 = artField(150, 84, 0.075, 0.075, 11, 3);
-  const F2 = artField(300, 168, 0.155, 0.155, 23, 2);   /* 中频放慢一倍：70px 尺度的斑驳 */
+  const F2 = artField(300, 168, 0.42, 0.42, 23, 3);   /* ⚠️ 26px 尺度：泰拉瑞亚的纹理就是这个量级 */
   const FS = artField(90, 50, 0.11, 0.11, 57, 2);
   const FD = artField(130, 73, 0.10, 0.10, 91, 3);
   const GT = ART_GRASS_TONES.map(artRgb);
   const DT = ART_DIRT_TONES.map(artRgb);
+  /* ===== 第一遍：算每个 texel 的色阶索引（不抖动，硬分档） ===== */
+  const idxMap = new Uint8Array(TW * TH);     // 0..5 = 色阶；+16 = 土
   for (let y = 0; y < TH; y++) {
     const nv = y / (TH - 1);
     for (let x = 0; x < TW; x++) {
       const nu = x / (TW - 1);
       const big = artSample(F1, nu, nv);
       const med = artSample(F2, nu, nv);
-      const fine = artHash(x, y, 41);
-      /* 光照：左上暖亮 → 右下冷暗（方向光是"像个游戏"的关键） */
-      const light = 1 - (nu * 0.50 + nv * 0.50);
+      const light = 1 - (nu * 0.46 + nv * 0.54);          // 左上亮
       const sun = artSample(FS, nu, nv);
-      const sunBoost = sun > 0.60 ? (sun - 0.60) * 2.4 : 0;
+      const sunBoost = sun > 0.74 ? (sun - 0.74) * 3.4 : 0;   // 收窄：大块亮面会读成"脏"
       const dryN = artSample(FD, nu, nv);
-      const bayer = ART_BAYER4[(y & 3) * 4 + (x & 3)] / 16;
-      /* 干土带：阈值 + 抖动 → 有机边界 */
-      const useDirt = dryN > 0.700 + bayer * 0.055;
-      let v = 0.38 * big + 0.13 * med + 0.07 * fine + 0.22 * light + 0.15 * sunBoost + 0.22;
-      let tones, pal;
+      /* 块状颗粒：3texel 一格的暗斑 + 稀疏亮砾（泰拉瑞亚土面最标志性的"点点"） */
+      const gc = artHash(x / 3 | 0, y / 3 | 0, 91);
+      let grain = 0;
+      if (gc < 0.22) grain -= 0.075;          // 暗土粒
+      else if (gc > 0.955) grain += 0.16;      // 亮砾
+      else if (gc > 0.90) grain += 0.05;
+      const useDirt = dryN > 0.715;
+      let v;
       if (useDirt) {
-        v = 0.30 + (dryN - 0.70) * 2.4 + (med - 0.5) * 0.30 + light * 0.16;
-        tones = ART_DIRT_TONES; pal = DT;
-      } else { tones = ART_GRASS_TONES; pal = GT; }
-      /* 直接按 index 取色（省掉字符串查表） */
-      const fi = Math.max(0, Math.min(1, v)) * (tones.length - 1);
-      const i0 = Math.floor(fi);
-      const c = pal[Math.min(tones.length - 1, i0 + ((fi - i0) > bayer ? 1 : 0))];
-      const o = (y * TW + x) * 4;
+        v = 0.26 + (dryN - 0.715) * 2.6 + (med - 0.5) * 0.26 + light * 0.22 + grain;
+      } else {
+        v = 0.13 * big + 0.40 * med + 0.18 * light + 0.10 * sunBoost + 0.17 + grain;
+      }
+      /* 色调拉伸：把窄分布铺满 6 档（否则整张图只用 2 档 = 平涂） */
+      v = 0.70 + (v - 0.46) * 1.9;
+      let i2 = Math.round(Math.max(0, Math.min(1, v)) * 5);
+      idxMap[y * TW + x] = (useDirt ? 16 : 0) + i2;
+    }
+  }
+  /* ===== 第二遍：写像素 —— 色阶交界处描成最暗档（硬边色块） ===== */
+  for (let y = 0; y < TH; y++) {
+    for (let x = 0; x < TW; x++) {
+      const k = y * TW + x;
+      const cur = idxMap[k];
+      const isDirt = cur >= 16, lv = isDirt ? cur - 16 : cur;
+      const base = isDirt ? DT : GT;
+      /* 4 邻域里只要有一格色阶（或土/草属性）不同 → 这条边描深 */
+      let edge = false;
+      if (x > 0 && idxMap[k - 1] !== cur) edge = true;
+      else if (x < TW - 1 && idxMap[k + 1] !== cur) edge = true;
+      else if (y > 0 && idxMap[k - TW] !== cur) edge = true;
+      else if (y < TH - 1 && idxMap[k + TW] !== cur) edge = true;
+      /* 描边只在"跨越 2 档以上或土草交界"时生效，否则会糊成一团黑网 */
+      let hardEdge = false;
+      if (edge) {
+        const nb = x > 0 && idxMap[k - 1] !== cur ? idxMap[k - 1]
+          : (x < TW - 1 && idxMap[k + 1] !== cur ? idxMap[k + 1]
+            : (y > 0 && idxMap[k - TW] !== cur ? idxMap[k - TW] : idxMap[k + TW]));
+        const nbDirt = nb >= 16, nbLv = nbDirt ? nb - 16 : nb;
+        /* 土/草交界一律描（这是真正的结构边）；同色系内跨 2 档才描，避免糊成黑网 */
+        hardEdge = (nbDirt !== isDirt) || Math.abs(nbLv - lv) >= 2;
+      }
+      const c = hardEdge ? base[0] : base[Math.max(0, Math.min(5, lv))];
+      const o = k * 4;
       d[o] = c[0]; d[o + 1] = c[1]; d[o + 2] = c[2]; d[o + 3] = 255;
     }
   }
@@ -24944,6 +25050,22 @@ function artBuildGrassGround(g, W, H, gr, grR) {
           const cv = spr.flowers[(gr() * spr.flowers.length) | 0];
           g.drawImage(cv, Math.round(bx - cv.width / 2), Math.round(by - cv.height + 2));
         }
+      }
+    }
+    /* 🗿 场景地标：7 处大地标（石圈 / 巨石 / 倒塌石柱）
+       —— 用相对坐标而不是纯随机，保证每局都分布均匀、不挤在角落 */
+    {
+      const LM = [
+        [0.13, 0.70, 'stones'], [0.83, 0.23, 'stones'],
+        [0.60, 0.78, 'boulder'], [0.19, 0.17, 'boulder'], [0.89, 0.60, 'boulder'],
+        [0.37, 0.11, 'fallen'], [0.69, 0.89, 'fallen']
+      ];
+      for (const lm of LM) {
+        const lx = lm[0] * W + grR(-46, 46), ly = lm[1] * H + grR(-34, 34);
+        /* 中心战斗空地不放（那里要保持完全干净） */
+        if (Math.abs(lx - W / 2) < TREE_CLEAR_W * 0.5 && Math.abs(ly - H / 2) < TREE_CLEAR_H * 0.6) continue;
+        if (inWater(lx, ly)) continue;
+        pxDecor(g, lm[2], lx, ly, grR(92, 150), gr, grR);   // 地标要"大"才叫地标
       }
     }
     /* 小件：石子 / 蘑菇（成组出现，像手摆的） */
