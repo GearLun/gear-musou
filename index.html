@@ -5308,6 +5308,7 @@ function voidSlamMark(cx, cy, r) {
 /* 诊断计数：虚空执剑者三套技能的出手次数（测试/读数用） */let dbgVoidHits = 0, dbgVoidFan = 0, dbgVoidQi = 0, dbgVoidDash = 0, dbgVoidSlam = 0, dbgVoidQiAng = 0;
 let dbgVoidQiAngs = [], dbgVoidDashPeak = 0;          // 最近一轮三剑气的三道角度 / 冲刺实测峰值速度
 let dbgArcherTreeDodge = 0;                           // 🏹 弓箭手因「箭被树挡住」而换位的次数（诊断 / 冒烟用）
+let dbgFoeUnstick = 0;                                // 🌀 敌人"卡住自救"次数（诊断 / 冒烟用）
 let dbgTreeSeparate = 0;                              // 🌳 普通敌人被树"推出"的次数（诊断 / 冒烟用；恒 0 = 没生效）
 let dbgVoidSlashFx = 0, dbgVoidSlamFx = 0;            // 斩击特效次数 / 落地特效次数（冒烟 S16 核对"特效真的出了"）
 let dbgTwinBreathHits = 0;                            // 🔥 双子火焰眼「持续喷火」**真的打掉玩家血**的次数（冒烟 S27 核对结算节拍）
@@ -14540,6 +14541,10 @@ const SHINY_CNT_N = 8;           // 能记录的物种数 = floor(24 / 3)
     它们的 `PET_FR[形态][1]` 闪光条带本来就随生成器一起出好了，所以直接列进来即可）。
    ⚠️ 加物种必须同步 `SHINY_SPECIES_NAME`（面板/横幅按 id 取中文名），否则横幅会显示英文 id。 */
 const SHINY_SPECIES = ['bulba', 'charm', 'squirt', 'eevee', 'charcadet', 'scyther', 'dreepy', 'dratini', 'beldum', 'gible', 'shaymin', 'zeraora', 'jirachi', 'victini', 'toge', 'kyogre', 'groudon', 'rayquaza'];   // 🥊 铁哑铃 / 🦈 圆陆鲨（用户 2026-10 点名加进刷闪名单）· 🔥 比克提尼（幻之助战第四只）· 🦗 飞天螳螂（用户 2026-10 点名补上 —— 它第 15 波捕捉入队，当然也该能出闪）
+/* 📦 存档码里 dex / dexOn 两段的位宽（= 老布局的 24 位）。
+   加新物种**不要动它** —— 动了老存档码就解不开（用户明确禁止）。
+   超出这个数的物种（训练家专属的 12 只敌方宝可梦）只做"本局内可见"，不持久化。 */
+const SAVE_DEX_N = 24;
 const SHINY_HP_MUL = 5;   // 🟢 闪光词条·绿身体：血量倍率（本轮由 2 倍提高到 5 倍）
 const CARD_ONLY_MUTS = ['deck', 'wild', 'possess', 'multishot'];   // 🃏 牌皇专属四件套（传统弓/士兵/其它职业都拿不到）
 /* 🃏 牌皇专属质变的数值（放在 MUTS 之前：MUTS 数组字面量里要引用这些 cap）
@@ -14881,6 +14886,50 @@ const WM_QUAL_BANDS = [
   { max: 40,  w: { poor: 20, common: 10, fine: 25, epic: 35, legend: 10 } },
   { max: 999, w: { poor: 20, common: 10, fine: 20, epic: 30, legend: 15, myth: 5 } }
 ];
+/* ============================================================
+   🧢 **训练家专属：12 只敌方宝可梦正式登记为"闪光物种"**
+   ============================================================
+   用户口径：这些宝可梦要进刷闪质变的名单、也要出现在闪光图鉴里；
+   击败闪光**敌人**不计入图鉴，只有刷闪质变（spawnShinyVisit）才计。
+   —— 所以它们必须真的在 SHINY_SPECIES 里（图鉴按这个表逐行渲染），
+      而不是只加个名字。
+   · PET_FORM：**必须登记**，否则 petFormKey() 会回退成妙蛙种子，来访者会画错。
+     每条只有一段（不参与等级进化）；敌人那边的"第 15 波后进化"是 FOE_PET
+     自己的映射（base → evo），和这里无关。
+   · PET_SPECIES / PET_SUMMON：来访者要用物种参数（属性配色 / 缩放 / 半径）。
+     战斗数值借同体型的现成伙伴（它们只当来访者，不会上场打）。
+   · **不**进 PET_CATCHES / PET_STARTER / PET_WAVE_EVO → 玩家收编不到它们。
+   ============================================================ */
+const FOE_SHINY_DEF = [
+  /* id,            名字,        属性,       参照物种, 缩放 */
+  ['foe_sentret',   '尾立',      'NORMAL', 'eevee',    1.30],
+  ['foe_furret',    '大尾立',    'NORMAL', 'eevee',    1.75],
+  ['foe_poochyena', '土狼犬',    'DARK',   'eevee',    1.35],
+  ['foe_mightyena', '大狼犬',    'DARK',   'gible',    1.60],
+  ['foe_munchlax',  '小卡比兽',  'NORMAL', 'gible',    1.45],
+  ['foe_snorlax',   '卡比兽',    'NORMAL', 'kyogre',   1.35],
+  ['foe_avulpix',   '阿罗拉六尾', 'ICE',    'eevee',    1.30],
+  ['foe_aninetales','阿罗拉九尾', 'ICE',    'eevee',    1.80],
+  ['foe_vulpix',    '六尾',      'FIRE',   'eevee',    1.30],
+  ['foe_ninetales', '九尾',      'FIRE',   'eevee',    1.80],
+  ['foe_ponyta',    '小火马',    'FIRE',   'charcadet',1.45],
+  ['foe_rapidash',  '烈焰马',    'FIRE',   'charcadet',1.85]
+];
+for (const [fid, fname, fel, ref, fsc] of FOE_SHINY_DEF) {
+  PET_FORM[fid] = [fid];                                   // 单段：不参与等级进化
+  if (!PET_SPECIES[fid]) {
+    PET_SPECIES[fid] = Object.assign({}, PET_SPECIES[ref] || PET_SPECIES.bulba, {
+      key: fid, element: fel, label: fname, scale: fsc
+    });
+  }
+  if (!PET_SUMMON[fid]) {
+    PET_SUMMON[fid] = Object.assign({}, PET_SUMMON[ref] || PET_SUMMON.bulba, {
+      name: fname, element: fel, scale: fsc, r: Math.round(11 * fsc / 1.67)
+    });
+  }
+  if (SHINY_SPECIES.indexOf(fid) < 0) SHINY_SPECIES.push(fid);
+}
+
 function wmQualBand() {
   const lv = Math.max(1, p.lvl | 0);
   for (const b of WM_QUAL_BANDS) if (lv <= b.max) return b.w;
@@ -21611,8 +21660,9 @@ const SAVE_SEG_BUILD = {
   ver: () => savePad(SAVE_VER, 1) + '0',                                  // 格式版本 + 备用位
   tree: () => META_TREE.map((n, i) => savePad(n ? metaLv(n.id) : 0, 2)).join('') + '0'.repeat(2 * Math.max(0, 12 - META_TREE.length)),
   treeRes: () => '0'.repeat(16),                                          // 预留（养成 / 技能书）
-  dex: () => SHINY_SPECIES.map(id => shinyGot(id) ? '1' : '0').join('') + '0'.repeat(Math.max(0, 24 - SHINY_SPECIES.length)),
-  dexOn: () => SHINY_SPECIES.map(id => shinyOn(id) ? '1' : '0').join('') + '0'.repeat(Math.max(0, 24 - SHINY_SPECIES.length)),
+  /* ⚠️ 只编码前 SAVE_DEX_N 只（存档布局是固定 24 位，不能随物种增加而改） */
+  dex: () => SHINY_SPECIES.slice(0, SAVE_DEX_N).map(id => shinyGot(id) ? '1' : '0').join('') + '0'.repeat(Math.max(0, SAVE_DEX_N - SHINY_SPECIES.length)),
+  dexOn: () => SHINY_SPECIES.slice(0, SAVE_DEX_N).map(id => shinyOn(id) ? '1' : '0').join('') + '0'.repeat(Math.max(0, SAVE_DEX_N - SHINY_SPECIES.length)),
   dexRes: () => shinyCntBits(),                                           // 📊 重复出闪记录（前 8 只，每只 3 位）—— 不再全 0，但**布局长度不变**，所以老码照样能导入
   runs: () => savePad(meta.runs, 6),
   bank: () => savePad(meta.bank, 10),
@@ -22910,7 +22960,7 @@ function labBodyClass(on) {
 function labSpawnBoss(type) {
   enemies = []; spawnQ = []; waveT = -1; orbs = [];
   dbgVoidHits = 0; dbgVoidFan = 0; dbgVoidQi = 0; dbgVoidDash = 0; dbgVoidSlam = 0;   // 虚空执剑者的诊断计数随新 Boss 归零
-  dbgVoidQiAngs = []; dbgVoidDashPeak = 0; dbgVoidSlashFx = 0; dbgVoidSlamFx = 0; voidImpacts = []; dbgArcherTreeDodge = 0; dbgTreeSeparate = 0;
+  dbgVoidQiAngs = []; dbgVoidDashPeak = 0; dbgVoidSlashFx = 0; dbgVoidSlamFx = 0; voidImpacts = []; dbgArcherTreeDodge = 0; dbgTreeSeparate = 0; dbgFoeUnstick = 0;
   dbgSlimeJumps = 0; dbgSlimeSplits = 0; dbgSlimeSlamHits = 0;
   dbgSkullSpawns = 0; dbgSkullBooms = 0;
   dbgPlunderSkills = 0; dbgPlunderLaserHits = 0; dbgPlunderClaws = 0; dbgPlunderDowns = 0; dbgBlindMax = 0;
@@ -23895,6 +23945,12 @@ const TREE_CELL = 24;         // 碰撞网格边长（把树烘进网格，查�
 /* 🈳 **中心空地**：影分身十字斩的"幕布"就是中央 1280×720 的视区（世界中心 W/2,H/2）。
    用户要求那块地**完全空**、一棵树都不许有，否则分身/走位会被树挡。
    这里用矩形而不是圆 —— 幕布本身就是矩形。 */
+/* 🌳 敌人**照常被树干阻挡**（用户最终口径：不是穿树，而是"卡住就闪避"）。
+   配套的自救机制见 FOE_UNSTICK_*：连续 1 秒完全没动 → 朝目标短距闪避（这一下无视树）。 */
+const TREES_BLOCK_FOES = true;
+const FOE_UNSTICK_T = 1.0;        // 连续静止多久判定为"卡住"（秒）
+const FOE_UNSTICK_DIST = 76;      // 闪避距离（要足够跨过一棵树的树干直径 30 + 身位）
+const FOE_UNSTICK_MIN_TGT = 46;   // 目标至少这么远才值得闪（贴脸卡住没意义）
 const TREE_CLEAR_W = 700;     // 空地半宽（视区半宽 640 + 60 余量）
 const TREE_CLEAR_H = 420;     // 空地半高（视区半高 360 + 60 余量）
 function treeInClearZone(x, y) {
@@ -24006,6 +24062,7 @@ function playerTreeSeparate() {
   if (treePushOut(p, p.r)) dbgTreeSeparate++;
 }
 function enemyTreeSeparate(e) {
+  if (!TREES_BLOCK_FOES) return;          // 🚫 敌人一律穿树（用户口径）
   if (!TREES_ACTIVE || !worldTrees.length || !e || e.dead) return;
   if (e.boss || e.headBoss || e.phantom || e.segPhantom || e.tentacle || e.bossUnit || e.devDummy) return;
   /* 敌人的"攻击动作"同样豁免：兵卒突刺 / 跃击腾空 —— 允许落进去，动作结束再挤出来 */
@@ -24666,15 +24723,23 @@ function drawFoePet(e, key) {
   const vr = FR[v] && FR[v][role] ? FR[v][role] : (FR[v] ? FR[v].idle : null);
   const arr = vr ? (vr[d] || vr[0]) : null;
   if (!arr || !arr.length) return false;
-  const dtR = (M.dt && (M.dt[role] || M.dt.idle)) || 0.1;
+  /* ⚠️⚠️ PET_META[形态] 是**按动作分层**的：{ idle: {sw,sh,gy,dt,n}, walk: {...}, ... }
+     （不是顶层的 sw/sh！本轮踩过：取错层 → 全是 undefined → 缩放 NaN → 敌人整个隐形） */
+  const MR = M[role] || M.idle;
+  if (!MR) return false;
+  const dtR = MR.dt || 0.1;
   const fi = Math.floor((time + (e.pxSeed || 0)) / dtR) % arr.length;
   const fr = arr[fi < 0 ? 0 : fi];
   if (!fr) return false;
   /* 缩放：让贴图高度 ≈ 2.6 倍判定半径（和像素模型观感一致） */
-  const k = Math.max(0.28, Math.min(1.15, (e.r * 2.6) / Math.max(1, M.sh)));
-  const dw = M.sw * k, dh = M.sh * k;
-  const gy = (M.gy && M.gy[d] !== undefined) ? M.gy[d] : M.sh * 0.9;
+  const sw = MR.sw, sh = MR.sh;
+  if (!isFinite(sw) || !isFinite(sh) || sw <= 0 || sh <= 0) return false;   // 取错层就回退，绝不隐形
+  const k = Math.max(0.28, Math.min(1.15, (e.r * 2.6) / Math.max(1, sh)));
+  const dw = sw * k, dh = sh * k;
+  const gy = (MR.gy && MR.gy[d] !== undefined) ? MR.gy[d] : sh * 0.9;
   const dx = -dw / 2, dy = -gy * k;
+  /* 🛡️ 最后一道保险：任何几何值不是有限数 → 回退像素模型（而不是画一个 NaN 矩形） */
+  if (!isFinite(dx) || !isFinite(dy) || !isFinite(dw) || !isFinite(dh) || dw <= 0 || dh <= 0) return false;
   const sm = ctx.imageSmoothingEnabled;
   ctx.imageSmoothingEnabled = false;
   ctx.drawImage(img, fr[0], fr[1], fr[2], fr[3], dx, dy, dw, dh);
@@ -29616,7 +29681,42 @@ function updateGame(dt, rawDt) {
     }
     e.vx += (tx * spdNow - e.vx) * Math.min(1, dt * 3);
     e.vy += (ty * spdNow - e.vy) * Math.min(1, dt * 3);
+    const ex0 = e.x, ey0 = e.y;
     enemyKnockMove(e, dt);
+    /* 🌀 **卡住自救**（用户口径）：被树/树桩顶住时连续 1 秒几乎没位移，
+       而目标还在远处 → 朝目标方向短距闪避（这一下无视树，直接穿过去）。
+       判据用"本帧实际位移"而不是速度：被顶住时速度可能还有值，但坐标不动。 */
+    const movedD = Math.hypot(e.x - ex0, e.y - ey0);
+    /* ⚠️ 只有「**想动**但动不了」才算卡住：
+       spdNow = 0 的静止靶 / 炮台 / 假人是设计上就不动的，不能给它们闪避
+       （冒烟当场抓到：法师无双测试里的静止靶被闪到玩家身边）。 */
+    const wantsMove = spdNow > 1 && !e.boss && !e.devDummy && (Math.abs(tx) + Math.abs(ty)) > 0.05;
+    if (wantsMove && movedD < Math.max(0.5, spdNow * dt * 0.30) && d > FOE_UNSTICK_MIN_TGT) {
+      e.stuckT = (e.stuckT || 0) + dt;
+    } else {
+      e.stuckT = 0;
+    }
+    if ((e.stuckT || 0) >= FOE_UNSTICK_T) {
+      e.stuckT = 0;
+      /* 方向优先用"想去的方向"，退化时用朝目标的方向 */
+      let ux2 = tx, uy2 = ty;
+      const ul = Math.hypot(ux2, uy2) || 1;
+      ux2 /= ul; uy2 /= ul;
+      const nx3 = Math.max(44, Math.min(W - 44, e.x + ux2 * FOE_UNSTICK_DIST));
+      const ny3 = Math.max(44, Math.min(H - 44, e.y + uy2 * FOE_UNSTICK_DIST));
+      if (Math.hypot(nx3 - e.x, ny3 - e.y) > 24) {    // 撞边界时没挪动就别白闪
+        e.x = nx3; e.y = ny3;
+        e.vx = ux2 * spdNow; e.vy = uy2 * spdNow;
+        addRing(e.x, e.y, '#9adcff', 7);
+        /* ⚠️ **不能用 burst()**：它内部用 rnd()，会推移全局随机流
+           （冒烟的金币/掉落断言当场变红）。这里用确定性的 addPart。 */
+        for (let k2 = 0; k2 < 6; k2++) {
+          const a2 = k2 * (TAU / 6);
+          addPart(e.x, e.y, Math.cos(a2) * 90, Math.sin(a2) * 90 - 24, 0.30, 2.4, '#cfe6ff', 0);
+        }
+        dbgFoeUnstick++;
+      }
+    }
     /* 闪光词条·疾风：高速移动时扬尘拖尾（1.5 倍移速的视觉读法） */
     if (e.aff && e.aff.spd && Math.abs(e.vx) + Math.abs(e.vy) > 70 && Math.random() < 0.35) {
       addPart(e.x - e.vx * 0.04, e.y - e.vy * 0.04, rnd(-22, 22), rnd(-22, 22), 0.24, rnd(1.4, 2.6), '#9adcff', 0);
@@ -29629,8 +29729,10 @@ function updateGame(dt, rawDt) {
       if (!e.boss) { e.x -= nx * 14; e.y -= ny * 14; }   // Boss 碰撞不后退
     }
   }
-  /* 🌳 普通敌人也不能停在树里（Boss 豁免；统一收口，见 enemyTreeSeparate 的说明） */
-  if (TREES_ACTIVE && worldTrees.length) {
+  /* 🌳 敌人默认**穿树**（TREES_BLOCK_FOES = false）：以前这里每帧把敌人推出树干，
+     但实际表现是"敌人被卡在树丛里"（用户连报几次）→ 关掉。
+     玩家侧不受影响（playerTreeSeparate 仍在跑）。 */
+  if (TREES_BLOCK_FOES && TREES_ACTIVE && worldTrees.length) {
     for (const e2 of enemies) enemyTreeSeparate(e2);
   }
   /* 敌人间互推（避免叠成一点；震慑期间跳过） */
@@ -33840,7 +33942,8 @@ window.__musouVoidInfo = () => {      // 🗡️ 虚空执剑者读数（状态�
     qiArc: VOID.qiArc, qiSize: VOID.qiSize,   // 扇形总张角（120°）/ 剑气尺寸倍率
     dashSpd: VOID.dashSpd, dashPeak: +dbgVoidDashPeak.toFixed(1),  // 冲刺设定速度 / 实测峰值速度
     fxSlash: dbgVoidSlashFx, fxSlam: dbgVoidSlamFx, fxSlamMark: voidImpacts.length, archerTreeDodge: dbgArcherTreeDodge,
-  treeSeparate: dbgTreeSeparate   // 斩击特效 / 落地特效计数
+  treeSeparate: dbgTreeSeparate, foeUnstick: dbgFoeUnstick,              // 🌀 敌人卡住自救次数
+  treeBlockFoes: TREES_BLOCK_FOES, unstickT: FOE_UNSTICK_T, unstickDist: FOE_UNSTICK_DIST   // 斩击特效 / 落地特效计数
   };
 };
 window.__musouPlanteraInfo = () => {   // 🌸 世纪之花读数（形态 / 移速 / 藤蔓间隔与累计根数 / 触手）
