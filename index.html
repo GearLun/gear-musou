@@ -4891,6 +4891,9 @@ function tickPlanteraVines(dt) {
         if (v.warnRef) { v.warnRef.dead = true; v.warnRef = null; }
         addRing(v.x, v.y, '#5fd06a', 12);
         burst(v.x, v.y, 20, '#5fd06a', 380);
+        /* 🌸 藤蔓破土：地面裂开（同世界吞噬者那套裂纹，配色换翠绿） */
+        groundCracks.push({ x: v.x, y: v.y, t: 0, life: 0.55, r: v.r * 1.5, n: 7,
+          seed: (v.x * 7 + v.y * 13) | 0, ang0: pxRand(v.x + v.y) * TAU, color: '#7fe08a' });
         sfx.flame();
       }
       continue;
@@ -5184,6 +5187,9 @@ function voidCleaveFx(cx, cy, ang, r, arc) {
 function voidSlamMark(cx, cy, r) {
   if (voidImpacts.length > 10) voidImpacts.shift();
   voidImpacts.push({ x: cx, y: cy, r: r, t: 0, life: 0.7 });
+  /* 🗡️ 虚空落地：地面裂开（这套裂纹的另一处接线） */
+  groundCracks.push({ x: cx, y: cy, t: 0, life: 0.6, r: r * 1.2, n: 8,
+    seed: (cx * 11 + cy * 17) | 0, ang0: pxRand(cx + cy * 1.7) * TAU, color: '#9ad8ff' });
   dbgVoidSlamFx++;
 }
 /* 诊断计数：虚空执剑者三套技能的出手次数（测试/读数用） */let dbgVoidHits = 0, dbgVoidFan = 0, dbgVoidQi = 0, dbgVoidDash = 0, dbgVoidSlam = 0, dbgVoidQiAng = 0;
