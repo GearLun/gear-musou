@@ -24451,7 +24451,7 @@ function treeSprite(kind, sc, variant, tint) {
     g.lineTo(cx - twB + 0.2 * q, base + 0.2 * q); g.closePath(); g.fill();
     g.beginPath(); g.moveTo(cx + twB + 2.0 * q, base + 0.2 * q); g.lineTo(cx + twB - 0.2 * q, base - 2.6 * q);
     g.lineTo(cx + twB - 0.2 * q, base + 0.2 * q); g.closePath(); g.fill();
-    const cy4 = base - 23 * q;
+    const cy4 = base - 33 * q;   // 冠心再往上：树干才能露出来
     /* 叶色四阶：比草地暗一档，但远不到黑（原来 #22391f 会变成"黑团"） */
     /* 深底 → 亮顶，跨度大才有泰拉瑞亚那种"硬"的感觉 */
     const LEAF_DD = '#141d0e', LEAF_D = '#1c2c14', LEAF_M = '#29441d', LEAF_L = '#3b5e29', LEAF_H = '#527d36', LEAF_HH = '#74a34c';
@@ -24483,94 +24483,128 @@ function treeSprite(kind, sc, variant, tint) {
     };
     /* 3 套配色（深浅/冷暖略有差异）——同一片树林里有变化才不像复制品 */
     /* 每套 6 档：最深只做阴影/描边，主色是 m/l —— 否则整棵树读成黑团 */
+    /* 树冠比草地暗一档 → 物件才能从地面上分离出来 */
     const TINT = [
-      { dd: '#1a2412', d: '#25361a', m: '#37551f', l: '#4d7329', h: '#67943c', hh: '#8cbb58' },
-      { dd: '#18220f', d: '#22331a', m: '#335220', l: '#4a702c', h: '#628f40', hh: '#84b25a' },
-      { dd: '#1c2614', d: '#28391c', m: '#3a5822', l: '#51782c', h: '#6b9940', hh: '#90bf5c' }
+      { dd: '#0e170a', d: '#15230f', m: '#1f3316', l: '#2b481d', h: '#3a5e26', hh: '#517f34' },
+      { dd: '#0d1509', d: '#14210e', m: '#1d3015', l: '#28441c', h: '#365924', hh: '#4c7832' },
+      { dd: '#101a0b', d: '#172611', m: '#223818', l: '#2e4d20', h: '#3e6429', hh: '#558538' }
     ];
     const TC = TINT[tt];
-    /* ===== 阶梯方块树冠 =====
-       每棵树用一组"行带"描述剪影：半宽随高度变化，宽度突变 → 阶梯边。
-       轮廓参数按 8 个变体取不同曲线，保证形状真的不同。 */
-    const CH = Math.round(26 * q);            // 冠高
-    const CWr = Math.round(13.5 * q);         // 冠最大半宽
-    /* 8 种剪影：t=0 顶部 1 底部；返回该高度的半宽系数 0..1 */
-    const PROFILE = [
-      function (u) { return Math.sqrt(Math.max(0, 1 - Math.pow(u * 1.16 - 0.10, 2))) * 0.95; },   // 圆
-      function (u) { return Math.pow(Math.max(0, 1 - u), 0.55) * 1.0; },                          // 水滴（上尖下宽）
-      function (u) { return (0.62 + 0.38 * Math.sin(u * Math.PI)) * 0.98; },                      // 桶形
-      function (u) { return Math.sqrt(Math.max(0, 1 - Math.pow(u * 1.05 - 0.02, 2))) * 0.80 + 0.14; },
-      function (u) { return Math.pow(Math.max(0, 1 - u * 0.85), 0.8) * 0.92; },                    // 高瘦
-      function (u) { return Math.sqrt(Math.max(0, 1 - Math.pow(u * 1.32, 2))) * 1.05; },          // 扁宽
-      function (u) { return Math.pow(Math.max(0, 1 - u), 0.42) * 0.86 + 0.08; },
-      function (u) { return Math.sqrt(Math.max(0, 1 - Math.pow(u * 1.10 - 0.16, 2))) * 0.88; }
-    ];
-    const prof = PROFILE[vv % PROFILE.length];
-    const topY = base - 15 * q - CH;           // 冠顶
-    /* 逐行算半宽，量化成 2texel 的阶梯 */
-    const rows = [];
-    for (let r = 0; r <= CH; r++) {
-      const u = r / CH;
-      let w = prof(u) * CWr;
-      w = Math.round(w / 2) * 2;               // 🔑 量化：宽度突变 → 阶梯硬边
-      if (w < 2) w = 0;
-      rows.push(w);
-    }
-    /* ① 剪影（暗底） */
-    for (let r = 0; r <= CH; r++) {
-      const w = rows[r];
-      if (!w) continue;
-      g.fillStyle = TC.dd;
-      g.fillRect(Math.round(cx - w), Math.round(topY + r), Math.round(w * 2), 1);
-    }
-    /* ② 描边：每一行的左右端各 1px 更深；冠顶/冠底整行加深 */
     const OUT = '#101a0d';
-    g.fillStyle = OUT;
-    for (let r = 0; r <= CH; r++) {
-      const w = rows[r];
-      if (!w) continue;
-      const yy = Math.round(topY + r);
-      g.fillRect(Math.round(cx - w), yy, 1, 1);
-      g.fillRect(Math.round(cx + w) - 1, yy, 1, 1);
-      if (r === 0) g.fillRect(Math.round(cx - w), yy, Math.round(w * 2), 1);
-      if (r === CH) g.fillRect(Math.round(cx - w), yy, Math.round(w * 2), 1);
+    /* 8 套圆簇布局（单位 = q 像素，已经手调成"宽 > 高"的树的形状，不是锥形） */
+    const CLUSTER = [
+      /* 每套都是**不对称**的团块：注意没有任何 ±x 同 y 同半径的圆对 */
+      [[-6.5, -4, 8.2, 7.2], [2.5, -6.5, 7.4, 6.4], [8, -1.5, 6.6, 6], [-1, 0.5, 9.2, 7.6], [-8, 2, 5.8, 5.2], [4.5, 3.5, 6.2, 5.4]],
+      [[-7, -1, 8.6, 7.4], [0, -6.5, 7.2, 6.2], [6.5, -3, 7, 6.4], [3, 2.5, 7.8, 6.6], [-4, 4, 6.4, 5.6], [-9.5, -5, 5, 4.4]],
+      [[-4, -6.5, 7.8, 6.8], [4, -4.5, 7.6, 6.6], [9, 1.5, 6, 5.6], [-1.5, 1.5, 9.4, 7.4], [-8.5, 0, 6, 5.4], [2, 4.5, 6.6, 5.6]],
+      [[-8, -2.5, 7.2, 6.4], [-1.5, -6, 7.6, 6.6], [6, -3.5, 7, 6.2], [7.5, 2.5, 5.8, 5.2], [-3, 2, 8.4, 6.8], [-7.5, 4.5, 5, 4.6]],
+      [[-6, -5, 7, 6.2], [3, -6.8, 6.6, 5.8], [8.5, -0.5, 7, 6.2], [-2, 1.5, 8.8, 7.2], [-8.5, 3, 5.4, 4.8], [4, 4.2, 6, 5.2]],
+      [[-5.5, -6, 7.4, 6.6], [4.5, -5.5, 7, 6.2], [9, 2, 5.8, 5.2], [-1.5, 0, 9.6, 7.6], [-9, 1, 5.6, 5], [2.5, 4.5, 6.4, 5.4]]
+    ];
+    const cl = CLUSTER[vv % CLUSTER.length];
+    /* ① 描边：圆簇外扩 1.3px，深绿 */
+    for (const c2 of cl) blob(c2[0], c2[1], c2[2] + 1.3, c2[3] + 1.3, OUT);
+    /* ② 暗底 */
+    for (const c2 of cl) blob(c2[0], c2[1], c2[2], c2[3], TC.dd);
+    /* ③ 中间调：整体往左上挪 1.5，内缩 1.6 */
+    for (const c2 of cl) blob(c2[0] - 1.5, c2[1] - 1.8, c2[2] - 1.6, c2[3] - 1.6, TC.m);
+    /* ④ 受光面：只留左上那几团 */
+    for (let i = 0; i < cl.length; i++) {
+      const c2 = cl[i];
+      if (c2[0] > 3.5) continue;                       // 右半不参与受光
+      blob(c2[0] - 2.6, c2[1] - 3.0, c2[2] * 0.60, c2[3] * 0.56, TC.l);
     }
-    /* ③ 中间调：整行内缩 2px，并往左上偏 1 行（光源在左上） */
-    for (let r = 1; r <= CH - 1; r++) {
-      const w = rows[r] - 2;
-      if (w < 2) continue;
-      g.fillStyle = TC.m;
-      g.fillRect(Math.round(cx - w), Math.round(topY + r), Math.round(w * 2), 1);
+    /* ⑤ 冠内叶簇：亮团分布在左上、暗团在右下（打散"一块平色"） */
+    blob(-5.2, -6.2, 3.4, 2.8, TC.h);
+    blob(1.4, -8.4, 3.0, 2.4, TC.h);
+    blob(-7.6, -2.8, 2.8, 2.4, TC.l);
+    blob(3.8, 2.6, 3.6, 2.8, TC.d);
+    blob(-1.2, 4.2, 3.2, 2.2, TC.d);
+    /* ⑥ 顶部亮心 */
+    blob(-2.4, -10.4, 3.2, 2.4, TC.hh);
+    /* ⑥ rim pass：读回像素，上/左轮廓提亮、右下轮廓压暗（跟着形状走） */
+    {
+      const iw = cv.width, ih = cv.height;
+      let idat = null;
+      try { idat = g.getImageData(0, 0, iw, ih); } catch (e) { idat = null; }
+      if (idat && idat.data) {
+        const px2 = idat.data;
+        const at2 = (x, y) => (y * iw + x) * 4;
+        const empty = (x, y) => (x < 0 || y < 0 || x >= iw || y >= ih) ? false : (px2[at2(x, y) + 3] < 16);
+        const put = (x, y, hex) => {
+          const o2 = at2(x, y), c3 = artRgb(hex);
+          px2[o2] = c3[0]; px2[o2 + 1] = c3[1]; px2[o2 + 2] = c3[2]; px2[o2 + 3] = 255;
+        };
+        for (let y = 1; y < ih - 1; y++) {
+          if (y > base - 7 * q) break;                    // 树干区不动
+          for (let x = 1; x < iw - 1; x++) {
+            if (px2[at2(x, y) + 3] < 16) continue;
+            const eUp = empty(x, y - 1), eLeft = empty(x - 1, y);
+            const eDown = empty(x, y + 1), eRight = empty(x + 1, y);
+            if (eUp && eLeft) put(x, y, TC.hh);
+            else if (eUp || eLeft) put(x, y, TC.h);
+            else if (eDown && eRight) put(x, y, TC.d);
+          }
+        }
+        g.putImageData(idat, 0, 0);
+      }
     }
-    /* ④ 受光面：只占左上象限（上半 + 左半） */
-    for (let r = 1; r <= Math.round(CH * 0.62); r++) {
-      const w = rows[r] - 2;
-      if (w < 3) continue;
-      g.fillStyle = TC.l;
-      g.fillRect(Math.round(cx - w), Math.round(topY + r), Math.round(w), 1);
-    }
-    /* ⑤ 冠顶亮块（小块，跟形状走） */
-    for (let r = 1; r <= Math.round(CH * 0.26); r++) {
-      const w = rows[r];
-      if (w < 4) continue;
-      g.fillStyle = TC.h;
-      g.fillRect(Math.round(cx - w * 0.62), Math.round(topY + r), Math.round(w * 0.9), 1);
-    }
-    /* ⑥ 暗部：右下象限压一档（出体积） */
-    for (let r = Math.round(CH * 0.55); r <= CH - 1; r++) {
-      const w = rows[r] - 2;
-      if (w < 3) continue;
-      g.fillStyle = TC.d;
-      g.fillRect(Math.round(cx + 1), Math.round(topY + r), Math.round(w - 1), 1);
-    }
-    /* ⑦ 叶簇：沿剪影左右边缘点小方块，破掉平滑（阶梯感更明显） */
-    for (let r = 2; r <= CH - 2; r += 3) {
-      const w = rows[r];
-      if (!w) continue;
-      const side = (r % 2) ? 1 : -1;
-      const eh = 2 + ((artHash(vv, r, 61) * 2) | 0);
-      g.fillStyle = (side > 0) ? TC.m : TC.l;
-      g.fillRect(Math.round(cx + side * w) - (side > 0 ? 0 : 2), Math.round(topY + r), 2, eh);
+    /* ===== 树干（画在树冠之后 = 最上层，确保可见）===== */
+    {
+      const th = Math.min(20, Math.round((base - cy4) / q) - 8);   // 树干高（q 单位）
+      const hgt = th > 4 ? th : 8;
+      const botW = 3.0 * q, topW = 1.9 * q;
+      const lean2 = ((vv % 5) - 2) * 0.9 * q;
+      const gBase = base + 1.5 * q;
+      const gTop = base - hgt * q;
+      /* 描边 */
+      g.fillStyle = '#0d0906';
+      g.beginPath();
+      g.moveTo(cx - botW - 1, gBase);
+      g.lineTo(cx + lean2 - topW - 1, gTop);
+      g.lineTo(cx + lean2 + topW + 1, gTop);
+      g.lineTo(cx + botW + 1, gBase);
+      g.closePath(); g.fill();
+      /* 主体 */
+      g.fillStyle = '#6b5232';
+      g.beginPath();
+      g.moveTo(cx - botW, gBase);
+      g.lineTo(cx + lean2 - topW, gTop);
+      g.lineTo(cx + lean2 + topW, gTop);
+      g.lineTo(cx + botW, gBase);
+      g.closePath(); g.fill();
+      /* 左侧受光 */
+      g.fillStyle = '#8a6a42';
+      g.beginPath();
+      g.moveTo(cx - botW, gBase);
+      g.lineTo(cx + lean2 - topW, gTop);
+      g.lineTo(cx + lean2 - topW + 0.9 * q, gTop);
+      g.lineTo(cx - botW + 1.2 * q, gBase);
+      g.closePath(); g.fill();
+      /* 右侧背光 */
+      g.fillStyle = '#42301c';
+      g.beginPath();
+      g.moveTo(cx + botW, gBase);
+      g.lineTo(cx + lean2 + topW, gTop);
+      g.lineTo(cx + lean2 + topW - 0.9 * q, gTop);
+      g.lineTo(cx + botW - 1.2 * q, gBase);
+      g.closePath(); g.fill();
+      /* 树皮竖纹 */
+      g.fillStyle = '#4a3620';
+      g.fillRect(Math.round(cx - 0.6 * q + lean2 * 0.4), Math.round(gTop + 2 * q), Math.max(1, Math.round(0.8 * q)), Math.round(hgt * 0.45 * q));
+      g.fillStyle = '#5d4530';
+      g.fillRect(Math.round(cx + 0.7 * q + lean2 * 0.7), Math.round(gTop + hgt * 0.5 * q), Math.max(1, Math.round(0.7 * q)), Math.round(hgt * 0.3 * q));
+      /* 树根张开 */
+      g.fillStyle = '#0d0906';
+      g.beginPath(); g.moveTo(cx - botW - 3 * q, gBase + 1 * q); g.lineTo(cx - botW + 0.3 * q, gBase - 3 * q);
+      g.lineTo(cx - botW + 0.3 * q, gBase + 1 * q); g.closePath(); g.fill();
+      g.beginPath(); g.moveTo(cx + botW + 3 * q, gBase + 1 * q); g.lineTo(cx + botW - 0.3 * q, gBase - 3 * q);
+      g.lineTo(cx + botW - 0.3 * q, gBase + 1 * q); g.closePath(); g.fill();
+      g.fillStyle = '#523c26';
+      g.beginPath(); g.moveTo(cx - botW - 2.3 * q, gBase + 0.6 * q); g.lineTo(cx - botW + 0.3 * q, gBase - 2.4 * q);
+      g.lineTo(cx - botW + 0.3 * q, gBase + 0.6 * q); g.closePath(); g.fill();
+      g.beginPath(); g.moveTo(cx + botW + 2.3 * q, gBase + 0.6 * q); g.lineTo(cx + botW - 0.3 * q, gBase - 2.4 * q);
+      g.lineTo(cx + botW - 0.3 * q, gBase + 0.6 * q); g.closePath(); g.fill();
     }
   }
   TREE_SPR[key] = cv;
@@ -24629,10 +24663,10 @@ function drawWorldTrees(target) {
     /* 投影：光从左上 → 影子朝右下、被拉长（和树一起画，先影后树） */
     if (tr.kind === 'tree' && !tr.stump && cv) {
       const sh = Math.min(1.25, tr.sc / 2.2);
-      c.globalAlpha = 0.20;
-      c.fillStyle = '#050a03';
+      c.globalAlpha = 0.26;
+      c.fillStyle = '#0a1106';
       c.beginPath();
-      c.ellipse(tr.x + 8 * sh, tr.y + 2, 16 * tr.sc * (0.85 + 0.3 * sh), 5.4 * tr.sc, 0.16, 0, Math.PI * 2);
+      c.ellipse(tr.x + 6 * sh, tr.y + 1, 10.5 * tr.sc * (0.85 + 0.25 * sh), 3.6 * tr.sc, 0.14, 0, Math.PI * 2);
       c.fill();
       c.globalAlpha = 1;
     }
