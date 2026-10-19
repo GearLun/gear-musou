@@ -24588,6 +24588,8 @@ function drawPondShimmer() {
   if (!worldPonds.length || lowSpecOn()) return;
   const vx0 = camX - 60, vx1 = camX + VW + 60, vy0 = camY - 60, vy1 = camY + VH + 60;
   for (const pd of worldPonds) {
+    /* 形状防御：缺字段就跳过（绝不因为一个水塘把整帧打死） */
+    if (!pd || !pd.rx || !pd.ry || !pd.sub) continue;
     const ex = pd.rx * 1.35, ey = pd.ry * 1.35;
     if (pd.cx + ex < vx0 || pd.cx - ex > vx1 || pd.cy + ey < vy0 || pd.cy - ey > vy1) continue;
     const subs = pd.sub.length ? pd.sub : [{ x: pd.cx, y: pd.cy, rx: pd.rx, ry: pd.ry }];
@@ -24665,6 +24667,12 @@ window.__musouTrees = () => ({
   sample: worldTrees.slice(0, 5).map(x => ({ x: Math.round(x.x), y: Math.round(x.y), kind: x.kind, solidR: x.solidR, bulletR: Math.round(x.bulletR) }))
 });
 window.__musouTreesOff = () => { TREES_ACTIVE = false; return true; };
+/* 水塘登记项的**形状契约**（给测试用：图集加载后才会填，无头环境容易漏测） */
+window.__musouPonds = () => worldPonds.map(function (p) {
+  return (p && typeof p === 'object' && !Array.isArray(p))
+    ? { cx: p.cx, cy: p.cy, rx: p.rx, ry: p.ry, subN: (p.sub && p.sub.length) || 0 }
+    : { bad: true, raw: String(p) };
+});
 window.__musouDrawTrees = (target) => { drawWorldTrees(target); return worldTrees.length; };
 window.__musouCam = () => ({ camX, camY, VW, VH });
 window.__musouTreesOn = () => { TREES_ACTIVE = true; return true; };
@@ -25156,7 +25164,10 @@ function artBuildGrassGround(g, W, H, gr, grR) {
     g.fillRect(0, 0, W, H);
     return;
   }
-  worldPonds = pondList;
+  /* ⚠️ 必须按 drawPondShimmer 期望的**对象**形状登记（数组会让它抛异常、整帧中断） */
+  worldPonds = pondList.map(function (p) {
+    return { cx: p[0], cy: p[1], rx: p[2], ry: p[3], sub: [{ x: p[0], y: p[1], rx: p[2], ry: p[3] }] };
+  });
 }
 
 function buildGround() {
