@@ -22061,6 +22061,10 @@ const FOE_PET = {
 /* 这些兵种换成宝可梦外观后**不强制面朝玩家**（按冲刺/移动方向取朝向）：
    铁骑 → 小火马 / 烈焰马，冲刺型，强制面朝玩家会"反着冲"。 */
 const FOE_FACE_MOVE_IDS = ['cavalry'];
+/* ⚠️⚠️ **只有铁骑**在上面那个名单里。用户明确要求：
+      阿罗拉六尾 / 六尾（弓兵 / 妖法师）必须**始终面朝玩家** —— 绝对不要把 archer / mage 加进 FOE_FACE_MOVE_IDS。
+   下面这份名单是「无论如何都面朝玩家」的硬保证（以后方向逻辑再扩展也不会漏）。 */
+const FOE_FACE_PLAYER_IDS = ['foe_avulpix', 'foe_aninetales', 'foe_vulpix', 'foe_ninetales'];
 const FOE_PET_EVO_WAVE = 15;      // 第 15 波**结束之后**全体进化 → 16 波起用 evo 形态
 /* 敌方宝可梦的整体体型系数（用户 2026-10：先按像素模型高度，之后要求「再减少 1/3」 → 2/3）*/
 const FOE_PET_SIZE_K = 2 / 3;
@@ -22088,6 +22092,8 @@ function foePetDir(e) {
   } else {
     ang = Math.atan2(p.y - e.y, p.x - e.x);
   }
+  /* 🦊 硬保证：这几只无论如何都面朝玩家 */
+  if (FOE_FACE_PLAYER_IDS.indexOf(foePetOf(e)) >= 0) ang = Math.atan2(p.y - e.y, p.x - e.x);
   const idx = Math.round((Math.PI / 2 - ang) / (Math.PI / 4));
   return ((idx % 8) + 8) % 8;
 }
@@ -22124,7 +22130,9 @@ function drawFoePet(e, key) {
      → 换成宝可梦外观后**体型和原来一致**（用户：「将体型全部换成正常体型」） */
   /* v1.0.8 没有 PX_SPEC → 用判定半径折算身高 */
   /* ⚠️ ×2/3：用户要求「所有普通敌人宝可梦的体型再减少 1/3，比我方的宝可梦大得多」 */
-  const targetH = Math.max(24, e.r * 2.6) * FOE_PET_SIZE_K;
+  /* 敌人身体绘制高 ≈ e.r × 3.8（椭圆 rh = e.r*1.9）→ 基准取它，
+     再 × FOE_PET_SIZE_K(2/3) 保持「比模型小一号」的原有口径 */
+  const targetH = Math.max(30, e.r * 3.8) * FOE_PET_SIZE_K;
   const k = targetH / gy;
   const dw = sw * k, dh = sh * k;
   const dx = -dw / 2, dy = -gy * k;
