@@ -22188,8 +22188,10 @@ function drawEnemy(e, col) {
   const DRK = col || (hpAff ? '#1b5c25' : (e.shiny ? '#7a5c10' : e.dark));
   const ACC = col || (hpAff ? '#a8f0a8' : (e.shiny ? '#fff6d0' : e.acc));
   ctx.save();
+  ctx.translate(e.x, e.y - air);
 
-  /* 🧢 训练家专属：普通敌人换成宝可梦外观（画不出来就退回原模型，绝不空场） */
+  /* 🧢 训练家专属：普通敌人换成宝可梦外观（画不出来就退回原模型，绝不空场）
+     ⚠️ 必须在 ctx.translate 之后：drawFoePet 是按「原点 = 敌人脚下」绘制的 */
   {
     const foeKey = foePetOf(e);
     if (foeKey) {
@@ -22203,7 +22205,6 @@ function drawEnemy(e, col) {
       if (drawFoePet(e, foeKey)) { ctx.restore(); return; }
     }
   }
-  ctx.translate(e.x, e.y - air);
   /* ===== 🛠 开发者·无限血量假人：一截木桩 + 靶环 + 金色护罩 =====
      ⚠️ 这个分支在 `ctx.save()` 之后、必须在 return 前 restore（save/restore 一漏就每帧泄漏） */
   if (e.devDummy) {
