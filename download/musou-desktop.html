@@ -24752,11 +24752,11 @@ window.__musouTreeTest = (x, y) => ({
   bullet: treeBlocksBullet(x, y)
 });
 /* ===== 🧱 地面图集：TinyMeadow（tools/_build-ground-atlas.js 生成）=====
-   grass=32 rock=20 water=16 块 · 每格 24×24 */
+   grass=32 rock=8 water=1 块 · 每格 24×24 */
 const ART_GROUND_ATLAS = {
-  w: 288, h: 144, tw: 24, th: 24,
-  cells: {"grass":[[0,0],[24,0],[48,0],[72,0],[96,0],[120,0],[144,0],[168,0],[192,0],[216,0],[240,0],[264,0],[0,24],[24,24],[48,24],[72,24],[96,24],[120,24],[144,24],[168,24],[192,24],[216,24],[240,24],[264,24],[0,48],[24,48],[48,48],[72,48],[96,48],[120,48],[144,48],[168,48]],"rock":[[192,48],[216,48],[240,48],[264,48],[0,72],[24,72],[48,72],[72,72],[96,72],[120,72],[144,72],[168,72],[192,72],[216,72],[240,72],[264,72],[0,96],[24,96],[48,96],[72,96]],"water":[[96,96],[120,96],[144,96],[168,96],[192,96],[216,96],[240,96],[264,96],[0,120],[24,120],[48,120],[72,120],[96,120],[120,120],[144,120],[168,120]]},
-  data: 'data:image/png;base64,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'
+  w: 288, h: 96, tw: 24, th: 24,
+  cells: {"grass":[[0,0],[24,0],[48,0],[72,0],[96,0],[120,0],[144,0],[168,0],[192,0],[216,0],[240,0],[264,0],[0,24],[24,24],[48,24],[72,24],[96,24],[120,24],[144,24],[168,24],[192,24],[216,24],[240,24],[264,24],[0,48],[24,48],[48,48],[72,48],[96,48],[120,48],[144,48],[168,48]],"rock":[[192,48],[216,48],[240,48],[264,48],[0,72],[24,72],[48,72],[72,72]],"water":[[96,72]]},
+  data: 'data:image/png;base64,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'
 };
 
 const ART_BASE_GRASS = '#456334';        // 兜底底色
@@ -24878,28 +24878,52 @@ function artPaintTerrain(g, W, H, layout) {
   /* 0 草 / 1 石 / 2 水 / 3 墙 */
   const kind = new Uint8Array(CX * CY);
 
-  /* ① 边墙：最外 2 格 */
-  const WALL = 2;
-  for (let y = 0; y < CY; y++) for (let x = 0; x < CX; x++)
-    if (x < WALL || y < WALL || x >= CX - WALL || y >= CY - WALL) kind[y * CX + x] = 3;
+  /* 边墙不再单独画：石砌围边由 layout.paths 给出（避免两套边叠在一起） */
 
-  /* ② 石路：矩形块（格坐标） */
-  const fillRect = (r, v) => {
-    const x0 = Math.max(0, r[0]), y0 = Math.max(0, r[1]);
-    const x1 = Math.min(CX, r[0] + r[2]), y1 = Math.min(CY, r[1] + r[3]);
-    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
-      if (kind[y * CX + x] === 3) continue;
-      kind[y * CX + x] = v;
+    /* ② 有机形状：噪声团块（水塘 / 石堆 / 围边） */
+  const NOISE = artField(80, 45, 0.13, 0.13, 401, 3);
+  const nAt = (x, y) => artSample(NOISE, x / CX, y / CY);
+  const blobAt = (cx0, cy0, rx, ry, soft) => {
+    /* 返回该格是否在团块内：椭圆距离 + 噪声扰动 → 自然起伏的边 */
+    return (x, y) => {
+      const dx = (x - cx0) / rx, dy = (y - cy0) / ry;
+      const d = dx * dx + dy * dy;
+      const wob = (nAt(x, y) - 0.5) * soft;
+      return d + wob < 1;
+    };
+  };
+  const put = (fn, v) => {
+    for (let y = 0; y < CY; y++) for (let x = 0; x < CX; x++) {
+      if (fn(x, y)) kind[y * CX + x] = v;
     }
   };
-  if (layout && layout.paths) for (const r of layout.paths) fillRect(r, 1);
-  /* ③ 水池（矩形）；再给池子外圈铺一格岸（石） */
-  if (layout && layout.water) {
-    for (const r of layout.water) {
-      fillRect([r[0] - 1, r[1] - 1, r[2] + 2, r[3] + 2], 1);   // 先铺岸
-      fillRect(r, 2);                                          // 再挖水
-    }
+
+  /* 围边：最外 3 格（用噪声把内边界打毛，避免死直线） */
+  const RIM = 3;
+  for (let y = 0; y < CY; y++) for (let x = 0; x < CX; x++) {
+    const inner = 3 + Math.round((nAt(x, y) - 0.5) * 4);
+    if (x < inner || y < inner || x >= CX - inner || y >= CY - inner) kind[y * CX + x] = 3;
   }
+
+  /* 水塘（3 个有机团块）+ 石岸 */
+  const pondsDef = [];
+  {
+    const R = 7 + Math.round(nAt(CX * 0.2, CY * 0.2) * 2);
+    pondsDef.push([Math.round(CX * 0.16), Math.round(CY * 0.24), R + 3, R]);
+    pondsDef.push([Math.round(CX * 0.74), Math.round(CY * 0.30), R + 2, R - 1]);
+    pondsDef.push([Math.round(CX * 0.46), Math.round(CY * 0.74), R + 3, R + 1]);
+  }
+  /* 先铺一圈更宽的石头做岸 */
+  for (const p of pondsDef) put(blobAt(p[0], p[1], p[2] + 2, p[3] + 2, 0.55), 1);
+  /* 再挖水 */
+  for (const p of pondsDef) put(blobAt(p[0], p[1], p[2], p[3], 0.5), 2);
+
+  /* 石堆：草地上几处有机的卵石聚集（像野外的碎石地） */
+  const rocksDef = [
+    [0.08, 0.62, 5, 4], [0.30, 0.10, 4, 3], [0.55, 0.16, 3, 3],
+    [0.86, 0.70, 5, 4], [0.64, 0.88, 4, 3], [0.20, 0.90, 3, 3]
+  ];
+  for (const r of rocksDef) put(blobAt(Math.round(CX * r[0]), Math.round(CY * r[1]), r[2], r[3], 0.9), 1);
 
   /* ④ 平铺：草地按**低频场**选变体（同区域同一种草，避免棋盘） */
   const sm = g.imageSmoothingEnabled;
@@ -24919,10 +24943,23 @@ function artPaintTerrain(g, W, H, layout) {
         hv = artHash(cx2, cy2, k === 2 ? 311 : 211) * list.length;
       }
       const cell = list[hv | 0] || list[0];
-      g.drawImage(artAtlasImg, cell[0], cell[1], TW, TH, cx2 * TW, cy2 * TH, TW, TH);
+      /* 内缩 1px：套图每块自带 1px 边，直接铺会露网格缝
+         ⚠️ 不要翻转：草地有两种明暗，翻转会暴露成明暗方格补丁 */
+      g.drawImage(artAtlasImg, cell[0] + 1, cell[1] + 1, TW - 2, TH - 2, cx2 * TW, cy2 * TH, TW, TH);
     }
   }
   g.imageSmoothingEnabled = sm;
+
+  /* ④b 水面压深：水格叠一层深蓝，避免"泳池青" */
+  g.globalAlpha = 0.22;
+  g.fillStyle = '#12314f';
+  for (let cy2 = 0; cy2 < CY; cy2++) {
+    for (let cx2 = 0; cx2 < CX; cx2++) {
+      if (kind[cy2 * CX + cx2] !== 2) continue;
+      g.fillRect(cx2 * TW, cy2 * TH, TW, TH);
+    }
+  }
+  g.globalAlpha = 1;
 
   /* ⑤ 把格子类型导出（给道具摆放判断用） */
   artTileKind = { CX: CX, CY: CY, TW: TW, TH: TH, kind: kind };
@@ -25164,25 +25201,22 @@ function artBuildGrassGround(g, W, H, gr, grR) {
   const TW = (ART_GROUND_ATLAS && ART_GROUND_ATLAS.tw) || 24;
   const TH = (ART_GROUND_ATLAS && ART_GROUND_ATLAS.th) || 24;
   const CX = Math.ceil(W / TW), CY = Math.ceil(H / TH);
-  const mx = Math.round(CX / 2), my = Math.round(CY / 2);
-  const ROAD = 4;                       // 主干宽 4 格 = 96px
+
+  /* 石砌围边：外圈 3 格（参考图那种"卵石镶在草里"的边） */
   const paths = [];
-  paths.push([0, my - 2, CX, ROAD]);    // 横向主干
-  paths.push([mx - 2, 0, ROAD, CY]);    // 纵向主干
-  /* 中心校场环路（空心矩形，留出入口） */
-  const ax = 9, ay = 6;                 // 校场半径（格）
-  paths.push([mx - ax, my - ay, ax * 2, 2]);            // 上边
-  paths.push([mx - ax, my + ay - 2, ax * 2, 2]);        // 下边
-  paths.push([mx - ax, my - ay, 2, ay * 2]);            // 左边
-  paths.push([mx + ax - 2, my - ay, 2, ay * 2]);        // 右边
-  /* 校场内部铺石台（战斗区在地面上有明确边界） */
-  paths.push([mx - ax + 2, my - ay + 2, ax * 2 - 4, ay * 2 - 4]);
-  /* 两个矩形水池（避开主干与校场） */
-  const pw = 10, ph = 6;
-  const water = [
-    [Math.round(CX * 0.13), Math.round(CY * 0.68), pw, ph],
-    [Math.round(CX * 0.76), Math.round(CY * 0.20), pw, ph]
-  ];
+  const RIM = 3;
+  paths.push([0, 0, CX, RIM]);            // 上
+  paths.push([0, CY - RIM, CX, RIM]);     // 下
+  paths.push([0, 0, RIM, CY]);            // 左
+  paths.push([CX - RIM, 0, RIM, CY]);     // 右
+
+  /* 水池：3 个矩形，避开正中（战斗区） */
+  const water = [];
+  const pw = 9, ph = 5;
+  water.push([Math.round(CX * 0.13), Math.round(CY * 0.20), pw, ph]);
+  water.push([Math.round(CX * 0.72), Math.round(CY * 0.26), pw, ph]);
+  water.push([Math.round(CX * 0.44), Math.round(CY * 0.72), pw, ph]);
+
   if (!artPaintTerrain(g, W, H, { paths: paths, water: water })) {
     g.fillStyle = '#7ec24a';
     g.fillRect(0, 0, W, H);
@@ -25190,40 +25224,13 @@ function artBuildGrassGround(g, W, H, gr, grR) {
   }
   worldPonds = water.map(function (r) {
     const cx = (r[0] + r[2] / 2) * TW, cy = (r[1] + r[3] / 2) * TH;
-    return { cx: cx, cy: cy, rx: r[2] * TW / 2, ry: r[3] * TH / 2, sub: [{ x: cx, y: cy, rx: r[2] * TW / 2, ry: r[3] * TH / 2 }] };
+    const rx = r[2] * TW / 2, ry = r[3] * TH / 2;
+    return { cx: cx, cy: cy, rx: rx, ry: ry, sub: [{ x: cx, y: cy, rx: rx, ry: ry }] };
   });
-
-  /* 🌿 摆放道具：只在草地格上，避开校场中心 / 道路 / 水 / 墙 */
-  const _propList = [];
-  artLoadProps();
-  if (artTileKind && artPropOK && typeof ART_PROP_ATLAS !== 'undefined' && ART_PROP_ATLAS) {
-    const K = artTileKind, kind = K.kind, CXk = K.CX, CYk = K.CY, TWk = K.TW, THk = K.TH;
-    const cells = ART_PROP_ATLAS.cells;
-    const arenaX = W / 2, arenaY = H / 2;
-    let tries = 0, nb = 0, np = 0, nc = 0;
-    const wantBush = 150, wantPot = 18, wantChest = 8;
-    while (tries < 6000 && (nb < wantBush || np < wantPot || nc < wantChest)) {
-      tries++;
-      const gx = Math.floor(gr() * CXk), gy = Math.floor(gr() * CYk);
-      if (gx < 2 || gy < 2 || gx >= CXk - 2 || gy >= CYk - 2) continue;
-      if (kind[gy * CXk + gx] !== 0) continue;
-      const wx = (gx + 0.5) * TWk + grR(-6, 6), wy = (gy + 0.5) * THk + grR(-6, 6);
-      if (Math.abs(wx - arenaX) < 300 && Math.abs(wy - arenaY) < 200) continue;
-      const r0 = gr();
-      let tag, list;
-      if (r0 < 0.86 && nb < wantBush) { tag = 'bush'; list = cells.bush; nb++; }
-      else if (r0 < 0.96 && np < wantPot) { tag = 'pot'; list = cells.pot; np++; }
-      else if (nc < wantChest) { tag = 'chest'; list = cells.chest; nc++; }
-      else continue;
-      if (!list || !list.length) continue;
-      const c = list[Math.floor(gr() * list.length) % list.length];
-      _propList.push({ x: wx, y: wy, tag: tag, cx: c[0], cy: c[1], cw: c[2], ch: c[3] });
-    }
-    _propList.sort(function (a, b) { return a.y - b.y; });
-  }
-  /* 最后一次性赋值：重复调用 buildGround 也不会累加 */
-  worldProps = _propList;
+  /* 🚫 道具全部不放（用户：莫名其妙的宝箱和植物） */
+  worldProps = [];
 }
+
 
 function buildGround() {
   /* 🎨 地表生成用**局部确定随机**：不吃全局 Math.random（见 tools\_fix-ground-rng.js 的说明） */
