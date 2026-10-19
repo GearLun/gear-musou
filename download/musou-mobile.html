@@ -24696,13 +24696,12 @@ window.__musouTreeTest = (x, y) => ({
   move: treeBlocksMove(x, y, 10),
   bullet: treeBlocksBullet(x, y)
 });
-/* ===== 🧱 地面图集（由 tools/_build-ground-atlas.js 从 材料/assets/tilesets 裁出）=====
-   grass ← 12 个内部图块（可无缝平铺）
-   每格 24×24，cells[key] = [[x,y], ...] */
+/* ===== 🧱 地面图集：TinyMeadow（tools/_build-ground-atlas.js 生成）=====
+   grass=32 rock=20 water=16 块 · 每格 24×24 */
 const ART_GROUND_ATLAS = {
-  w: 96, h: 72, tw: 24, th: 24,
-  cells: {"grass":[[0,0],[24,0],[48,0],[72,0],[0,24],[24,24],[48,24],[72,24],[0,48],[24,48],[48,48],[72,48]]},
-  data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAGAAAABICAYAAAAJZ/BjAAAEJElEQVR42u2cO3LcMAxAcZOUOULKHMGly5QufQSXLnMMlylTukzpI7hM6TKlM/QMPBCMD7UEdkkZhcbZlfYJ4p/UC+H+6eqVHg9/f7z/+/Hl5u3vze/vm2vwe+lzu5ZfX3ydD/SEdjN+jgYh3VC6rvgyH3pzn0N7AtlTuiL5VmLNxgc8yasT/8xvoCWkVhrOyX9+uH2/bnY+aNWE5prW7lEYz2WvXTyVTx+e8zFxnu6vXx9vvy3Bh572jn7mVdKqflIAI3z68FpJbd//e/m1OT8zH3hCeB2KlNi9nc4oX3p4ia9l/Ix88Hrx3p6eJrzXHp7K1zJxZT54QywpCNru8epn9QvF/8gHremQ2mw+cvE6YqtpKj7LAN6ba+NZqfPxfld8/XduBnjjXasa9jzAZ+ernbAElgDSsMt7mOJfycNQr+fngHZoM9w9peEz88EbUkljem0Wa814iy9fD177Ji0xWG2hxyn+9hxIJ6R1bqxO0vXWKmLxbT5okwzpJtqNpZt6k5g9/D0z0NX4oN3MW9PY8zIjms+r+cr8t07Yqy7WKzpp9seDGuHTa9pqIq4o0lq3Mh+81U06fNJKgrUOEsXna/F3d18PwQdvjR47F22iYc0GvZnlHn47MPi2pPv85+ch+NDTkWg39uwBqVka4bfPreS04KXXgivywVsy5Z2INLvz2sRIPj6E9UZqJT6UtzORF9TaqHZkeTXFN7ygBqbDpGivpviGF4RwzOHWUz9cfwnzaorveEF0iNTA7WgdRZQXtBJf8oIy49/0ATg+9UYBp3hBK/AtLygr/k0G8PFvpBe0At/ygrLiB2nykOUFzc73vKCM+MsLKi+ovKDydmbwgvg69WrezqrxAwbPh2AreTsrx/9hIobr1Ct5OyvHD3wMzMe5q3g7q8a/8YJ4yVnN21kx/vKCygta2wuSlqhpe++lT3lBg3xpAY9mgJc+5QUN8iXTgZZ6L33KCwrgc9MBX9y0w0uf8oIC+JTRMgM59D9za+lTXlAgn760oa8trfQpLyiYTzOvJ31CvCCqa2R4Ndn8bC/Iin94vyCua/TuD5HBn9EL8uKH0f1wqLLBVyIj9tvp5c/qBXnxw+h+OFgysPPBIPnvMvkze0Fe/BCxHw41Bvjvz8Gf3Quy4oeI/XD4OBoD1d6HZvBn9oKs+CFiPxz6W8xpLCHn4s/sBVnxh+4XJM0gz8mf3QuS4i8vqLyg8oLK26n9gub3grL4h9gvKNsLyuQfYr+gbC8ok3+Y/YKyvaAs/qH2C8r2gjL45QXN7gWNei+X9o564s/2joa8oFHv5dLe0SnxZ3tHu7ygUe/l0t6RF3+2dxTiBY14LzN4Rz3xZ3tHQ17QiPcyg3fUE3+2dxTiBZ3ivczkHXnxZ3tHIV7QXu9lNu/Iiz/bO+Lf/wdlHWca05jK2QAAAABJRU5ErkJggg=='
+  w: 288, h: 144, tw: 24, th: 24,
+  cells: {"grass":[[0,0],[24,0],[48,0],[72,0],[96,0],[120,0],[144,0],[168,0],[192,0],[216,0],[240,0],[264,0],[0,24],[24,24],[48,24],[72,24],[96,24],[120,24],[144,24],[168,24],[192,24],[216,24],[240,24],[264,24],[0,48],[24,48],[48,48],[72,48],[96,48],[120,48],[144,48],[168,48]],"rock":[[192,48],[216,48],[240,48],[264,48],[0,72],[24,72],[48,72],[72,72],[96,72],[120,72],[144,72],[168,72],[192,72],[216,72],[240,72],[264,72],[0,96],[24,96],[48,96],[72,96]],"water":[[96,96],[120,96],[144,96],[168,96],[192,96],[216,96],[240,96],[264,96],[0,120],[24,120],[48,120],[72,120],[96,120],[120,120],[144,120],[168,120]]},
+  data: 'data:image/png;base64,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'
 };
 
 const ART_BASE_GRASS = '#456334';        // 兜底底色
@@ -24809,17 +24808,26 @@ function artPaintTerrain(g, W, H, pathLines, ponds) {
   const A = ART_GROUND_ATLAS;
   const TW = A.tw | 0, TH = A.th | 0;
   const CX = Math.ceil(W / TW), CY = Math.ceil(H / TH);
-  const cg = A.cells.grass || [], cd = A.cells.dirt || [], cw = A.cells.water || [];
-  if (!cg.length) return false;
+  const cg = A.cells.grass || [], cr = A.cells.rock || [], cw = A.cells.water || [];
+  if (!cg.length || !cr.length) return false;
 
-  /* ① 土路：tile 中心到折线的最近距离 + 抖动边界 */
-  const kind = new Uint8Array(CX * CY);          // 0 草 / 1 土 / 2 水
-  if (pathLines) {   // 土路已改纯色硬块，不再依赖 dirt 图块
+  /* 0 草 / 1 石路 / 2 水 / 3 边墙 */
+  const kind = new Uint8Array(CX * CY);
+
+  /* ① 边墙：最外 2 圈（地图四周是石砌边界） */
+  const WALL = 2;
+  for (let y = 0; y < CY; y++) {
+    for (let x = 0; x < CX; x++) {
+      if (x < WALL || y < WALL || x >= CX - WALL || y >= CY - WALL) kind[y * CX + x] = 3;
+    }
+  }
+
+  /* ② 石路：tile 中心到折线的最近距离 + 哈希抖动（台阶边不规则） */
+  if (pathLines) {
     for (const pl of pathLines) {
       const halfW = pl.w / 2;
       const pts = [];
       for (let i = 0; i <= 240; i++) pts.push(artCatmull(pl.pts, i / 240));
-      /* 只遍历折线包围盒内的 tile */
       let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
       for (const q of pts) {
         if (q[0] < minX) minX = q[0]; if (q[0] > maxX) maxX = q[0];
@@ -24831,95 +24839,64 @@ function artPaintTerrain(g, W, H, pathLines, ponds) {
       const cy1 = Math.min(CY - 1, Math.ceil((maxY + halfW + 40) / TH));
       for (let cy2 = cy0; cy2 <= cy1; cy2++) {
         for (let cx2 = cx0; cx2 <= cx1; cx2++) {
+          if (kind[cy2 * CX + cx2] === 3) continue;
           const px2 = (cx2 + 0.5) * TW, py2 = (cy2 + 0.5) * TH;
           let best = 1e9;
-          for (let i = 0; i < pts.length; i += 2) {
+          for (let i = 0; i < pts.length; i++) {
             const dx = pts[i][0] - px2, dy = pts[i][1] - py2;
             const d = dx * dx + dy * dy;
             if (d < best) best = d;
           }
-          best = Math.sqrt(best);
-          /* 边界抖动：让台阶边不规则 */
-          const jit = (artHash(cx2, cy2, 17) - 0.5) * TW * 0.9;
-          if (best < halfW + jit) kind[cy2 * CX + cx2] = 1;
+          const jit = (artHash(cx2, cy2, 17) - 0.5) * TW * 0.8;
+          if (Math.sqrt(best) < halfW + jit) kind[cy2 * CX + cx2] = 1;
         }
       }
     }
   }
-  /* ② 水塘 */
-  if (ponds && cw.length) {
+
+  /* ③ 水塘 */
+  if (ponds) {
     for (const p of ponds) {
       const cx0 = Math.max(0, Math.floor((p[0] - p[2]) / TW)), cx1 = Math.min(CX - 1, Math.ceil((p[0] + p[2]) / TW));
       const cy0 = Math.max(0, Math.floor((p[1] - p[3]) / TH)), cy1 = Math.min(CY - 1, Math.ceil((p[1] + p[3]) / TH));
       for (let cy2 = cy0; cy2 <= cy1; cy2++) {
         for (let cx2 = cx0; cx2 <= cx1; cx2++) {
+          if (kind[cy2 * CX + cx2] === 3) continue;
           const px2 = (cx2 + 0.5) * TW, py2 = (cy2 + 0.5) * TH;
           const dx = (px2 - p[0]) / p[2], dy = (py2 - p[1]) / p[3];
-          const jit = (artHash(cx2, cy2, 23) - 0.5) * 0.16;
+          const jit = (artHash(cx2, cy2, 23) - 0.5) * 0.14;
           if (dx * dx + dy * dy + jit < 1) kind[cy2 * CX + cx2] = 2;
         }
       }
     }
+    /* 水岸：水格旁边是草 → 改成石路（石岸） */
+    const copy = kind.slice();
+    for (let y = 0; y < CY; y++) {
+      for (let x = 0; x < CX; x++) {
+        const k = copy[y * CX + x];
+        if (k !== 0) continue;
+        const nb = (x > 0 && copy[y * CX + x - 1] === 2) ||
+                   (x < CX - 1 && copy[y * CX + x + 1] === 2) ||
+                   (y > 0 && copy[(y - 1) * CX + x] === 2) ||
+                   (y < CY - 1 && copy[(y + 1) * CX + x] === 2);
+        if (nb) kind[y * CX + x] = 1;
+      }
+    }
   }
 
-  /* ③ 平铺（确定性哈希选图块，避免可辨的重复） */
+  /* ④ 平铺 */
   const sm = g.imageSmoothingEnabled;
   g.imageSmoothingEnabled = false;
   for (let cy2 = 0; cy2 < CY; cy2++) {
     for (let cx2 = 0; cx2 < CX; cx2++) {
       const k = kind[cy2 * CX + cx2];
-      const x0 = cx2 * TW, y0 = cy2 * TH;
-      if (k === 0) {
-        /* 草地：图块平铺（不翻转；只用亮度一致的块） */
-        const hv = artHash(cx2, cy2, 131) * cg.length;
-        const cell = cg[hv | 0] || cg[0];
-        g.drawImage(artAtlasImg, cell[0], cell[1], TW, TH, x0, y0, TW, TH);
-      } else if (k === 1) {
-        /* 土路：纯色硬块 + 每格轻微明暗抖动（不出杂色） */
-        const j = artHash(cx2, cy2, 211);
-        g.fillStyle = j < 0.30 ? ART_PATH_A : (j > 0.72 ? ART_PATH_C : ART_PATH_B);
-        g.fillRect(x0, y0, TW, TH);
-      } else {
-        /* 水面：纯色硬块 */
-        const j = artHash(cx2, cy2, 223);
-        g.fillStyle = j < 0.34 ? ART_WATER_A : (j > 0.74 ? ART_WATER_C : ART_WATER_B);
-        g.fillRect(x0, y0, TW, TH);
-      }
+      const list = (k === 2 && cw.length) ? cw : ((k === 1 || k === 3) ? cr : cg);
+      const hv = artHash(cx2, cy2, k === 2 ? 311 : (k === 0 ? 131 : 211)) * list.length;
+      const cell = list[hv | 0] || list[0];
+      g.drawImage(artAtlasImg, cell[0], cell[1], TW, TH, cx2 * TW, cy2 * TH, TW, TH);
     }
   }
   g.imageSmoothingEnabled = sm;
-
-  /* ③b 土路/水面的硬边：贴着异类格画 1px 深色 */
-  g.fillStyle = '#3d2c1c';
-  for (let cy2 = 0; cy2 < CY; cy2++) {
-    for (let cx2 = 0; cx2 < CX; cx2++) {
-      const k = kind[cy2 * CX + cx2];
-      if (k !== 1) continue;
-      const x0 = cx2 * TW, y0 = cy2 * TH;
-      const nbGrass = (cx2 === 0 || kind[cy2 * CX + cx2 - 1] === 0) ||
-                      (cx2 === CX - 1 || kind[cy2 * CX + cx2 + 1] === 0) ||
-                      (cy2 === 0 || kind[(cy2 - 1) * CX + cx2] === 0) ||
-                      (cy2 === CY - 1 || kind[(cy2 + 1) * CX + cx2] === 0);
-      if (!nbGrass) continue;
-      if (cx2 > 0 && kind[cy2 * CX + cx2 - 1] === 0) g.fillRect(x0, y0, 2, TH);
-      if (cx2 < CX - 1 && kind[cy2 * CX + cx2 + 1] === 0) g.fillRect(x0 + TW - 2, y0, 2, TH);
-      if (cy2 > 0 && kind[(cy2 - 1) * CX + cx2] === 0) g.fillRect(x0, y0, TW, 2);
-      if (cy2 < CY - 1 && kind[(cy2 + 1) * CX + cx2] === 0) g.fillRect(x0, y0 + TH - 2, TW, 2);
-    }
-  }
-  /* ④ 草/土交界的草沿位置（给上面的草叶用） */
-  for (let cy2 = 0; cy2 < CY; cy2++) {
-    for (let cx2 = 0; cx2 < CX; cx2++) {
-      if (kind[cy2 * CX + cx2] !== 0) continue;
-      const nb = (cx2 > 0 && kind[cy2 * CX + cx2 - 1] === 1) ||
-                 (cx2 < CX - 1 && kind[cy2 * CX + cx2 + 1] === 1) ||
-                 (cy2 > 0 && kind[(cy2 - 1) * CX + cx2] === 1) ||
-                 (cy2 < CY - 1 && kind[(cy2 + 1) * CX + cx2] === 1);
-      if (nb && artDirtEdges.length < 4000 && artHash(cx2, cy2, 41) < 0.5) {
-        artDirtEdges.push(cx2 * TW + (TW >> 1), cy2 * TH + TH);
-      }
-    }
-  }
   return true;
 }
 
@@ -25154,135 +25131,31 @@ function artPond(g, cx, cy, rx, ry, gr, grR) {
 
 /* ---------- ⑤ 主入口：地形 → 土路 → 水塘 → 草丛 → 花/小件 ---------- */
 function artBuildGrassGround(g, W, H, gr, grR) {
-  g.fillStyle = ART_BASE_GRASS;
-  g.fillRect(0, 0, W, H);
-  /* 土路折线先算出来 —— 它要和地形**同一次像素绘制**，否则会有抗锯齿软边 */
+  artDirtEdges = [];
+  /* 石路折线（贯穿地图，交汇在中心空地） */
   const PATH_PTS = [
-    [[-60, H * 0.26], [W * 0.15, H * 0.34], [W * 0.32, H * 0.21], [W * 0.49, H * 0.40], [W * 0.67, H * 0.30], [W * 0.84, H * 0.46], [W + 60, H * 0.40]],
-    [[W * 0.23, -60], [W * 0.30, H * 0.22], [W * 0.45, H * 0.42], [W * 0.40, H * 0.63], [W * 0.56, H * 0.81], [W * 0.51, H + 60]],
-    [[-60, H * 0.77], [W * 0.24, H * 0.68], [W * 0.46, H * 0.79], [W * 0.66, H * 0.69], [W * 0.85, H * 0.83], [W + 60, H * 0.73]],
-    [[W * 0.06, H * 0.52], [W * 0.30, H * 0.50], [W * 0.52, H * 0.54], [W * 0.74, H * 0.50], [W * 0.95, H * 0.55]]
+    [[-80, H * 0.28], [W * 0.18, H * 0.36], [W * 0.36, H * 0.24], [W * 0.52, H * 0.42], [W * 0.70, H * 0.30], [W * 0.86, H * 0.46], [W + 80, H * 0.40]],
+    [[W * 0.26, -80], [W * 0.32, H * 0.24], [W * 0.46, H * 0.44], [W * 0.40, H * 0.64], [W * 0.56, H * 0.82], [W * 0.50, H + 80]],
+    [[-80, H * 0.78], [W * 0.26, H * 0.70], [W * 0.48, H * 0.80], [W * 0.68, H * 0.70], [W * 0.86, H * 0.84], [W + 80, H * 0.74]]
   ];
-  const pathLines = PATH_PTS.map(function (pt) { return { pts: pt, w: grR(38, 52) }; });
-  /* 水塘先算出来（图块平铺需要它） */
+  const pathLines = PATH_PTS.map(function (pt) { return { pts: pt, w: grR(66, 88) }; });
+  /* 水塘：避开中心空地 */
   const pondList = [];
   for (let i = 0; i < 4; i++) {
-    let wx2 = grR(360, W - 360), wy2 = grR(320, H - 320);
-    if (Math.abs(wx2 - W / 2) < 480 && Math.abs(wy2 - H / 2) < 340) {
-      wx2 += (wx2 < W / 2 ? -560 : 560);
-      wx2 = Math.max(340, Math.min(W - 340, wx2));
+    let wx2 = grR(400, W - 400), wy2 = grR(360, H - 360);
+    if (Math.abs(wx2 - W / 2) < 500 && Math.abs(wy2 - H / 2) < 360) {
+      wx2 += (wx2 < W / 2 ? -600 : 600);
+      wx2 = Math.max(380, Math.min(W - 380, wx2));
     }
-    pondList.push([wx2, wy2, grR(130, 240), grR(85, 160)]);
+    pondList.push([wx2, wy2, grR(130, 230), grR(90, 150)]);
   }
   if (!artPaintTerrain(g, W, H, pathLines, pondList)) {
-    g.fillStyle = '#496b37';
+    /* 图集还没解码：先铺一层草色，等 onload 后 buildGround 会重来 */
+    g.fillStyle = '#7ec24a';
     g.fillRect(0, 0, W, H);
+    return;
   }
-  /* 🌿 草沿：沿土/草交界长一圈参差草叶（土块边缘才有"毛边"） */
-  if (artDirtEdges.length) {
-    const COL_A = '#3d6b2c', COL_B = '#578c3a', COL_C = '#6da84a';
-    for (let i = 0; i < artDirtEdges.length; i += 2) {
-      const ex = artDirtEdges[i], ey = artDirtEdges[i + 1];
-      const hsh = artHash(ex, ey, 131);
-      const h2 = 2 + Math.round(hsh * 3);              // 叶长 2~5px
-      const lean = Math.round((artHash(ex, ey, 137) - 0.5) * 3);
-      g.fillStyle = hsh < 0.4 ? COL_A : (hsh < 0.78 ? COL_B : COL_C);
-      g.fillRect(ex, ey - h2, 1, h2);
-      if (hsh > 0.55) g.fillRect(ex + 1, ey - h2 + 1, 1, Math.max(1, h2 - 1));
-      if (lean) g.fillRect(ex + lean, ey - h2 - 1, 1, 1);
-    }
-  }
-  const spr = artSprites();
-  /* 水塘：**复用前面算好的 pondList**（图块平铺的水面和艺术水面必须同一组坐标） */
-  const ponds = pondList;
-  for (const p of ponds) artPond(g, p[0], p[1], p[2], p[3], gr, grR);
-  /* 判断是否落在水里（草丛/花不长在水上） */
-  const inWater = (x, y) => {
-    for (const p of ponds) {
-      const dx = (x - p[0]) / (p[2] * 1.02), dy = (y - p[1]) / (p[3] * 1.02);
-      if (dx * dx + dy * dy < 1) return true;
-    }
-    return false;
-  };
-  /* 基础草丛：抖动网格 + **低频密度场**（有密草皮区、也有干净的草地，
-     星露谷的草地就是这种"一撮一撮"的分区感；全图均匀撒 = 麻点） */
-  if (spr && spr.tufts.length) {
-    const ENV = artField(90, 50, 0.085, 0.085, 137, 3);
-    const CELL = 26;
-    for (let cy2 = 0; cy2 < H; cy2 += CELL) {
-      for (let cx2 = 0; cx2 < W; cx2 += CELL) {
-        /* 密度 = 0.10（保底）~ 0.62（密草皮），由低频噪声决定 */
-        const e = artSample(ENV, cx2 / W, cy2 / H);
-        const dens = 0.14 + Math.max(0, Math.min(1, (e - 0.30) * 2.0)) * 0.56;
-        if (gr() > dens) continue;
-        const x = cx2 + grR(2, CELL - 2), y = cy2 + grR(2, CELL - 2);
-        if (inWater(x, y)) continue;
-        const cv = spr.tufts[(gr() * spr.tufts.length) | 0];
-        g.drawImage(cv, Math.round(x - cv.width / 2), Math.round(y - cv.height + 2));
-      }
-    }
-    /* 成片高草（宝可梦那种"草丛区"）：边缘按密度衰减，绝不画实心椭圆 */
-    for (let pi = 0; pi < 14; pi++) {
-      const pcx = grR(200, W - 200), pcy = grR(180, H - 180);
-      const prx = grR(100, 230), pry = grR(70, 160);
-      for (let i = 0; i < 1000; i++) {
-        const a2 = gr() * TAU, rr2 = Math.sqrt(gr());
-        if (gr() > 1 - Math.pow(rr2, 1.7)) continue;
-        const bx = pcx + Math.cos(a2) * prx * rr2, by = pcy + Math.sin(a2) * pry * rr2;
-        if (inWater(bx, by)) continue;
-        const cv = spr.tufts[(gr() * spr.tufts.length) | 0];
-        g.drawImage(cv, Math.round(bx - cv.width / 2), Math.round(by - cv.height + 2));
-      }
-    }
-    /* 花簇 */
-    if (spr.flowers.length) {
-      for (let y = 0; y < H; y += 46) {
-        for (let x = 0; x < W; x += 46) {
-          if (gr() > 0.085) continue;
-          const bx = x + grR(6, 40), by = y + grR(6, 40);
-          if (inWater(bx, by)) continue;
-          const cv = spr.flowers[(gr() * spr.flowers.length) | 0];
-          g.drawImage(cv, Math.round(bx - cv.width / 2), Math.round(by - cv.height + 2));
-        }
-      }
-    }
-    /* 🗿 场景地标：7 处大地标（石圈 / 巨石 / 倒塌石柱）
-       —— 用相对坐标而不是纯随机，保证每局都分布均匀、不挤在角落 */
-    {
-      const LM = [
-        [0.13, 0.70, 'stones'], [0.83, 0.23, 'stones'],
-        [0.60, 0.78, 'boulder'], [0.19, 0.17, 'boulder'], [0.89, 0.60, 'boulder'],
-        [0.37, 0.11, 'fallen'], [0.69, 0.89, 'fallen']
-      ];
-      for (const lm of LM) {
-        const lx = lm[0] * W + grR(-46, 46), ly = lm[1] * H + grR(-34, 34);
-        /* 中心战斗空地不放（那里要保持完全干净） */
-        if (Math.abs(lx - W / 2) < TREE_CLEAR_W * 0.5 && Math.abs(ly - H / 2) < TREE_CLEAR_H * 0.6) continue;
-        if (inWater(lx, ly)) continue;
-        pxDecor(g, lm[2], lx, ly, grR(92, 150), gr, grR);   // 地标要"大"才叫地标
-      }
-    }
-    /* 小件：石子 / 蘑菇（成组出现，像手摆的） */
-    for (let y = 0; y < H; y += 38) {
-      for (let x = 0; x < W; x += 38) {
-        const r = gr();
-        if (r > 0.20) continue;
-        const bx = x + grR(4, 34), by = y + grR(4, 34);
-        if (inWater(bx, by)) continue;
-        if (r < 0.08 && spr.pebbles.length) {
-          const cv = spr.pebbles[(gr() * spr.pebbles.length) | 0];
-          g.drawImage(cv, Math.round(bx - cv.width / 2), Math.round(by - cv.height + 2));
-          if (gr() < 0.55 && spr.pebbles.length) {
-            const cv2 = spr.pebbles[(gr() * spr.pebbles.length) | 0];
-            g.drawImage(cv2, Math.round(bx + grR(5, 10)), Math.round(by + grR(1, 6)));
-          }
-        } else if (spr.mushrooms.length) {
-          const cv = spr.mushrooms[(gr() * spr.mushrooms.length) | 0];
-          g.drawImage(cv, Math.round(bx - cv.width / 2), Math.round(by - cv.height + 2));
-        }
-      }
-    }
-  }
+  worldPonds = pondList;
 }
 
 function buildGround() {
@@ -25305,49 +25178,8 @@ function buildGround() {
     /* NEW GROUND (Stardew-ish): terrain tones / dirt paths / ponds / tufts / flowers
        all in artBuildGrassGround() above. Old version was flat fill + 1px noise +
        16000 blades -> text preview measured 98% one colour, neighbour-variety only 2%. */
+    /* 🗺 地面：全部由 TinyMeadow 图块合成（草 / 石路 / 水塘 / 边墙） */
     artBuildGrassGround(g, W, H, gr, grR);
-    /* ④c **树林（实体）**：数量多、体型大。树本身不烘进地面 —— 每帧按 y 排序画在角色**之后**，
-       所以"站在树叶下会被遮住"是天然的。这里只负责**撒点**并登记到 worldTrees。
-       间距用抖动（grid+jitter）而不是纯随机，避免挤成一坨 / 留大片空地。 */
-    {
-      /* 🌳 成林：用低频密度场决定"哪里有树林"，而不是均匀撒点。
-         均匀撒 = 稀疏的棉花球；成林 = 有疏有密，才像野外。 */
-      const TFOR = artField(96, 54, 0.055, 0.055, 211, 3);
-      const cellW = Math.round(W / 26), cellH = Math.round(H / 17);
-      for (let gy = 0; gy < 17; gy++) {
-        for (let gx = 0; gx < 26; gx++) {
-          const fx = (gx + 0.5) / 26, fy = (gy + 0.5) / 17;
-          const dens = artSample(TFOR, fx, fy);
-          /* dens 高 → 密林（0.92），低 → 几乎不长（0.06） */
-          const p = dens > 0.42 ? 0.90 : 0.06;
-          if (gr() > p) continue;
-          const tx = gx * cellW + grR(cellW * 0.12, cellW * 0.88);
-          const ty = gy * cellH + grR(cellH * 0.15, cellH * 0.92);
-          /* 中心空地由 treeAdd 统一拦（判据只有一处） */
-          treeAdd(tx, ty, grR(2.2, 3.2), 'tree');
-        }
-      }
-      /* 树桩：零星分布（数量约树的 1/3）*/
-      for (let i = 0; i < 62; i++) {
-        treeAdd(grR(150, W - 150), grR(150, H - 120), grR(1.3, 2.1), 'stump');
-      }
-    }
-    /* 树根暗影：每棵树脚下压一圈软阴影（物件才"长在地上"） */
-    for (const tr of worldTrees) {
-      if (tr.kind === 'stump') continue;
-      const srx = 11 * (tr.scale || 1), sry = 4.5 * (tr.scale || 1);
-      g.globalAlpha = 0.16;
-      g.fillStyle = '#1d2416';
-      g.beginPath(); g.ellipse(tr.x, tr.y + 2, srx, sry, 0, 0, TAU); g.fill();
-      g.globalAlpha = 1;
-    }
-    /* ⑤ 少量小件装饰（岩石 / 灌木 / 断柱）——**当作地图物件**，不当色块 */
-    for (let i = 0; i < 40; i++) {
-      const x = grR(200, W - 200), y = grR(180, H - 180);
-      const r0 = gr();
-      const kind = r0 < 0.45 ? 'rock' : (r0 < 0.78 ? 'bush' : 'ruin');
-      pxDecor(g, kind, x, y, kind === 'ruin' ? 8 : grR(7, 11), gr, grR);
-    }
     /* 暗角：**半径必须覆盖地图对角线**（中心到角 ≈ hypot(1600,900)=1835）。
        原来是固定 780 —— 半径之外全是渐变的最后一档（0.5 黑），四个角直接变成死黑块
        （用户报的「地图右下角缺失、完全是灾难」就是这个）。 */
@@ -31743,7 +31575,6 @@ function drawGame() {
   if (p.shinySet && p.alive) drawShinyAura();   // 局外·闪光套装：脚下金色光环
   drawPlayer();
   /* 🌳 树画在**敌我单位之后**（所以站在树叶下会被遮住）、**近战/激光/弹幕之前** */
-  drawWorldTrees();
   if (p.shinySet && p.alive) drawShinyGear();   // 局外·闪光套装：头顶齿轮装饰（各职业套装共用标志）
   if (isRonin() && p.alive) drawRoninMark();    // 浪客：头顶月牙 + 腰间紫绶带（纯外观）
   if (isRonin() && p.alive) drawRoninWalls();   // 浪客·烈焰步：路径火墙
