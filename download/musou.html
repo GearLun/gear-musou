@@ -22097,19 +22097,183 @@ function bindTouchUI() {
 
 /* ============================================================
    地面（预渲染 · 支持场景主题：草原 → 20 层魔君讨伐后的黑暗战场）
-   🌿 草原 = **纯草地**：整张地图只铺 Sprout Lands 的草地本色（#c0d470），
-      不拼边、不放物件、不画水/路/栏 —— 没有任何接缝与剪切痕迹。
+   🏝️ 草原 = **小岛**：画布比战场大一圈（环岛一条河）。
+      叠加顺序（后面的盖前面的，靠 alpha 透出下层）：
+        ① 河水铺满整张画布（Water.png 4 帧）
+        ② 岛身铺草地（Grass.png 左下角那批草块，四边同色 → 拼接无接缝）
+        ③ 岛的最外圈叠悬崖（Hills.png）：上/左/右是带 alpha 切口的边缘块，
+           下边缘是"草顶 + 泥土崖面"整块 —— 水/草交界因此是悬崖，不是一刀切的直角
    素材署名：Assets - From : Sprout Lands - By : Cup Nooble
    ============================================================ */
 let sceneDark = false;
+const RING = 192;                                  // 岛外那条河的宽度（像素）
+const GW = W, GH = H;                             // 河在战场的最外圈里（不动战场尺寸，测试与玩法都不受影响）
 const ground = document.createElement('canvas');
-ground.width = W; ground.height = H;
+ground.width = GW; ground.height = GH;
 
-/* 草地本色：取 Sprout Lands 里那块纯内部草地块的颜色（Hills/Grass 的 1111 全不透明块都是它） */
-const SPROUT_GRASS = '#c0d470';
+/* ===== 🏝️ 小岛图集（Assets - From : Sprout Lands - By : Cup Nooble）=====
+   由 tools\_island-atlas.js 生成，勿手改。
+   grass = Grass.png 左下角 12 块（整块不透明、四边本色 → 拼接无接缝）
+   water = Water.png 4 帧
+   cliff = Hills.png 的上/左/右/下/左上角/右上角（下边缘是"草顶 + 泥土崖面"整块） */
+const ISLAND = {
+  ts: 16, w: 128, h: 48,
+  grass: [[0,0],[16,0],[32,0],[48,0],[64,0],[80,0],[96,0],[112,0],[0,16],[16,16],[32,16],[48,16]],
+  gdetail: [9,6,9,61,74,24,12,6,3,63,58,16],
+  water: [[64,16],[80,16],[96,16],[112,16]],
+  cliff: {"n":[0,32],"w":[16,32],"e":[32,32],"s":[48,32],"tl":[64,32],"tr":[80,32]},
+  base: '#c0d470',
+  data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAAAwCAYAAADZ9HK+AAADLklEQVR42u2cO04EMQyGc0woaKCloGM5AgUXgAqJarttKBECToD2ANAhCq6waFaKlMnGedqOJ+uRrIXJPDL5vzix52Fet1c7teM1o42gAIioyNPbxexXQn18UwAqBcoVt7WRMQQLCV9yzN/v1d4kiv3zt579FgPQIhB1D2oRLVf81LGs+EuAgB2AHi67FIJWAGIeoAYKXyyWIWCpYx0GAFieBMMzcIgPeoAlQoAFAJXliO+KLg6AJUBBKT4XTKGJWvcoQIL41GFiDBpOjwIJTwUEKgAcIlGEhynPwRkOxoTOgaDUgxgpIvUcFkq3oZj0YU4MS7zF8Kng3HkBtounyAVQDANGomDYnuQYUrpD3QxSkfRuoJoCwGMP2/di23y9zKz1GC37t55bAahowJFMAWDopbX7c9QBFYDPr+sDk3As9QAMHiAkWK1wsWNhg6AAIKUUOQFIHbMkCdPiYv3JIMYxOIeI5CSwNPOE1VtbAChNw6oHEDo5a/EoJR5AAegg5tLCQOy4n3uoiO1rJPXiHqCoBxACANWMPzUcYGbYMPbnrgNJGFgzMaQAIGdCqB5AUAKIYggo9QDc2bne9xKMtAzgSKng3unknH3JhwC9GaRhoAIgGYBpWT2e7FwzzuKX+eV2m7vNGcsjV/Ycth6tTxsZYMlpj1jbpdpMzOKLZxvXmls2/T1ZqBHsdtSPdtl61AJw8EQMILx73VB7xNrObS+3zcQBkPNCZMxiAFD1fgiAmvOnOgOWuSCIBaDm1ShKAGLP5pd4gNjLHinxaz4eAZ1LJAQYLtS6PM5vANhGxPBg/jVQXEvIew0JACUEMQD8uYlfp1D5tA7q/ZRfMBEFQeuFcgIQigJcQdc3pzPzBQ+Vp6IYzK+iLAYAqR4gBIAr6PPt+cx8wUPlWPUveYFWJAC1H3CC5gCUbwi7DeiL+nF/uTd/PVRODTDkBYbzABxhYAgAK6gV1f3ft1B5j/orAArAuABQZf9GACAUxSgAjT0ICwCK8E+jgM4AxCaBEAAceYwhAaCIoyELRQHTemjmH7Jpey4A3I9eHB0ApS41Z38oDPQhgKBw1/fwYJIA+AdBgB3t45L/5AAAAABJRU5ErkJggg=='
+};
 
-/* 诊断/测试钩子（截图与体检用；纯草地没有图层可报） */
-window.__musouSproutInfo = () => ({ ok: 1, plain: 1, grass: SPROUT_GRASS });
+/* ---------- 图集加载 ---------- */
+let isImg = null, isOK = false, isTried = false;
+function islandLoad() {
+  if (isTried) return;
+  isTried = true;
+  if (typeof ISLAND === 'undefined' || !ISLAND) return;
+  if (typeof Image === 'undefined') return;
+  try {
+    const im = new Image();
+    im.onload = function () {
+      isOK = true;
+      if (typeof buildGround === 'function') { try { buildGround(); } catch (e) {} }
+    };
+    im.onerror = function () { isOK = false; };
+    im.src = ISLAND.data;
+    isImg = im;
+  } catch (e) { isOK = false; }
+}
+
+/* 每格的确定随机（不吃全局随机流） */
+function isHash(x, y, s) {
+  let h = Math.imul(x | 0, 374761393) + Math.imul(y | 0, 668265263) + Math.imul(s | 0, 1442695041);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+/* 平滑值噪声：做"整片茂密/整片清淡"的起伏 */
+function isNoise(x, y, cell) {
+  const gx = x / cell, gy = y / cell;
+  const x0 = Math.floor(gx), y0 = Math.floor(gy);
+  const tx = gx - x0, ty = gy - y0;
+  const n00 = isHash(x0, y0, 5501), n10 = isHash(x0 + 1, y0, 5501);
+  const n01 = isHash(x0, y0 + 1, 5501), n11 = isHash(x0 + 1, y0 + 1, 5501);
+  const sx = tx * tx * (3 - 2 * tx), sy = ty * ty * (3 - 2 * ty);
+  const a = n00 + (n10 - n00) * sx, b = n01 + (n11 - n01) * sx;
+  return a + (b - a) * sy;
+}
+/* 抽签表：按细节量分档（细节少的块当底，细节多的成片出现） */
+let isBag = null;
+function islandBuildBag() {
+  const plain = [], mid = [], dense = [];
+  const cells = ISLAND.grass;
+  for (let i = 0; i < cells.length; i++) {
+    const d = ISLAND.gdetail ? ISLAND.gdetail[i] : 0;
+    if (d >= 50) dense.push(i); else if (d >= 12) mid.push(i); else plain.push(i);
+  }
+  const rep = function (arr, w) { const out = []; for (const i of arr) for (let k = 0; k < w; k++) out.push(i); return out; };
+  isBag = { plain: rep(plain, 6), all: rep(plain.concat(mid, dense), 3), dense: rep(dense.concat(mid), 4) };
+}
+const IS_T = 32;                                   // 世界里的图块边长（16px 素材 ×2）
+const IX = Math.floor((W - RING * 2) / IS_T), IY = Math.floor((H - RING * 2) / IS_T);   // 岛的格数（四周各让出 RING 的河）
+let isWX = 0, isWY = 0;                            // 岛的左上角（画布坐标）
+
+/* ① 河水：铺满整张画布（4 帧混铺，水面不会整片一个样） */
+function paintWater(g) {
+  g.imageSmoothingEnabled = false;
+  const CX = Math.ceil(GW / IS_T), CY = Math.ceil(GH / IS_T);
+  for (let y = 0; y < CY; y++) for (let x = 0; x < CX; x++) {
+    const c = ISLAND.water[Math.floor(isHash(x, y, 3301) * ISLAND.water.length) % ISLAND.water.length];
+    g.drawImage(isImg, c[0], c[1], ISLAND.ts, ISLAND.ts, x * IS_T, y * IS_T, IS_T, IS_T);
+  }
+}
+/* ② 岛身：草地（草块四边同色 → 无接缝；再叠低频起伏 + 随机翻转打散重复）
+   ⚠️ 岛的轮廓不是矩形：四周按平滑噪声各起伏 0~2 格，避免"一刀切的直线岸" */
+function islandEdgeOffset(x, y, seed) {
+  return Math.round(isNoise(x, y, 4 + seed) * 4) - 2;         // -2 ~ +2 格（岸线才有起伏）
+}
+function islandInside(x, y) {
+  if (x < 1 || y < 1 || x >= IX - 1 || y >= IY - 1) return false;
+  const t = 2 + islandEdgeOffset(x, 0, 1);                    // 上边界的起伏
+  const b = IY - 3 + islandEdgeOffset(x, 7, 2);               // 下边界
+  const l = 2 + islandEdgeOffset(0, y, 3);                    // 左边界
+  const r = IX - 3 + islandEdgeOffset(5, y, 4);               // 右边界
+  return y >= t && y <= b && x >= l && x <= r;
+}
+function paintIslandGrass(g) {
+  if (!isBag) islandBuildBag();
+  g.imageSmoothingEnabled = false;
+  const S = ISLAND.ts;
+  const inMask = function (x, y) { return x >= 0 && y >= 0 && x < IX && y < IY && islandInside(x, y); };
+  /* 草地要多铺一圈（给悬崖当底，悬崖是带 alpha 的，底下必须有草，不能露出水） */
+  for (let y = 0; y < IY; y++) for (let x = 0; x < IX; x++) {
+    if (!inMask(x, y) && !(inMask(x - 1, y) || inMask(x + 1, y) || inMask(x, y - 1) || inMask(x, y + 1))) continue;
+    const v = isNoise(x, y, 8) * 0.65 + isNoise(x + 37, y + 91, 3) * 0.35;
+    const bag = v > 0.62 ? isBag.dense : v < 0.34 ? isBag.plain : isBag.all;
+    const pick = bag[Math.floor(isHash(x, y, 9173) * bag.length) % bag.length];
+    const c = ISLAND.grass[pick];
+    const f = Math.floor(isHash(x, y, 9181) * 4) & 3;
+    const fx = f & 1, fy = (f >> 1) & 1;
+    const dx = isWX + x * IS_T, dy = isWY + y * IS_T;
+    if (!fx && !fy) {
+      g.drawImage(isImg, c[0], c[1], S, S, dx, dy, IS_T, IS_T);
+    } else {
+      g.save();
+      g.translate(dx + (fx ? IS_T : 0), dy + (fy ? IS_T : 0));
+      g.scale(fx ? -1 : 1, fy ? -1 : 1);
+      g.drawImage(isImg, c[0], c[1], S, S, 0, 0, IS_T, IS_T);
+      g.restore();
+    }
+  }
+}
+/* ③ 悬崖：按"哪边出岛"选块，**叠**在草地边缘（切口朝水，水从切口里透出来）
+      下边界一律用"草顶 + 泥土崖面"整块 → 岛的南面是一道真正的悬崖立面
+      再在崖脚压一道水影，崖边才有"立起来"的感觉 */
+let isCliffN = 0, isCliffErr = '';
+function paintCliff(g) {
+  isCliffN = 0;
+  g.imageSmoothingEnabled = false;
+  const S = ISLAND.ts, C = ISLAND.cliff;
+  const inMask = function (x, y) { return x >= 0 && y >= 0 && x < IX && y < IY && islandInside(x, y); };
+  const blit = function (cell, x, y) {
+    if (!cell) return;
+    g.drawImage(isImg, cell[0], cell[1], S, S, isWX + x * IS_T, isWY + y * IS_T, IS_T, IS_T);
+    isCliffN++;
+  };
+  for (let y = 0; y < IY; y++) for (let x = 0; x < IX; x++) {
+    if (!inMask(x, y)) continue;
+    const N = inMask(x, y - 1), E = inMask(x + 1, y), Sd = inMask(x, y + 1), W = inMask(x - 1, y);
+    if (N && E && Sd && W) continue;                 // 内部不叠
+    if (!Sd) { blit(C.s, x, y); continue; }          // 南面：悬崖立面（优先，岛的正面）
+    if (!N && !W) { blit(C.tl, x, y); continue; }
+    if (!N && !E) { blit(C.tr, x, y); continue; }
+    if (!W) { blit(C.w, x, y); continue; }
+    if (!E) { blit(C.e, x, y); continue; }
+    if (!N) { blit(C.n, x, y); continue; }
+  }
+  /* 崖脚水影：四条边朝水那一侧都压一道深色，水与崖才有前后关系 */
+  g.fillStyle = 'rgba(18,68,60,0.26)';
+  for (let y = 0; y < IY; y++) for (let x = 0; x < IX; x++) {
+    if (!inMask(x, y)) continue;
+    const N = inMask(x, y - 1), E = inMask(x + 1, y), Sd = inMask(x, y + 1), W = inMask(x - 1, y);
+    if (N && E && Sd && W) continue;
+    const px = isWX + x * IS_T, py = isWY + y * IS_T;
+    if (!Sd) g.fillRect(px, py + IS_T - 7, IS_T, 9);
+    if (!N) g.fillRect(px, py - 3, IS_T, 5);
+    if (!W) g.fillRect(px - 3, py, 5, IS_T);
+    if (!E) g.fillRect(px + IS_T - 2, py, 5, IS_T);
+  }
+}
+
+/* 诊断/测试钩子 */
+window.__musouSproutInfo = () => ({
+  ok: 1, island: 1, base: ISLAND.base, ring: RING,
+  canvas: [ground.width, ground.height], world: [W, H],
+  tile: IS_T, islandTiles: [IX, IY], img: isOK ? 1 : 0,
+  grass: ISLAND.grass.length, water: ISLAND.water.length,
+  cliffN: isCliffN, cliffErr: isCliffErr
+});
+window.__musouGroundPixel = (x, y) => { const d = ground.getContext('2d').getImageData(x, y, 1, 1).data; return [d[0], d[1], d[2], d[3]]; };
 window.__musouSproutRebuild = () => {
   const t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
   buildGround();
@@ -22120,58 +22284,69 @@ function buildGround() {
   const g = ground.getContext('2d');
   g.imageSmoothingEnabled = false;
   if (!sceneDark) {
-    /* —— 草原战场：一整片纯草色（不画任何边缘/物件） —— */
-    g.fillStyle = SPROUT_GRASS;
-    g.fillRect(0, 0, W, H);
+    /* —— 小岛：河水铺底 → 岛身草地 → 悬崖边缘 —— */
+    isWX = RING; isWY = RING;
+    g.fillStyle = ISLAND.base;
+    g.fillRect(0, 0, GW, GH);
+    if (!isOK) { islandLoad(); }
+    if (isOK) {
+      paintWater(g);           // ① 河（最底层）
+      paintIslandGrass(g);     // ② 岛（盖在河上）
+      try { paintCliff(g); } catch (e) { isCliffErr = String(e && e.message); }   // ③ 悬崖（叠在岛的边缘，切口透出水）
+    }
     /* RNG_PARITY_20940：旧地形（渐变 + 3400 根草线 + 90 块暗斑）消耗 20940 次全局随机，
        这里补平这个数量，保证依赖种子的测试不漂移 */
     for (let _rp = 0; _rp < 20940; _rp++) Math.random();
   } else {
-    /* —— 黑暗战场（灭世魔君被讨伐后）—— */
-    const grad = g.createLinearGradient(0, 0, 0, H);
-    grad.addColorStop(0, '#151318'); grad.addColorStop(0.55, '#0b0a0e'); grad.addColorStop(1, '#050408');
-    g.fillStyle = grad; g.fillRect(0, 0, W, H);
-    for (let i = 0; i < 140; i++) {
-      const x = Math.random() * W, y = Math.random() * H;
-      g.fillStyle = 'rgba(0,0,0,' + rnd(0.12, 0.3).toFixed(2) + ')';
-      g.beginPath();
-      g.ellipse(x, y, rnd(18, 64), rnd(10, 30), rnd(0, 3), 0, TAU);
-      g.fill();
-    }
-    for (let i = 0; i < 46; i++) {
-      const x = rnd(0, W), y = rnd(0, H), segs = Math.floor(rnd(4, 10));
-      let px = x, py = y;
-      g.lineCap = 'round';
-      for (let s = 0; s < segs; s++) {
-        const nx2 = px + rnd(-26, 26), ny2 = py + rnd(6, 26);
-        g.strokeStyle = 'rgba(255,' + Math.floor(rnd(60, 90)) + ',40,' + rnd(0.08, 0.2).toFixed(2) + ')';
-        g.lineWidth = rnd(1, 2.4);
-        g.beginPath(); g.moveTo(px, py); g.lineTo(nx2, ny2); g.stroke();
-        px = nx2; py = ny2;
+    /* 黑暗战场：整张画布先铺暗色，再画战场（岛外那圈河也一起压暗） */
+    g.fillStyle = '#0a090d'; g.fillRect(0, 0, GW, GH);
+
+      /* —— 黑暗战场（灭世魔君被讨伐后）—— */
+      const grad = g.createLinearGradient(0, 0, 0, H);
+      grad.addColorStop(0, '#151318'); grad.addColorStop(0.55, '#0b0a0e'); grad.addColorStop(1, '#050408');
+      g.fillStyle = grad; g.fillRect(0, 0, W, H);
+      for (let i = 0; i < 140; i++) {
+        const x = Math.random() * W, y = Math.random() * H;
+        g.fillStyle = 'rgba(0,0,0,' + rnd(0.12, 0.3).toFixed(2) + ')';
+        g.beginPath();
+        g.ellipse(x, y, rnd(18, 64), rnd(10, 30), rnd(0, 3), 0, TAU);
+        g.fill();
       }
-    }
-    for (let i = 0; i < 2600; i++) {
-      const x = Math.random() * W, y = Math.random() * H;
-      g.strokeStyle = 'rgba(' + (Math.random() < 0.5 ? '120,110,130' : '70,66,80') + ',' + rnd(0.04, 0.13).toFixed(2) + ')';
-      g.lineWidth = 1;
-      g.beginPath();
-      g.moveTo(x, y);
-      g.lineTo(x + rnd(-3, 3), y - rnd(3, 7));
-      g.stroke();
-    }
-    const vig = g.createRadialGradient(W / 2, H / 2, 90, W / 2, H / 2, 700);
-    vig.addColorStop(0, 'rgba(90,80,120,0.10)');
-    vig.addColorStop(0.55, 'rgba(0,0,0,0)');
-    vig.addColorStop(1, 'rgba(0,0,0,0.72)');
-    g.fillStyle = vig; g.fillRect(0, 0, W, H);
-    g.strokeStyle = 'rgba(10,6,8,0.95)'; g.lineWidth = 22;
-    g.strokeRect(0, 0, W, H);
-    g.strokeStyle = 'rgba(160,60,50,0.30)'; g.lineWidth = 2;
-    g.strokeRect(11, 11, W - 22, H - 22);
-    g.strokeStyle = 'rgba(120,46,40,0.14)'; g.lineWidth = 1;
-    g.strokeRect(15, 15, W - 30, H - 30);
+      for (let i = 0; i < 46; i++) {
+        const x = rnd(0, W), y = rnd(0, H), segs = Math.floor(rnd(4, 10));
+        let px = x, py = y;
+        g.lineCap = 'round';
+        for (let s = 0; s < segs; s++) {
+          const nx2 = px + rnd(-26, 26), ny2 = py + rnd(6, 26);
+          g.strokeStyle = 'rgba(255,' + Math.floor(rnd(60, 90)) + ',40,' + rnd(0.08, 0.2).toFixed(2) + ')';
+          g.lineWidth = rnd(1, 2.4);
+          g.beginPath(); g.moveTo(px, py); g.lineTo(nx2, ny2); g.stroke();
+          px = nx2; py = ny2;
+        }
+      }
+      for (let i = 0; i < 2600; i++) {
+        const x = Math.random() * W, y = Math.random() * H;
+        g.strokeStyle = 'rgba(' + (Math.random() < 0.5 ? '120,110,130' : '70,66,80') + ',' + rnd(0.04, 0.13).toFixed(2) + ')';
+        g.lineWidth = 1;
+        g.beginPath();
+        g.moveTo(x, y);
+        g.lineTo(x + rnd(-3, 3), y - rnd(3, 7));
+        g.stroke();
+      }
+      const vig = g.createRadialGradient(W / 2, H / 2, 90, W / 2, H / 2, 700);
+      vig.addColorStop(0, 'rgba(90,80,120,0.10)');
+      vig.addColorStop(0.55, 'rgba(0,0,0,0)');
+      vig.addColorStop(1, 'rgba(0,0,0,0.72)');
+      g.fillStyle = vig; g.fillRect(0, 0, W, H);
+      g.strokeStyle = 'rgba(10,6,8,0.95)'; g.lineWidth = 22;
+      g.strokeRect(0, 0, W, H);
+      g.strokeStyle = 'rgba(160,60,50,0.30)'; g.lineWidth = 2;
+      g.strokeRect(11, 11, W - 22, H - 22);
+      g.strokeStyle = 'rgba(120,46,40,0.14)'; g.lineWidth = 1;
+      g.strokeRect(15, 15, W - 30, H - 30);
   }
 }
+
 function setSceneDark() {
   if (sceneDark) return;
   sceneDark = true;
@@ -22179,6 +22354,7 @@ function setSceneDark() {
   flashG = Math.max(flashG, 0.15);
 }
 buildGround();
+islandLoad();
 
 /* ============================================================
    绘制：敌人
