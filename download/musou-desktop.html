@@ -968,8 +968,8 @@ const WORLD_MUL = 2.5;
 const W = Math.round(VW * WORLD_MUL), H = Math.round(VH * WORLD_MUL);   // 3200 × 1800
 let camX = 0, camY = 0;
 function updateCamera() {
-  camX = Math.round(Math.max(0, Math.min(W - VW, p.x - VW / 2)));
-  camY = Math.round(Math.max(0, Math.min(H - VH, p.y - VH / 2)));
+  camX = Math.round(Math.max(-RING, Math.min(W - VW + RING, p.x - VW / 2)));   // 岛外还有一圈河，镜头放宽 RING
+  camY = Math.round(Math.max(-RING, Math.min(H - VH + RING, p.y - VH / 2)));
 }
 /* 渲染分辨率：桌面最多 ×2；**手机端降到 ×1.25 起**（手机 GPU 填充率有限，×2 = 每帧 2560×1440，
    是发热/耗电的第一大来源；×1.25 在手机上几乎看不出差别，像素却少了 ~60%） */
@@ -22107,7 +22107,7 @@ function bindTouchUI() {
    ============================================================ */
 let sceneDark = false;
 const RING = 192;                                  // 岛外那条河的宽度（像素）
-const GW = W, GH = H;                             // 河在战场的最外圈里（不动战场尺寸，测试与玩法都不受影响）
+const GW = W + RING * 2, GH = H + RING * 2;        // 地面画布：战场外再扩一圈河（岛 = 战场，居中）
 const ground = document.createElement('canvas');
 ground.width = GW; ground.height = GH;
 
@@ -22175,7 +22175,7 @@ function islandBuildBag() {
   isBag = { plain: rep(plain, 6), all: rep(plain.concat(mid, dense), 3), dense: rep(dense.concat(mid), 4) };
 }
 const IS_T = 32;                                   // 世界里的图块边长（16px 素材 ×2）
-const IX = Math.floor((W - RING * 2) / IS_T), IY = Math.floor((H - RING * 2) / IS_T);   // 岛的格数（四周各让出 RING 的河）
+const IX = Math.floor(W / IS_T), IY = Math.floor(H / IS_T);   // 岛的格数（岛 = 战场 3200×1800）
 let isWX = 0, isWY = 0;                            // 岛的左上角（画布坐标）
 
 /* ① 河水：铺满整张画布（4 帧混铺，水面不会整片一个样） */
@@ -22205,9 +22205,9 @@ function paintIslandGrass(g) {
   g.imageSmoothingEnabled = false;
   const S = ISLAND.ts;
   const inMask = function (x, y) { return x >= 0 && y >= 0 && x < IX && y < IY && islandInside(x, y); };
-  /* 草地要多铺一圈（给悬崖当底，悬崖是带 alpha 的，底下必须有草，不能露出水） */
+  /* 只铺岛内（悬崖外面①格都不铺草——悬崖外必须是水） */
   for (let y = 0; y < IY; y++) for (let x = 0; x < IX; x++) {
-    if (!inMask(x, y) && !(inMask(x - 1, y) || inMask(x + 1, y) || inMask(x, y - 1) || inMask(x, y + 1))) continue;
+    if (!inMask(x, y)) continue;
     const v = isNoise(x, y, 8) * 0.65 + isNoise(x + 37, y + 91, 3) * 0.35;
     const bag = v > 0.62 ? isBag.dense : v < 0.34 ? isBag.plain : isBag.all;
     const pick = bag[Math.floor(isHash(x, y, 9173) * bag.length) % bag.length];
@@ -27892,7 +27892,7 @@ function drawGame() {
   ctx.translate(sx, sy);
   ctx.translate(-camX, -camY);   // 摄像机：世界坐标 → 屏幕
 
-  ctx.drawImage(ground, 0, 0);
+  ctx.drawImage(ground, -RING, -RING);
   drawGooField();          // 🟢 超级史莱姆：黏糊糊场地（整张图糊一层黏液）
   drawPlunderRunes();      // 💡 光明掠夺者技能 3：地面法阵（蓄力 2 秒 → 召骷髅头）
   drawSprinterTrack();     // 🏃 超级跑者的跑道（贴着地图最外圈的赛道）
