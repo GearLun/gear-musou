@@ -22102,94 +22102,31 @@ function bindTouchUI() {
 let sceneDark = false;
 const ground = document.createElement('canvas');
 ground.width = W; ground.height = H;
-/* ===== 🧱 地面图集：Pixel Art Top Down - Basic（itch.io / cainos）=====
-   grass=24 deco=0 stone=20 · 每格 16×16 */
-const ART_ITCH_GROUND = {
-  tw: 16, th: 16, w: 128, h: 96,
-  cells: {"grass":[[0,0],[16,0],[32,0],[48,0],[64,0],[80,0],[96,0],[112,0],[0,16],[16,16],[32,16],[48,16],[64,16],[80,16],[96,16],[112,16],[0,32],[16,32],[32,32],[48,32],[64,32],[80,32],[96,32],[112,32]],"deco":[],"stone":[[0,48],[16,48],[32,48],[48,48],[64,48],[80,48],[96,48],[112,48],[0,64],[16,64],[32,64],[48,64],[64,64],[80,64],[96,64],[112,64],[0,80],[16,80],[32,80],[48,80]]},
-  data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAABgCAYAAADVenpJAAACWUlEQVR42u3b20rEMBCA4T6FXngliC8mgoIgCILihSiIj72ShWIte7BJDzvNt/CzKBu7Jn/SSWbaPD1fbA5x93i2OfaZHG4fzrf0f39zf75ljGu8f17vvMZU7dNnX94ut5Rcd06aCF+yRLK527cSROmjVQsAAoAAIEBgUiDaBpZTtCdAANoBzJXgUHsCBNrRlOxq9rUngBhAJxAABAABQAAQAAQAAbJItQPd+oF08pR+bk+hpqotGPvApXtyNvTwJbd9t4/S+/vHVfwVoBUiyuCPUdSR236pyRLyFpBmRyI7QXKkfWlRR077uSZL/3s1Y//BOSUouXZp+8gTZxUCtLNlqfYRM4pp8PurSzPGQCz1T5VeO0pcMmZK2TawUvo7NAKAACAAAXQCAXQEAcrLj7GCFaC0/BgruAWUlh9DDAAC/CZb2uxWpLqAbkr30DHq0GPYU1xZJxOgO+D9nHekuoDue+lTOduEzOd1PbeA6Bm3dtDHmrlLB9hJvr6AYoBAz/f9Se1mriT97T4BAj82niNBP75phpqn8087vz90JWqGRPVzVapimrrD7CBwXzkRTiNInUUAy3/FB0H7yongJHC2albxR8W5gO6xskGrUIBdx8pWisqygf+JQ6wUlaeD/7NSYOX1AHYsAwX4/nrdoF4IQACdQAAQAAQAAUAAEAAEAAFAABAABAABQAAQAAQAAUAAEAAEAAFAABAABAABQAAQAAQAAUAAECBEB9T+IgABCEAAAhCAAAQgAAEIQAACEIAABCAAAQhAAAIQgAAEIAABCEAAAqzx9QP4XHFOcibbLAAAAABJRU5ErkJggg=='
-};
-
-/* 🧱 itch.io 地面图集：加载 + 就绪后重建地面 */
-let itchGImg = null, itchGOK = false, itchGTried = false;
-function itchGroundLoad() {
-  if (itchGTried || typeof Image === 'undefined') return;
-  itchGTried = true;
-  if (typeof ART_ITCH_GROUND === 'undefined' || !ART_ITCH_GROUND) return;
-  try {
-    const im = new Image();
-    im.onload = function () {
-      itchGOK = true;
-      if (typeof buildGround === 'function' && typeof ground !== 'undefined' && ground) {
-        try { buildGround(); } catch (e) { }
-      }
-    };
-    im.onerror = function () { itchGOK = false; };
-    im.src = ART_ITCH_GROUND.data;
-    itchGImg = im;
-  } catch (e) { itchGOK = false; }
-}
-/* 局部确定性伪随机（固定种子 → 每次生成的地图一致，且不吃全局随机流） */
-function itchRnd() {
-  itchRnd._s = (itchRnd._s * 1103515245 + 12345) & 0x7fffffff;
-  return itchRnd._s / 0x7fffffff;
-}
-function itchRndReset(seed) { itchRnd._s = seed || 20250101; }
-
-/* 图块地面：草地铺满 + 蜿蜒石路（16px 对齐，硬像素边） */
-function itchPaintGround(g, W, H) {
-  if (!itchGOK || !itchGImg) { itchGroundLoad(); return false; }
-  const TW = ART_ITCH_GROUND.tw, TH = ART_ITCH_GROUND.th;
-  const CG = ART_ITCH_GROUND.cells.grass, CS = ART_ITCH_GROUND.cells.stone;
-  if (!CG || !CG.length || !CS || !CS.length) return false;
-  const CX = Math.ceil(W / TW), CY = Math.ceil(H / TH);
-  itchRndReset(20250101);
-
-  /* 石路掩码：两条宽路（横 y 带 / 纵 x 带），用正弦让它们蜿蜒 */
-  const isPath = new Uint8Array(CX * CY);
-  const bandHalf = 42;
-  for (let cy2 = 0; cy2 < CY; cy2++) {
-    for (let cx2 = 0; cx2 < CX; cx2++) {
-      const wx = cx2 * TW + TW / 2, wy = cy2 * TH + TH / 2;
-      const yBand = H * 0.42 + Math.sin(wx * 0.0021) * 170 + Math.sin(wx * 0.0067) * 46;
-      const xBand = W * 0.56 + Math.sin(wy * 0.0023) * 150 + Math.sin(wy * 0.0071) * 40;
-      const dH = Math.abs(wy - yBand);
-      const dV = Math.abs(wx - xBand);
-      /* 边缘抖动 ±1 格，避免死板直线 */
-      const jitH = (itchRnd() - 0.5) * TW * 1.2;
-      const jitV = (itchRnd() - 0.5) * TW * 1.2;
-      if (dH < bandHalf + jitH || dV < bandHalf * 0.85 + jitV) isPath[cy2 * CX + cx2] = 1;
-    }
-  }
-
-  const sm = g.imageSmoothingEnabled;
-  g.imageSmoothingEnabled = false;
-  for (let cy2 = 0; cy2 < CY; cy2++) {
-    for (let cx2 = 0; cx2 < CX; cx2++) {
-      const path = isPath[cy2 * CX + cx2];
-      const list = path ? CS : CG;
-      const pick = list[Math.floor(itchRnd() * list.length) % list.length];
-      g.drawImage(itchGImg, pick[0], pick[1], TW, TH, cx2 * TW, cy2 * TH, TW, TH);
-    }
-  }
-  g.imageSmoothingEnabled = sm;
-  return true;
-}
-
 function buildGround() {
   const g = ground.getContext('2d');
   if (!sceneDark) {
-    /* —— 草原战场：itch.io 图块地面（Pixel Art Top Down - Basic）——
-       16px 图块铺满草地 + 两条蜿蜒石路；图集没就绪时退回纯色底 */
-    if (!itchPaintGround(g, W, H)) {
-      g.fillStyle = '#4d6a3c';
-      g.fillRect(0, 0, W, H);
+    /* —— 草原战场 —— */
+    const grad = g.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, '#3a4a35'); grad.addColorStop(0.5, '#33412f'); grad.addColorStop(1, '#2b3828');
+    g.fillStyle = grad; g.fillRect(0, 0, W, H);
+    for (let i = 0; i < 3400; i++) {
+      const x = Math.random() * W, y = Math.random() * H;
+      g.strokeStyle = 'rgba(' + (Math.random() < 0.5 ? '130,150,105' : '90,110,75') + ',' + rnd(0.05, 0.16).toFixed(2) + ')';
+      g.lineWidth = 1;
+      g.beginPath();
+      g.moveTo(x, y);
+      g.lineTo(x + rnd(-3, 3), y - rnd(3, 8));
+      g.stroke();
     }
-    /* RNG_PARITY_20940：旧地面消耗 3400×6 + 90×6 = 20940 次随机，这里补平，
-       保证随机流位置不变（否则依赖种子的测试会漂移） */
-    for (let _rp = 0; _rp < 20940; _rp++) Math.random();
-    const vig = g.createRadialGradient(W / 2, H / 2, Math.hypot(W, H) * 0.42, W / 2, H / 2, Math.hypot(W, H) * 0.70);
-    vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(10,14,8,0.34)');
+    for (let i = 0; i < 90; i++) {
+      const x = Math.random() * W, y = Math.random() * H;
+      g.fillStyle = 'rgba(0,0,0,' + rnd(0.05, 0.14).toFixed(2) + ')';
+      g.beginPath();
+      g.ellipse(x, y, rnd(14, 50), rnd(8, 26), rnd(0, 3), 0, TAU);
+      g.fill();
+    }
+    const vig = g.createRadialGradient(W / 2, H / 2, 200, W / 2, H / 2, 780);
+    vig.addColorStop(0, 'rgba(0,0,0,0)'); vig.addColorStop(1, 'rgba(10,14,8,0.5)');
     g.fillStyle = vig; g.fillRect(0, 0, W, H);
     g.strokeStyle = 'rgba(24,30,20,0.9)'; g.lineWidth = 22;
     g.strokeRect(0, 0, W, H);
