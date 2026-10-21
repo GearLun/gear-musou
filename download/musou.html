@@ -22199,22 +22199,28 @@ function paintWater(g) {
   }
 }
 /* ② 岛身：草地（草块四边同色 → 无接缝；再叠低频起伏 + 随机翻转打散重复）
-   ⚠️ 岛的轮廓不是矩形：四周按平滑噪声各起伏 0~2 格，避免"一刀切的直线岸" */
-function islandEdgeOffset(x, y, seed) {
-  return Math.max(0, Math.round(isNoise(x, y, 4 + seed) * 4) - 2);   // 0 ~ +2 格：只往里收，不往外鼓
-}
+   🏝️ 岸线：岛的中心是**整个战场矩形**（玩法判定用它，战场内一滴水都没有），
+      但**画**的时候往河那一侧多鼓出 0~2 格（`bump*`），于是悬崖和水的交界是凹凸不平的，
+      不再是一条直边。鼓出来的部分在战场坐标之外，玩家走不到，纯装饰。 */
 function islandInside(x, y) {
-  /* 岛 = **整个战场**：水只画在战场外那一圈画布上 → 战场内部一格水都没有，
-     玩家/敌人/刷怪在坐标上就不可能站到水里（悬崖正好压在战场边界那一格）。 */
+  /* 玩法判定：岛 = 整个战场（水只画在战场外那一圈画布上） */
   return x >= 0 && y >= 0 && x < IX && y < IY;
 }
-/* 旧的"按噪声往里收"的轮廓保留在这里，只给"要不要画成起伏岸线"的视觉参考，不再参与判定 */
-function islandInsideWavy(x, y) {
-  const t = 1 + islandEdgeOffset(x, 0, 1);
-  const b = IY - 2 - islandEdgeOffset(x, 7, 2);
-  const l = 1 + islandEdgeOffset(0, y, 3);
-  const r = IX - 2 - islandEdgeOffset(5, y, 4);
-  return y >= t && y <= b && x >= l && x <= r;
+const isClampI = function (v, a, b) { return v < a ? a : v > b ? b : v; };
+/* 四条边各自"往河里鼓出几格"（0~3）：两拍噪声，疏密才不会均匀 */
+function shoreBumpN(x) { const u = isClampI(x, 0, IX - 1) + 0.5; const v = isNoise(u, 13.7, 6) * 0.65 + isNoise(u, 13.7, 2.5) * 0.35; return Math.max(0, Math.round(v * 5) - 1); }
+function shoreBumpS(x) { const u = isClampI(x, 0, IX - 1) + 0.5; const v = isNoise(u, 27.3, 6) * 0.65 + isNoise(u, 27.3, 2.5) * 0.35; return Math.max(0, Math.round(v * 5) - 1); }
+function shoreBumpW(y) { const u = isClampI(y, 0, IY - 1) + 0.5; const v = isNoise(41.1, u, 6) * 0.65 + isNoise(41.1, u, 2.5) * 0.35; return Math.max(0, Math.round(v * 5) - 1); }
+function shoreBumpE(y) { const u = isClampI(y, 0, IY - 1) + 0.5; const v = isNoise(53.9, u, 6) * 0.65 + isNoise(53.9, u, 2.5) * 0.35; return Math.max(0, Math.round(v * 5) - 1); }
+/* 视觉陆地：战场矩形 + 四条边向外鼓出的部分（角落按两边的较小值自然收口） */
+function landVisual(x, y) {
+  const ox = x < 0 ? -x : (x >= IX ? x - IX + 1 : 0);
+  const oy = y < 0 ? -y : (y >= IY ? y - IY + 1 : 0);
+  if (!ox && !oy) return true;
+  const bx = x < 0 ? shoreBumpW(y) : shoreBumpE(y);
+  const by = y < 0 ? shoreBumpN(x) : shoreBumpS(x);
+  if (ox && oy) return ox <= bx && oy <= by;
+  return ox ? ox <= bx : oy <= by;
 }
 /* 岛格掩码：世界坐标 → 这一格是不是岛（玩家/敌人/刷点都用它判断"能不能站"） */
 let ISLAND_MASK = null;
@@ -22225,7 +22231,7 @@ function islandBuildMask() {
 /* 这个点是不是站在岛上（地面还没建好时一律放行，避免开局卡住） */
 function landAt(x, y) {
   if (!ISLAND_MASK) return true;
-  const tx = Math.floor(x / IS_T), ty = Math.floor(y / IS_T);   // 世界坐标 → 岛格（isWX/isWY 只是画布偏移，不参与判定）
+  const tx = Math.floor(x / IS_T), ty = Math.floor(y / IS_T);   // 世界坐标直接换算（isWX/isWY 只是画布偏移）
   if (tx < 0 || ty < 0 || tx >= IX || ty >= IY) return false;
   return ISLAND_MASK[ty * IX + tx] === 1;
 }
@@ -22243,10 +22249,9 @@ function paintIslandGrass(g) {
   if (!isBag) islandBuildBag();
   g.imageSmoothingEnabled = false;
   const S = ISLAND.ts;
-  const inMask = function (x, y) { return x >= 0 && y >= 0 && x < IX && y < IY && islandInside(x, y); };
-  /* 只铺岛内（悬崖外面①格都不铺草——悬崖外必须是水） */
-  for (let y = 0; y < IY; y++) for (let x = 0; x < IX; x++) {
-    if (!inMask(x, y)) continue;
+  /* 草要铺到"视觉陆地"的每一格（含往河里鼓出的那 1~2 格） */
+  for (let y = -3; y < IY + 3; y++) for (let x = -3; x < IX + 3; x++) {
+    if (!landVisual(x, y)) continue;
     const v = isNoise(x, y, 8) * 0.65 + isNoise(x + 37, y + 91, 3) * 0.35;
     const bag = v > 0.62 ? isBag.dense : v < 0.34 ? isBag.plain : isBag.all;
     const pick = bag[Math.floor(isHash(x, y, 9173) * bag.length) % bag.length];
@@ -22265,7 +22270,7 @@ function paintIslandGrass(g) {
     }
   }
 }
-/* ③ 悬崖：按"哪边出岛"选块，**叠**在草地边缘（切口朝水，水从切口里透出来）
+/* ③ 悬崖：按"哪边出岛"选块，**叠**在（视觉）草地边缘（切口朝水，水从切口里透出来）
       下边界一律用"草顶 + 泥土崖面"整块 → 岛的南面是一道真正的悬崖立面
       再在崖脚压一道水影，崖边才有"立起来"的感觉 */
 let isCliffN = 0, isCliffErr = '';
@@ -22273,15 +22278,14 @@ function paintCliff(g) {
   isCliffN = 0;
   g.imageSmoothingEnabled = false;
   const S = ISLAND.ts, C = ISLAND.cliff;
-  const inMask = function (x, y) { return x >= 0 && y >= 0 && x < IX && y < IY && islandInside(x, y); };
   const blit = function (cell, x, y) {
     if (!cell) return;
     g.drawImage(isImg, cell[0], cell[1], S, S, isWX + x * IS_T, isWY + y * IS_T, IS_T, IS_T);
     isCliffN++;
   };
-  for (let y = 0; y < IY; y++) for (let x = 0; x < IX; x++) {
-    if (!inMask(x, y)) continue;
-    const N = inMask(x, y - 1), E = inMask(x + 1, y), Sd = inMask(x, y + 1), W = inMask(x - 1, y);
+  for (let y = -3; y < IY + 3; y++) for (let x = -3; x < IX + 3; x++) {
+    if (!landVisual(x, y)) continue;
+    const N = landVisual(x, y - 1), E = landVisual(x + 1, y), Sd = landVisual(x, y + 1), W = landVisual(x - 1, y);
     if (N && E && Sd && W) continue;                 // 内部不叠
     if (!Sd) { blit(C.s, x, y); continue; }          // 南面：悬崖立面（优先，岛的正面）
     if (!N && !W) { blit(C.tl, x, y); continue; }
@@ -22292,15 +22296,50 @@ function paintCliff(g) {
   }
   /* 崖脚水影：四条边朝水那一侧都压一道深色，水与崖才有前后关系 */
   g.fillStyle = 'rgba(18,68,60,0.26)';
-  for (let y = 0; y < IY; y++) for (let x = 0; x < IX; x++) {
-    if (!inMask(x, y)) continue;
-    const N = inMask(x, y - 1), E = inMask(x + 1, y), Sd = inMask(x, y + 1), W = inMask(x - 1, y);
+  for (let y = -3; y < IY + 3; y++) for (let x = -3; x < IX + 3; x++) {
+    if (!landVisual(x, y)) continue;
+    const N = landVisual(x, y - 1), E = landVisual(x + 1, y), Sd = landVisual(x, y + 1), W = landVisual(x - 1, y);
     if (N && E && Sd && W) continue;
     const px = isWX + x * IS_T, py = isWY + y * IS_T;
     if (!Sd) g.fillRect(px, py + IS_T - 7, IS_T, 9);
     if (!N) g.fillRect(px, py - 3, IS_T, 5);
     if (!W) g.fillRect(px - 3, py, 5, IS_T);
     if (!E) g.fillRect(px + IS_T - 2, py, 5, IS_T);
+  }
+  /* 岸线啃边：8px 方波把水啃进崖脚 / 把浪花打在崖脚上（32px 台阶 → 8px 锯齿） */
+  const Q = 8;
+  for (let x = -3; x < IX + 3; x++) {
+    for (let y = IY + 2; y >= -3; y--) {
+      if (!landVisual(x, y)) continue;
+      if (!landVisual(x, y + 1)) {
+        const px = isWX + x * IS_T, py = isWY + y * IS_T + IS_T;
+        for (let i = 0; i < IS_T; i += Q) {
+          const d = 2 + Math.floor(isHash(x * 17 + i, y, 7301) * 3) * Q * 0.5;   // 2 / 6 / 10 px
+          g.fillStyle = '#9bd4c3';
+          g.fillRect(px + i, py - d, Q, d);
+          g.fillStyle = 'rgba(226,246,240,0.65)';
+          g.fillRect(px + i, py - d - 2, Q, 2);
+        }
+      }
+      break;
+    }
+  }
+  /* 东/西两侧也来一点（竖向碎边） */
+  for (let y = -3; y < IY + 3; y++) {
+    for (let x = IX + 2; x >= -3; x--) {
+      if (!landVisual(x, y)) continue;
+      if (!landVisual(x + 1, y)) {
+        const px = isWX + x * IS_T + IS_T, py = isWY + y * IS_T;
+        for (let i = 0; i < IS_T; i += Q) {
+          const d = 2 + Math.floor(isHash(x, y * 19 + i, 7302) * 3) * Q * 0.5;
+          g.fillStyle = '#9bd4c3';
+          g.fillRect(px - d, py + i, d, Q);
+          g.fillStyle = 'rgba(226,246,240,0.65)';
+          g.fillRect(px - d + 0, py + i, 2, Q);
+        }
+      }
+      break;
+    }
   }
 }
 
