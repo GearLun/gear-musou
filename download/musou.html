@@ -16886,32 +16886,63 @@ $('shiny-body').addEventListener('click', (ev) => {
 });
 
 /* ============================================================
-   💀 死亡动画（倒地 → 渐黑 → 渐隐 → 消失）
+   💀 死亡动画：缓慢倒下 → 逐渐消失
    ------------------------------------------------------------
-   · 普通敌人 / 敌人形态宝可梦：0.30 秒（很快，不拖）
-   · Boss：1.35 秒 + 专属演出（双环 + 金屑 + 震屏 + 扩散环）
-   ⚠️ 快照 e 的 x/y 必须置 0：drawEnemy 内部会自己 translate(e.x, e.y)。
+   · 普通敌人 / 敌人形态宝可梦：0.40 秒（倒下占前 58% ≈ 0.23 秒，边倒边消失）
+   · Boss：1.70 秒 + 专属演出
+   · **外观完全沿用敌人本体**（重新调 drawEnemy 绘制快照），不做抽象剪影
+   · 绘制期间把 Math.random 临时打桩 → 不影响任何随机流
    ============================================================ */
-const CORPSE_DUR = 0.30;          // 普通敌人（用户要求：0.3 秒就消失，不要拖）
-const CORPSE_DUR_BOSS = 1.35;     // Boss（更长，看得清）
-const CORPSE_MAX = 140;           // 上限：尸横遍野时最老的先消失
+const CORPSE_DUR = 0.40;          // 普通敌人（慢倒 + 渐隐）
+const CORPSE_DUR_BOSS = 1.70;     // Boss
+const CORPSE_MAX = 60;            // 上限（每个尸体要重绘一次 drawEnemy，不能太多）
+const CORPSE_MAX_BOSS = 4;        // Boss 尸体单独限流（体积大、绘制贵）
 let corpses = [];
-let _corpseFilterOK = -1;
-/* ctx.filter 支持探测（不支持就只靠透明度，绝不出错） */
-function corpseFilterOK() {
-  if (_corpseFilterOK < 0) {
-    try {
-      ctx.filter = 'brightness(0.8)';
-      _corpseFilterOK = (ctx.filter && ctx.filter !== 'none') ? 1 : 0;
-      ctx.filter = 'none';
-    } catch (e) { _corpseFilterOK = 0; }
+
+function corpseAdd(e) {
+  if (!e) return;
+  if (e.segPhantom || e.devDummy) return;
+  const boss = !!e.boss;
+  if (boss && corpses.filter(function (c) { return c.boss; }).length >= CORPSE_MAX_BOSS) {
+    /* 超限：把最老的 Boss 尸体删掉 */
+    for (let i = 0; i < corpses.length; i++) if (corpses[i].boss) { corpses.splice(i, 1); break; }
   }
-  return _corpseFilterOK === 1;
+  while (corpses.length >= CORPSE_MAX) corpses.shift();
+
+  const snap = Object.assign({}, e);
+  snap.dead = false;
+  /* ⚠️ 坐标必须清零：drawEnemy 内部会自己 ctx.translate(e.x, e.y) */
+  snap.x = 0; snap.y = 0;
+  snap.airH = 0; snap.bob = 0; snap.flash = 0;
+  snap.warn = null; snap.leap = null; snap.vWarn = null;
+  snap.kx = 0; snap.ky = 0; snap.vx = 0; snap.vy = 0;
+  snap.lunge = null; snap.castCd = 0; snap.cav = null;
+  snap.hp = Math.max(1, snap.maxhp || 1);
+  snap.shiny = !!e.shiny;
+
+  corpses.push({
+    e: snap,
+    x: e.x, y: e.y,
+    r0: e.r || 12,
+    boss: boss,
+    t: 0,
+    dur: boss ? CORPSE_DUR_BOSS : CORPSE_DUR,
+    /* 往远离玩家的方向倒 */
+    dir: (e.x >= p.x) ? 1 : -1,
+    acc: e.acc || (boss ? '#ffd166' : '#ffffff')
+  });
+
+  if (boss) {
+    addRing(e.x, e.y, e.acc || '#ffd166', 12);
+    addRing(e.x, e.y, '#ffffff', 7);
+    corpseSpray(e.x, e.y, 26, e.acc || '#ffd166', 300);
+    shake = Math.max(shake, 11);
+  }
 }
-/* 👑 Boss 死亡用的**确定性**碎屑喷发（不吃 Math.random / rnd —— 渲染与死亡特效绝不能推移随机流） */
+
+/* 👑 Boss 死亡用的**确定性**碎屑（不吃 Math.random / rnd） */
 function corpseSpray(x, y, n, color, spd) {
   if (!isFinite(x) || !isFinite(y) || !isFinite(spd)) return;
-  /* 内联确定性哈希（不依赖任何外面的函数，也绝不吃随机流） */
   const hs = (a2, b2, c2) => {
     let h = ((a2 | 0) * 73856093) ^ ((b2 | 0) * 19349663) ^ ((c2 | 0) * 83492791);
     h = (h ^ (h >>> 13)) >>> 0;
@@ -16919,63 +16950,13 @@ function corpseSpray(x, y, n, color, spd) {
     return ((h >>> 8) % 1000) / 1000;
   };
   for (let i = 0; i < n; i++) {
-    const h1 = hs(x, y, 101 + i * 7);
-    const h2 = hs(x, y, 211 + i * 11);
+    const h1 = hs(x, y, 101 + i * 7), h2 = hs(x, y, 211 + i * 11);
     const ang = h1 * TAU;
-    const s = spd * (0.3 + h2 * 0.7);
-    addPart(x, y, Math.cos(ang) * s, Math.sin(ang) * s,
-      0.25 + h1 * 0.3, 2 + h2 * 2.5, color, 260);
+    const s2 = spd * (0.3 + h2 * 0.7);
+    addPart(x, y, Math.cos(ang) * s2, Math.sin(ang) * s2, 0.28 + h1 * 0.34, 2 + h2 * 2.5, color, 250);
   }
 }
-/* 把 #rrggbb 按 k 变暗（k=0 原色，k=1 全黑），给尸体做"渐黑" */
-function corpseDarken(hex, k) {
-  if (typeof hex !== 'string' || hex.length < 7) return hex;
-  const f = Math.max(0, Math.min(1, 1 - k));
-  const r = Math.round(parseInt(hex.slice(1, 3), 16) * f);
-  const g = Math.round(parseInt(hex.slice(3, 5), 16) * f);
-  const b = Math.round(parseInt(hex.slice(5, 7), 16) * f);
-  return 'rgb(' + r + ',' + g + ',' + b + ')';
-}
-function corpseAdd(e) {
-  if (!e) return;
-  /* 这些不该留尸体：蠕虫幻影节（本来就不可见）/ 开发者假人（要一直站着） */
-  if (e.segPhantom || e.devDummy) return;
-  const boss = !!e.boss;
-  if (corpses.length >= CORPSE_MAX) corpses.shift();
-  const snap = Object.assign({}, e);
-  snap.dead = false;                 // 让 drawEnemy 按活体绘制
-  snap.x = 0; snap.y = 0;            // ⚠️ 关键：避免 drawEnemy 内部再次 translate 到真实坐标
-  snap.airH = 0; snap.bob = 0; snap.flash = 0;
-  snap.warn = null; snap.leap = null; snap.vWarn = null;
-  snap.kx = 0; snap.ky = 0; snap.vx = 0; snap.vy = 0;
-  /* 绘制时不再走 drawEnemy（它会消耗随机流）→ 这里把需要的视觉信息全存下来 */
-  const petKey = (typeof foePetOf === 'function') ? foePetOf(e) : null;
-  corpses.push({
-    e: snap,
-    x: e.x, y: e.y, r: e.r || 12,
-    boss: boss,
-    t: 0,
-    dur: boss ? CORPSE_DUR_BOSS : CORPSE_DUR,
-    /* 往**远离玩家**的方向倒（读起来像被打飞） */
-    dir: (e.x >= p.x) ? 1 : -1,
-    acc: e.acc || (boss ? '#ffd166' : '#ffffff'),
-    col: e.col || '#8a8a8a',
-    dark: e.dark || '#3a3a3a',
-    r0: e.r || 12,
-    petKey: petKey,
-    petDir: petKey ? foePetDir(e) : 0,
-    petShiny: !!e.shiny
-  });
-  /* 👑 Boss 死亡瞬间的专属演出 */
-  if (boss) {
-    addRing(e.x, e.y, e.acc || '#ffd166', 12);
-    addRing(e.x, e.y, '#ffffff', 7);
-    corpseSpray(e.x, e.y, 26, e.acc || '#ffd166', 330);
-    corpseSpray(e.x, e.y, 12, '#fff6d0', 190);
-    shake = Math.max(shake, 11);
-  }
-}
-/* 每帧推进（在 updateGame 里调） */
+
 function tickCorpses(dt) {
   if (!corpses.length) return;
   for (let i = corpses.length - 1; i >= 0; i--) {
@@ -16984,133 +16965,136 @@ function tickCorpses(dt) {
     if (c.t >= c.dur) corpses.splice(i, 1);
   }
 }
-/* 绘制（在 drawGame 画敌人**之前**调 → 尸体压在活怪下面） */
+
+/* 缓动：smoothstep */
+function corpseSmooth(x) {
+  const k = Math.max(0, Math.min(1, x));
+  return k * k * (3 - 2 * k);
+}
+
 function drawCorpses() {
   if (!corpses.length) return;
-  const vx0 = camX - 200, vx1 = camX + VW + 200, vy0 = camY - 200, vy1 = camY + VH + 200;
+  const vx0 = camX - 240, vx1 = camX + VW + 240, vy0 = camY - 240, vy1 = camY + VH + 240;
   for (const c of corpses) {
     if (c.x < vx0 || c.x > vx1 || c.y < vy0 || c.y > vy1) continue;
     const k = Math.min(1, c.t / c.dur);
-    /* 倒地：前 42% 完成，带一点过冲再回弹（像真的倒下） */
-    const tp = Math.min(1, k / 0.42);
-    const over = Math.sin(tp * Math.PI) * 0.18;            // 过冲量
-    const ease = tp * tp * (3 - 2 * tp);
-    const fall = Math.min(1, ease + over * (1 - ease));
-    const land = Math.min(1, Math.max(0, (tp - 0.55) / 0.45));   // 落地压扁进度
-    /* 渐隐：前 50% 保持不透明，之后 smoothstep 掉到 0 */
-    const fk = Math.max(0, (k - 0.50) / 0.50);
-    const alpha = k < 0.50 ? 1 : Math.max(0, 1 - (fk * fk * (3 - 2 * fk)));
-    if (alpha <= 0.01) continue;
-    const ang = c.dir * (c.boss ? 1.55 : 1.42) * fall;
-    const sink = c.r0 * (c.boss ? 0.42 : 0.30) * fall;
-    const dark = Math.min(1, k * 1.1) * (c.boss ? 0.50 : 0.72);
-    /* 落地压扁：横向 +6%，纵向 -9% */
-    const sx = 1 + 0.06 * land, sy = 1 - 0.09 * land;
+    const r = c.r0;
 
-    /* ③ 扬尘：4 团，确定性方向，随时间外扩淡出（普通敌人 0~0.6，Boss 更强） */
-    const dustK = Math.min(1, k / (c.boss ? 0.7 : 0.55));
+    /* ① 倒下进度：占前 62%，用"慢起 → 加速"的重力曲线 */
+    const fallT = Math.min(1, k / 0.58);
+    const fall = fallT * fallT * (1.7 - 0.7 * fallT);      // 约等于 easeInCubic 的柔和版
+    /* 落地后的微回弹（幅度很小，只是"砸实"的手感） */
+    let bounce = 0;
+    const bk = (k - 0.58) / 0.12;
+    if (bk > 0 && bk < 1) bounce = Math.sin(bk * Math.PI) * 0.045;
+
+    /* ② 逐渐消失：从 32% 处开始，smoothstep 一路降到 0（全程连续） */
+    const fade = Math.max(0, Math.min(1, (k - 0.44) / 0.56));
+    const alpha = 1 - corpseSmooth(fade);
+    if (alpha <= 0.012) continue;
+
+    /* ③ 物理：沿倒下方向滑出 + 下沉 + 落地压扁 */
+    const ang = c.dir * ((c.boss ? 0.85 : 0.34) * fall - bounce);
+    const slide = c.dir * r * 0.42 * fall;
+    const sink = r * (c.boss ? 0.26 : 0.10) * fall;
+    const land = Math.max(0, Math.min(1, (k - 0.28) / 0.22));
+    const sx = 1 + 0.26 * land, sy = 1 - 0.48 * land;
+    const dark = corpseSmooth(Math.min(1, k * 0.9)) * (c.boss ? 0.50 : 0.74);
+
+    /* ④ 地面影子：跟着滑出、逐渐缩小淡出（"重心下降"的读法） */
+    const shw = r * (1.55 + 0.75 * land);
+    const sha = 0.46 + 0.22 * land;   /* 塌下去 → 影子更大更深 */
+    if (sha > 0.01) {
+      const shx = c.x + slide * 0.8, shy = c.y + r * 0.80;
+      /* 外层：柔和扩散 */
+      ctx.globalAlpha = Math.min(1, sha) * 0.60;
+      ctx.fillStyle = '#060a04';
+      ctx.beginPath();
+      ctx.ellipse(shx, shy, shw * 1.18, r * (0.46 + 0.16 * land), 0, 0, TAU);
+      ctx.fill();
+      /* 内层：深核（贴地处最黑） */
+      ctx.globalAlpha = Math.min(1, sha);
+      ctx.fillStyle = '#030502';
+      ctx.beginPath();
+      ctx.ellipse(shx, shy, shw * 0.82, r * (0.30 + 0.12 * land), 0, 0, TAU);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    /* ⑤ 扬尘：倒下过程中在脚下外扩（确定性方向，不耗随机） */
+    const dustK = Math.min(1, k / 0.58);
     if (dustK < 1) {
-      for (let i = 0; i < 4; i++) {
-        const a2 = (i * TAU / 4) + (c.dir > 0 ? 0.5 : -0.5);
-        const rr2 = c.r0 * (0.45 + 1.35 * dustK);
-        const dx2 = Math.cos(a2) * rr2, dy2 = Math.sin(a2) * rr2 * 0.42;
-        ctx.globalAlpha = alpha * 0.34 * (1 - dustK) * (c.boss ? 1.5 : 1);
+      for (let i = 0; i < 5; i++) {
+        const a2 = (i * TAU / 5) + (c.dir > 0 ? 0.4 : -0.4);
+        const rr2 = r * (0.5 + 1.5 * dustK);
+        ctx.globalAlpha = alpha * 0.30 * (1 - dustK) * (c.boss ? 1.5 : 1);
         ctx.fillStyle = '#cfc9b4';
         ctx.beginPath();
-        ctx.ellipse(c.x + dx2, c.y + dy2, c.r0 * (0.18 + 0.30 * dustK), c.r0 * (0.10 + 0.18 * dustK), 0, 0, TAU);
+        ctx.ellipse(c.x + Math.cos(a2) * rr2, c.y + Math.sin(a2) * rr2 * 0.4,
+          r * (0.16 + 0.30 * dustK), r * (0.09 + 0.17 * dustK), 0, 0, TAU);
         ctx.fill();
       }
       ctx.globalAlpha = 1;
     }
 
-    /* ⑤ Boss：首帧白闪 + 3 圈错峰扩散环 + 上升余烬 */
+    /* ⑥ Boss：首帧白闪 + 3 圈错峰扩散环 + 上升余烬 */
     if (c.boss) {
-      const fl = Math.max(0, 1 - k / 0.14);
+      const fl = Math.max(0, 1 - k / 0.12);
       if (fl > 0.01) {
-        ctx.save();
-        ctx.globalAlpha = fl * 0.75;
+        ctx.globalAlpha = fl * 0.7;
         ctx.fillStyle = '#fffdf0';
-        ctx.beginPath(); ctx.arc(c.x, c.y - c.r0 * 0.5, c.r0 * (1.5 - 0.6 * (1 - fl)), 0, TAU); ctx.fill();
-        ctx.restore();
+        ctx.beginPath(); ctx.arc(c.x, c.y - r * 0.5, r * (1.2 + 0.5 * (1 - fl)), 0, TAU); ctx.fill();
+        ctx.globalAlpha = 1;
       }
       for (let i = 0; i < 3; i++) {
-        const p2 = Math.max(0, Math.min(1, (k - i * 0.12) / 0.85));
+        const p2 = Math.max(0, Math.min(1, (k - i * 0.10) / 0.9));
         if (p2 <= 0 || p2 >= 1) continue;
-        ctx.save();
         ctx.globalAlpha = alpha * 0.50 * (1 - p2);
         ctx.strokeStyle = i === 1 ? '#ffffff' : c.acc;
         ctx.lineWidth = Math.max(1, (i === 1 ? 2.5 : 5) * (1 - p2));
         ctx.beginPath();
-        ctx.arc(c.x, c.y - c.r0 * 0.35, c.r0 * (0.8 + (1.4 + i * 0.9) * p2), 0, TAU);
+        ctx.arc(c.x, c.y - r * 0.35, r * (0.8 + (1.5 + i * 1.0) * p2), 0, TAU);
         ctx.stroke();
-        ctx.restore();
       }
-      /* 上升余烬（确定性相位） */
-      for (let i = 0; i < 6; i++) {
-        const ph = (k * 0.9 + i * 0.1667) % 1;
-        const ax = c.dir * (i - 2.5) * c.r0 * 0.30;
-        const ay = -c.r0 * (0.4 + ph * 2.1);
+      for (let i = 0; i < 7; i++) {
+        const ph = (k * 0.85 + i / 7) % 1;
         ctx.globalAlpha = alpha * 0.55 * (1 - ph);
         ctx.fillStyle = i % 2 ? '#fff2c0' : c.acc;
-        ctx.beginPath(); ctx.arc(c.x + ax, c.y + ay, Math.max(1, c.r0 * 0.09 * (1 - ph * 0.6)), 0, TAU); ctx.fill();
+        ctx.beginPath();
+        ctx.arc(c.x + c.dir * (i - 3) * r * 0.26, c.y - r * (0.4 + ph * 2.3), Math.max(1, r * 0.09 * (1 - ph * 0.6)), 0, TAU);
+        ctx.fill();
       }
       ctx.globalAlpha = 1;
     }
 
+    /* ⑦ 本体：沿用敌人真实造型（drawEnemy），套上倒地变换 */
     ctx.save();
     ctx.globalAlpha = alpha;
-    ctx.translate(c.x, c.y + sink);
+    ctx.translate(c.x + slide, c.y + sink);
     if (ang) ctx.rotate(ang);
     if (sx !== 1 || sy !== 1) ctx.scale(sx, sy);
-    if (c.petKey) {
-      /* 🧢 敌人形态的宝可梦：直接用贴图（drawFoePet 不吃随机流） */
-      const snap = c.e;
-      snap.petDirOverride = c.petDir;
-      if (!drawFoePet(snap, c.petKey)) drawCorpseBody(c, dark);
-    } else {
-      drawCorpseBody(c, dark);
-    }
+    /* 渐黑：用滤镜（不支持就只靠透明度），并把随机钉死，绝不吃随机流 */
+    const useF = corpseFilterOK() && dark > 0.02;
+    if (useF) ctx.filter = 'brightness(' + (1 - dark).toFixed(3) + ') saturate(' + (1 - dark * 0.5).toFixed(3) + ')';
+    const _mr = Math.random;
+    Math.random = function () { return 0.937; };
+    try { drawEnemy(c.e); } finally { Math.random = _mr; }
+    if (useF) ctx.filter = 'none';
     ctx.restore();
   }
 }
-/* 普通敌人倒地剪影：按本体比例（body ≈ 1.15r × 0.95r，中心 -0.35r）+ 高光 + 眼睛 */
-function drawCorpseBody(c, dark) {
-  const r = c.r0;
-  const BODY = corpseDarken(c.col, dark);
-  const DRK = corpseDarken(c.dark, dark);
-  const ACC = corpseDarken(c.acc, dark);
-  /* 暗部（先画，作为轮廓） */
-  ctx.fillStyle = DRK;
-  ctx.beginPath();
-  ctx.ellipse(0, -r * 0.32, r * 1.19, r * 0.99, 0, 0, TAU);
-  ctx.fill();
-  /* 主体（略偏左上，出体积） */
-  ctx.fillStyle = BODY;
-  ctx.beginPath();
-  ctx.ellipse(-r * 0.06, -r * 0.42, r * 1.06, r * 0.88, 0, 0, TAU);
-  ctx.fill();
-  /* 顶部高光 */
-  ctx.globalAlpha *= 0.55;
-  ctx.fillStyle = ACC;
-  ctx.beginPath();
-  ctx.ellipse(-r * 0.34, -r * 0.74, r * 0.42, r * 0.24, -0.5, 0, TAU);
-  ctx.fill();
-  ctx.globalAlpha /= 0.55;
-  /* 眼睛（闭眼：一条短线，读作"倒下了"） */
-  ctx.strokeStyle = corpseDarken('#0c0c0c', dark * 0.4);
-  ctx.lineWidth = Math.max(1, r * 0.13);
-  ctx.lineCap = 'round';
-  ctx.beginPath();
-  ctx.moveTo(-r * 0.46, -r * 0.30); ctx.lineTo(-r * 0.14, -r * 0.24);
-  ctx.moveTo(r * 0.14, -r * 0.24); ctx.lineTo(r * 0.46, -r * 0.30);
-  ctx.stroke();
-  /* 兵种识别色：一条腰带 */
-  ctx.strokeStyle = ACC;
-  ctx.lineWidth = Math.max(1, r * 0.14);
-  ctx.beginPath();
-  ctx.moveTo(-r * 0.86, -r * 0.10);
-  ctx.lineTo(r * 0.86, -r * 0.10);
-  ctx.stroke();
+
+/* ctx.filter 支持探测（一次性） */
+let _corpseFilterOK = -1;
+function corpseFilterOK() {
+  if (_corpseFilterOK < 0) {
+    try {
+      ctx.filter = 'brightness(0.8)';
+      _corpseFilterOK = (ctx.filter && ctx.filter !== 'none') ? 1 : 0;
+      ctx.filter = 'none';
+    } catch (err) { _corpseFilterOK = 0; }
+  }
+  return _corpseFilterOK === 1;
 }
 function killEnemy(e) {
   /* 🃏 夺舍牌：击杀瞬间先掷一次倒戈判定（每层 2%，满 5 层 10%）。
@@ -31069,6 +31053,19 @@ window.__musouCorpses = () => ({
   cfg: { dur: CORPSE_DUR, bossDur: CORPSE_DUR_BOSS, max: CORPSE_MAX }
 });
 /* 杀场上第一只存活的普通敌人（真实 killEnemy 路径），返回 { type, boss, x, y } */
+/* 杀离玩家最近的非 Boss 敌人（截图用：尸体保证在画面中央） */
+window.__musouCorpseKillNear = () => {
+  let best = null, bd = Infinity;
+  for (const e of enemies) {
+    if (e.dead || e.boss || e.segPhantom) continue;
+    const d2 = (e.x - p.x) * (e.x - p.x) + (e.y - p.y) * (e.y - p.y);
+    if (d2 < bd) { bd = d2; best = e; }
+  }
+  if (!best) return null;
+  const b = { type: best.type, x: Math.round(best.x), y: Math.round(best.y), dist: Math.round(Math.sqrt(bd)) };
+  killEnemy(best);
+  return b;
+};
 window.__musouCorpseKillFirst = () => {
   for (const e of enemies) {
     if (e.dead || e.boss || e.segPhantom) continue;
