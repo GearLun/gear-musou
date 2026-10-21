@@ -16885,12 +16885,193 @@ $('shiny-body').addEventListener('click', (ev) => {
   renderShinyDex();
 });
 
+/* ============================================================
+   💀 死亡动画（倒地 → 渐黑 → 渐隐 → 消失）
+   ------------------------------------------------------------
+   · 普通敌人 / 敌人形态宝可梦：0.30 秒（很快，不拖）
+   · Boss：1.35 秒 + 专属演出（双环 + 金屑 + 震屏 + 扩散环）
+   ⚠️ 快照 e 的 x/y 必须置 0：drawEnemy 内部会自己 translate(e.x, e.y)。
+   ============================================================ */
+const CORPSE_DUR = 0.30;          // 普通敌人（用户要求：0.3 秒就消失，不要拖）
+const CORPSE_DUR_BOSS = 1.35;     // Boss（更长，看得清）
+const CORPSE_MAX = 140;           // 上限：尸横遍野时最老的先消失
+let corpses = [];
+let _corpseFilterOK = -1;
+/* ctx.filter 支持探测（不支持就只靠透明度，绝不出错） */
+function corpseFilterOK() {
+  if (_corpseFilterOK < 0) {
+    try {
+      ctx.filter = 'brightness(0.8)';
+      _corpseFilterOK = (ctx.filter && ctx.filter !== 'none') ? 1 : 0;
+      ctx.filter = 'none';
+    } catch (e) { _corpseFilterOK = 0; }
+  }
+  return _corpseFilterOK === 1;
+}
+/* 👑 Boss 死亡用的**确定性**碎屑喷发（不吃 Math.random / rnd —— 渲染与死亡特效绝不能推移随机流） */
+function corpseSpray(x, y, n, color, spd) {
+  if (!isFinite(x) || !isFinite(y) || !isFinite(spd)) return;
+  /* 内联确定性哈希（不依赖任何外面的函数，也绝不吃随机流） */
+  const hs = (a2, b2, c2) => {
+    let h = ((a2 | 0) * 73856093) ^ ((b2 | 0) * 19349663) ^ ((c2 | 0) * 83492791);
+    h = (h ^ (h >>> 13)) >>> 0;
+    h = (h * 2654435761) >>> 0;
+    return ((h >>> 8) % 1000) / 1000;
+  };
+  for (let i = 0; i < n; i++) {
+    const h1 = hs(x, y, 101 + i * 7);
+    const h2 = hs(x, y, 211 + i * 11);
+    const ang = h1 * TAU;
+    const s = spd * (0.3 + h2 * 0.7);
+    addPart(x, y, Math.cos(ang) * s, Math.sin(ang) * s,
+      0.25 + h1 * 0.3, 2 + h2 * 2.5, color, 260);
+  }
+}
+/* 把 #rrggbb 按 k 变暗（k=0 原色，k=1 全黑），给尸体做"渐黑" */
+function corpseDarken(hex, k) {
+  if (typeof hex !== 'string' || hex.length < 7) return hex;
+  const f = Math.max(0, Math.min(1, 1 - k));
+  const r = Math.round(parseInt(hex.slice(1, 3), 16) * f);
+  const g = Math.round(parseInt(hex.slice(3, 5), 16) * f);
+  const b = Math.round(parseInt(hex.slice(5, 7), 16) * f);
+  return 'rgb(' + r + ',' + g + ',' + b + ')';
+}
+function corpseAdd(e) {
+  if (!e) return;
+  /* 这些不该留尸体：蠕虫幻影节（本来就不可见）/ 开发者假人（要一直站着） */
+  if (e.segPhantom || e.devDummy) return;
+  const boss = !!e.boss;
+  if (corpses.length >= CORPSE_MAX) corpses.shift();
+  const snap = Object.assign({}, e);
+  snap.dead = false;                 // 让 drawEnemy 按活体绘制
+  snap.x = 0; snap.y = 0;            // ⚠️ 关键：避免 drawEnemy 内部再次 translate 到真实坐标
+  snap.airH = 0; snap.bob = 0; snap.flash = 0;
+  snap.warn = null; snap.leap = null; snap.vWarn = null;
+  snap.kx = 0; snap.ky = 0; snap.vx = 0; snap.vy = 0;
+  /* 绘制时不再走 drawEnemy（它会消耗随机流）→ 这里把需要的视觉信息全存下来 */
+  const petKey = (typeof foePetOf === 'function') ? foePetOf(e) : null;
+  corpses.push({
+    e: snap,
+    x: e.x, y: e.y, r: e.r || 12,
+    boss: boss,
+    t: 0,
+    dur: boss ? CORPSE_DUR_BOSS : CORPSE_DUR,
+    /* 往**远离玩家**的方向倒（读起来像被打飞） */
+    dir: (e.x >= p.x) ? 1 : -1,
+    acc: e.acc || (boss ? '#ffd166' : '#ffffff'),
+    col: e.col || '#8a8a8a',
+    dark: e.dark || '#3a3a3a',
+    r0: e.r || 12,
+    petKey: petKey,
+    petDir: petKey ? foePetDir(e) : 0,
+    petShiny: !!e.shiny
+  });
+  /* 👑 Boss 死亡瞬间的专属演出 */
+  if (boss) {
+    addRing(e.x, e.y, e.acc || '#ffd166', 12);
+    addRing(e.x, e.y, '#ffffff', 7);
+    corpseSpray(e.x, e.y, 26, e.acc || '#ffd166', 330);
+    corpseSpray(e.x, e.y, 12, '#fff6d0', 190);
+    shake = Math.max(shake, 11);
+  }
+}
+/* 每帧推进（在 updateGame 里调） */
+function tickCorpses(dt) {
+  if (!corpses.length) return;
+  for (let i = corpses.length - 1; i >= 0; i--) {
+    const c = corpses[i];
+    c.t += dt;
+    if (c.t >= c.dur) corpses.splice(i, 1);
+  }
+}
+/* 绘制（在 drawGame 画敌人**之前**调 → 尸体压在活怪下面） */
+function drawCorpses() {
+  if (!corpses.length) return;
+  const vx0 = camX - 200, vx1 = camX + VW + 200, vy0 = camY - 200, vy1 = camY + VH + 200;
+  for (const c of corpses) {
+    if (c.x < vx0 || c.x > vx1 || c.y < vy0 || c.y > vy1) continue;
+    const k = Math.min(1, c.t / c.dur);
+    /* 倒地：前 40% 完成；渐隐：42% 之后线性到 0 */
+    const tp = Math.min(1, k / 0.40);
+    const ease = tp * tp * (3 - 2 * tp);
+    const alpha = k < 0.42 ? 1 : Math.max(0, 1 - (k - 0.42) / 0.58);
+    if (alpha <= 0.01) continue;
+    const ang = c.dir * (c.boss ? 1.75 : 1.45) * ease;
+    const sink = c.r0 * (c.boss ? 0.45 : 0.32) * ease;
+    const dark = Math.min(1, k * 1.2) * (c.boss ? 0.55 : 0.78);
+
+    /* 👑 Boss：扩散环（不随倒地旋转，单独一层，纯几何不耗随机） */
+    if (c.boss) {
+      ctx.save();
+      ctx.globalAlpha = alpha * 0.55 * (1 - k * 0.5);
+      ctx.strokeStyle = c.acc;
+      ctx.lineWidth = Math.max(1, 5 * (1 - k));
+      ctx.beginPath();
+      ctx.arc(c.x, c.y - c.r0 * 0.4, c.r0 * (1.25 + 2.3 * k), 0, TAU);
+      ctx.stroke();
+      ctx.globalAlpha = alpha * 0.30 * (1 - k);
+      ctx.lineWidth = Math.max(1, 2.5 * (1 - k));
+      ctx.beginPath();
+      ctx.arc(c.x, c.y - c.r0 * 0.4, c.r0 * (0.7 + 3.4 * k), 0, TAU);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    ctx.save();
+    ctx.globalAlpha = alpha;
+    ctx.translate(c.x, c.y + sink);
+    if (ang) ctx.rotate(ang);
+    if (c.petKey) {
+      /* 🧢 敌人形态的宝可梦：直接复用贴图绘制（drawFoePet 不使用随机流） */
+      const snap = c.e;
+      snap.petDirOverride = c.petDir;
+      if (!drawFoePet(snap, c.petKey)) {
+        /* 贴图还没解码好 → 退回剪影，绝不空画 */
+        drawCorpseBody(c, dark);
+      }
+    } else {
+      drawCorpseBody(c, dark);
+    }
+    ctx.restore();
+  }
+}
+/* 普通敌人的倒地剪影：椭圆身 + 头 + 配色（全部几何绘制，不耗随机流） */
+function drawCorpseBody(c, dark) {
+  const r = c.r0;
+  const BODY = corpseDarken(c.col, dark);
+  const DRK = corpseDarken(c.dark, dark);
+  const ACC = corpseDarken(c.acc, dark);
+  /* 身体（略微拉长，像倒下的身体） */
+  ctx.fillStyle = DRK;
+  ctx.beginPath();
+  ctx.ellipse(0, -r * 0.55, r * 1.30, r * 1.05, 0, 0, TAU);
+  ctx.fill();
+  ctx.fillStyle = BODY;
+  ctx.beginPath();
+  ctx.ellipse(-r * 0.10, -r * 0.70, r * 1.10, r * 0.90, 0, 0, TAU);
+  ctx.fill();
+  /* 头 */
+  ctx.fillStyle = BODY;
+  ctx.beginPath();
+  ctx.arc(r * 0.55, -r * 1.45, r * 0.62, 0, TAU);
+  ctx.fill();
+  /* 一条装饰亮线（保留各兵种的识别色） */
+  ctx.strokeStyle = ACC;
+  ctx.globalAlpha *= 0.85;
+  ctx.lineWidth = Math.max(1, r * 0.16);
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.85, -r * 0.45);
+  ctx.lineTo(r * 0.75, -r * 1.05);
+  ctx.stroke();
+  ctx.globalAlpha /= 0.85;
+}
 function killEnemy(e) {
   /* 🃏 夺舍牌：击杀瞬间先掷一次倒戈判定（每层 2%，满 5 层 10%）。
      成功 → 目标原地满血变成友军，本函数直接返回：**不计击杀、不掉球、不给分** */
   if (charmCanConvert(e) && Math.random() < charmChance()) { charmConvert(e); return; }
   if (e.dead) return 0;
   e.dead = true;
+  corpseAdd(e);          // 💀 死亡动画：先登记快照（此后 e 还会被清理，快照不受影响）
   /* 🧢 训练家：**第 5 波的总大将倒下这一刻**才允许御三家三选一（用户要求「打完总大将之后再选」） */
   if (e.boss) petStarterBossDown();
   /* 💀 骷髅头：**被玩家提前打死也会在原地炸**（接触自爆与超时自爆走 skullBoom，爆炸由 skullBoomed 去重） */
@@ -20244,6 +20425,7 @@ function loadGame() {
    重置 / 开局
    ============================================================ */
 function resetRun() {
+  corpses = [];          // 💀 新局清空死亡动画队列
   /* 🧢 训练家的「预先选好的武器」要在清空**之前**读出来：`doStartGame()` 会调本函数，
      而本函数下面会把 `p.weapon` 清成 `''` —— 末尾要靠这个值决定「要不要补建三只御三家」
      （用户 2026-10 报的「选训练家后宝可梦全消失」就出在这里）。 */
@@ -25644,6 +25826,7 @@ function pushApart(a, b) {
   }
 }
 function updateGame(dt, rawDt) {
+  tickCorpses(dt);       // 💀 死亡动画计时
   /* 🧪🛠 试验场：**金币无限**（每帧补满，买东西/刷货架不心疼）
      —— 只补「手上金币」，`coinsTotal`（本局总金币）一分不加，所以**不影响传承 1% 带出** */
   if (p.lab === 1 && !labCoinOff) coins = Math.max(coins, LAB_COIN_INF);
@@ -27969,6 +28152,7 @@ function drawGame() {
      这里只跳过**完全在视野外 260px 以外**的敌人 —— 余量给足，预警线/大体型怪不会在边缘被切掉；
      **Boss 一律不剔除**（它们的血条与预警线是屏幕级表演）。
      剔除只影响绘制，**逻辑/判定/小地图一点没变**。 */
+  drawCorpses();         // 💀 尸体画在活怪下面（先死先沉）
   const cullL = camX - 260, cullR = camX + VW + 260, cullT = camY - 260, cullB = camY + VH + 260;
   for (const e of enemies) {
     /* 🛡️ **绘制前的最后一道 NaN 网**：只要坐标不是有限数就地拉回场上。
@@ -30830,6 +31014,40 @@ window.__musouClearAllies = () => { allyUnits = []; };   // 测试钩子：清�
 /* 🩺 性能探针：把「每帧会变长的那批数组」的长度 + 敌人的速度/血量统计一次读出来。
    用途：长跑体检（tests/smoke.js S61）里**采样 N 次看趋势** —— 只跑几帧是看不出泄漏的，
    长时间游玩卡死基本都是「某个数组只涨不消」或「速度无上限累加」造成的。 */
+/* 💀 死亡动画读数：给测试钉「普通敌人 / Boss 都有尸体、都会按时消失」 */
+window.__musouCorpses = () => ({
+  n: corpses.length,
+  boss: corpses.filter(function (c) { return c.boss; }).length,
+  list: corpses.slice(0, 6).map(function (c) { return { x: Math.round(c.x), y: Math.round(c.y), boss: c.boss, t: +c.t.toFixed(3), dur: c.dur }; }),
+  cfg: { dur: CORPSE_DUR, bossDur: CORPSE_DUR_BOSS, max: CORPSE_MAX }
+});
+/* 杀场上第一只存活的普通敌人（真实 killEnemy 路径），返回 { type, boss, x, y } */
+window.__musouCorpseKillFirst = () => {
+  for (const e of enemies) {
+    if (e.dead || e.boss || e.segPhantom) continue;
+    const b = { type: e.type, boss: false, x: Math.round(e.x), y: Math.round(e.y) };
+    killEnemy(e);
+    return b;
+  }
+  return null;
+};
+/* 杀第一个存活的 Boss（真实 killEnemy 路径） */
+window.__musouCorpseKillBoss = () => {
+  for (const e of enemies) {
+    if (e.dead || !e.boss) continue;
+    const b = { type: e.type, boss: true, x: Math.round(e.x), y: Math.round(e.y) };
+    killEnemy(e);
+    return b;
+  }
+  return null;
+};
+window.__musouCorpseKill = (i) => {
+  const e = enemies[i || 0];
+  if (!e) return null;
+  const b = { type: e.type, x: Math.round(e.x), y: Math.round(e.y), boss: !!e.boss };
+  killEnemy(e);
+  return b;
+};
 window.__musouPerfProbe = () => {
   const live = enemies.filter(e => !e.dead);
   let maxV = 0, maxSpd = 0, maxVBody = 0, sumHp = 0, bossN = 0, shinyN = 0, burningN = 0;
