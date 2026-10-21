@@ -16994,7 +16994,8 @@ function drawCorpses() {
     if (alpha <= 0.012) continue;
 
     /* ③ 物理：沿倒下方向滑出 + 下沉 + 落地压扁 */
-    const ang = c.dir * ((c.boss ? 0.85 : 0.34) * fall - bounce);
+    /* 倒下幅度：普通 ≈60°(1.05rad) / Boss ≈69°(1.20rad) —— 用户要求"再大些、看得显眼" */
+    const ang = c.dir * ((c.boss ? 1.20 : 1.05) * fall - bounce);
     const slide = c.dir * r * 0.42 * fall;
     const sink = r * (c.boss ? 0.26 : 0.10) * fall;
     const land = Math.max(0, Math.min(1, (k - 0.28) / 0.22));
