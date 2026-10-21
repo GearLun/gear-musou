@@ -22224,17 +22224,22 @@ function landVisual(x, y) {
   return ox ? ox <= bx : oy <= by;
 }
 /* 岛格掩码：世界坐标 → 这一格是不是岛（玩家/敌人/刷点都用它判断"能不能站"） */
+const ISLAND_EXT = 4;                       // 掩码在战场四周多留 4 格（岸线往外鼓出的部分）
+const ISLAND_MW = IX + ISLAND_EXT * 2, ISLAND_MH = IY + ISLAND_EXT * 2;
 let ISLAND_MASK = null;
 function islandBuildMask() {
-  ISLAND_MASK = new Uint8Array(IX * IY);
-  for (let y = 0; y < IY; y++) for (let x = 0; x < IX; x++) ISLAND_MASK[y * IX + x] = islandInside(x, y) ? 1 : 0;
+  ISLAND_MASK = new Uint8Array(ISLAND_MW * ISLAND_MH);
+  for (let y = 0; y < ISLAND_MH; y++) for (let x = 0; x < ISLAND_MW; x++) {
+    const tx = x - ISLAND_EXT, ty = y - ISLAND_EXT;
+    ISLAND_MASK[y * ISLAND_MW + x] = landVisual(tx, ty) ? 1 : 0;   // ← 和画出来的陆地**同一套判定**
+  }
 }
 /* 这个点是不是站在岛上（地面还没建好时一律放行，避免开局卡住） */
 function landAt(x, y) {
   if (!ISLAND_MASK) return true;
-  const tx = Math.floor(x / IS_T), ty = Math.floor(y / IS_T);   // 世界坐标直接换算（isWX/isWY 只是画布偏移）
-  if (tx < 0 || ty < 0 || tx >= IX || ty >= IY) return false;
-  return ISLAND_MASK[ty * IX + tx] === 1;
+  const mx = Math.floor(x / IS_T) + ISLAND_EXT, my = Math.floor(y / IS_T) + ISLAND_EXT;
+  if (mx < 0 || my < 0 || mx >= ISLAND_MW || my >= ISLAND_MH) return false;
+  return ISLAND_MASK[my * ISLAND_MW + mx] === 1;   // 草 = 可站，水 = 不可站
 }
 /* 出界/下水时往岛心推 px 像素（确定性，不吃随机流） */
 function landNudge(o, px) {
@@ -22346,6 +22351,7 @@ function paintCliff(g) {
 
 /* 诊断/测试钩子 */
 /* 🏝️ 只读钩子：统计"现在有多少实体站在水里"（0 = 全在草地上） */
+window.__musouLandAt = (x, y) => landAt(x, y);
 window.__musouLandCheck = () => {
   let bad = 0, n2 = 0;
   for (const e of enemies) { if (e.dead) continue; n2++; if (!landAt(e.x, e.y)) bad++; }
@@ -27131,12 +27137,20 @@ function updateGame(dt, rawDt) {
   artTick(dt);
 
   /* 位移与边界 */
+  const _px0 = p.x, _py0 = p.y;       // 🏝️ 撞水贴墙滑：改动前的位置
   if (!p.roninDash && !p.petBlitz) {   // 一闪 / 闪焰冲锋期间坐标完全由它们接管（避免输入位移叠加漂移）
     p.x += p.vx * dt; p.y += p.vy * dt;
   }
-  p.x = Math.max(30, Math.min(W - 30, p.x));
-  p.y = Math.max(30, Math.min(H - 30, p.y));
-  landNudge(p, 10);   // 🏝️ 水面不可站立：走到悬崖边就被挡住（沿岛心方向推回）
+  /* 边界 = 战场 + 岸线往外鼓出的那几格（玩家能走到鼓出来的草地上） */
+  const _pad = 16, _ex = ISLAND_EXT * IS_T;
+  p.x = Math.max(-_ex + _pad, Math.min(W + _ex - _pad, p.x));
+  p.y = Math.max(-_ex + _pad, Math.min(H + _ex - _pad, p.y));
+  /* 空气墙 = 水：撞到水就沿一边滑，绝不被"推走" */
+  if (!landAt(p.x, p.y)) {
+    if (landAt(p.x, _py0)) p.y = _py0;
+    else if (landAt(_px0, p.y)) p.x = _px0;
+    else { p.x = _px0; p.y = _py0; }
+  }
   p.vx *= Math.exp(-VEL_DRAG * dt); p.vy *= Math.exp(-VEL_DRAG * dt);
   petMountSnap();   // 🧢 骑乘：坐骑坐标在这一帧的**最终位置**上再钉一次（updateAllies 跑在玩家位移之前，
                     //    不补这一下高速闪避就会差一帧 ≈ 21px —— 看起来就是「人和宝可梦分家」）
