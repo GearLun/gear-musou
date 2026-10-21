@@ -1887,6 +1887,13 @@ function spawnEnemy(type, forceShiny, noShiny, probe) {
   let a = rnd(0, TAU), d = rnd(460, 920);
   let x = p.x + Math.cos(a) * d, y = p.y + Math.sin(a) * d;
   x = Math.max(50, Math.min(W - 50, x)); y = Math.max(50, Math.min(H - 50, y));
+  /* 🏝️ 只在草地上生成：落点在水里就沿"岛心方向"收敛（确定性，不吃随机流） */
+  if (!landAt(x, y)) {
+    for (let k = 0; k < 80 && !landAt(x, y); k++) {
+      const ca = Math.atan2(H / 2 - y, W / 2 - x);
+      x += Math.cos(ca) * 48; y += Math.sin(ca) * 48;
+    }
+  }
   /* 地狱/无尽奇遇·闪光大量出现：本波前 5 只必闪（探针的 forceShiny 不消耗这个额度）
      noShiny = 探针专用：**强制非闪光**（否则 0.5% 出闪 + 必带 5 倍血量会把血量探针读数放大 5 倍 —— 历史偶发失败源） */
   const surge = !forceShiny && !noShiny && hellRest.shinyLeft > 0;
@@ -3791,6 +3798,9 @@ function sprintDashGap(e) {
   return rnd(g[0], g[1]);
 }
 /* 冲撞伤害（本 Boss **唯一**的伤害手段） */
+/* 🏝️ 跑者只在草地上跑：位置一旦滑到水面就推回（跑道贴地图外圈，岛缘有起伏） */
+function sprinterKeepLand(e) { if (!landAt(e.x, e.y)) landNudge(e, 34); }
+
 function sprinterRam(e, dt) {
   e.spHitCd = Math.max(0, (e.spHitCd || 0) - dt);
   if (e.spHitCd > 0) return 0;
@@ -3893,6 +3903,7 @@ function tickSprinterAI(e, dt, tg) {
     const m = 40;
     e.x = Math.max(m, Math.min(W - m, e.x));
     e.y = Math.max(m, Math.min(H - m, e.y));
+    sprinterKeepLand(e);   // 🏝️ 冲刺也别冲进水里
     if (Math.random() < 0.9) {
       addPart(e.x - e.spDx * 14, e.y - e.spDy * 14,
         -e.spDx * rnd(80, 260) + rnd(-40, 40), -e.spDy * rnd(80, 260) + rnd(-40, 40),
@@ -22190,15 +22201,43 @@ function paintWater(g) {
 /* ② 岛身：草地（草块四边同色 → 无接缝；再叠低频起伏 + 随机翻转打散重复）
    ⚠️ 岛的轮廓不是矩形：四周按平滑噪声各起伏 0~2 格，避免"一刀切的直线岸" */
 function islandEdgeOffset(x, y, seed) {
-  return Math.round(isNoise(x, y, 4 + seed) * 4) - 2;         // -2 ~ +2 格（岸线才有起伏）
+  return Math.max(0, Math.round(isNoise(x, y, 4 + seed) * 4) - 2);   // 0 ~ +2 格：只往里收，不往外鼓
 }
 function islandInside(x, y) {
-  if (x < 1 || y < 1 || x >= IX - 1 || y >= IY - 1) return false;
-  const t = 2 + islandEdgeOffset(x, 0, 1);                    // 上边界的起伏
-  const b = IY - 3 + islandEdgeOffset(x, 7, 2);               // 下边界
-  const l = 2 + islandEdgeOffset(0, y, 3);                    // 左边界
-  const r = IX - 3 + islandEdgeOffset(5, y, 4);               // 右边界
+  /* 岛 = **整个战场**：水只画在战场外那一圈画布上 → 战场内部一格水都没有，
+     玩家/敌人/刷怪在坐标上就不可能站到水里（悬崖正好压在战场边界那一格）。 */
+  return x >= 0 && y >= 0 && x < IX && y < IY;
+}
+/* 旧的"按噪声往里收"的轮廓保留在这里，只给"要不要画成起伏岸线"的视觉参考，不再参与判定 */
+function islandInsideWavy(x, y) {
+  const t = 1 + islandEdgeOffset(x, 0, 1);
+  const b = IY - 2 - islandEdgeOffset(x, 7, 2);
+  const l = 1 + islandEdgeOffset(0, y, 3);
+  const r = IX - 2 - islandEdgeOffset(5, y, 4);
   return y >= t && y <= b && x >= l && x <= r;
+}
+/* 岛格掩码：世界坐标 → 这一格是不是岛（玩家/敌人/刷点都用它判断"能不能站"） */
+let ISLAND_MASK = null;
+function islandBuildMask() {
+  ISLAND_MASK = new Uint8Array(IX * IY);
+  for (let y = 0; y < IY; y++) for (let x = 0; x < IX; x++) ISLAND_MASK[y * IX + x] = islandInside(x, y) ? 1 : 0;
+}
+/* 这个点是不是站在岛上（地面还没建好时一律放行，避免开局卡住） */
+function landAt(x, y) {
+  if (!ISLAND_MASK) return true;
+  const tx = Math.floor(x / IS_T), ty = Math.floor(y / IS_T);   // 世界坐标 → 岛格（isWX/isWY 只是画布偏移，不参与判定）
+  if (tx < 0 || ty < 0 || tx >= IX || ty >= IY) return false;
+  return ISLAND_MASK[ty * IX + tx] === 1;
+}
+/* 出界/下水时往岛心推 px 像素（确定性，不吃随机流） */
+function landNudge(o, px) {
+  if (!o || landAt(o.x, o.y)) return false;
+  const cx = (IX * IS_T) / 2, cy = (IY * IS_T) / 2;
+  const a = Math.atan2(cy - o.y, cx - o.x);
+  let d = px;
+  for (let k = 0; k < 8 && !landAt(o.x + Math.cos(a) * d, o.y + Math.sin(a) * d); k++) d *= 1.6;
+  o.x += Math.cos(a) * d; o.y += Math.sin(a) * d;
+  return true;
 }
 function paintIslandGrass(g) {
   if (!isBag) islandBuildBag();
@@ -22266,6 +22305,12 @@ function paintCliff(g) {
 }
 
 /* 诊断/测试钩子 */
+/* 🏝️ 只读钩子：统计"现在有多少实体站在水里"（0 = 全在草地上） */
+window.__musouLandCheck = () => {
+  let bad = 0, n2 = 0;
+  for (const e of enemies) { if (e.dead) continue; n2++; if (!landAt(e.x, e.y)) bad++; }
+  return { foes: n2, foesInWater: bad, playerInWater: landAt(p.x, p.y) ? 0 : 1, mask: !!ISLAND_MASK };
+};
 window.__musouSproutInfo = () => ({
   ok: 1, island: 1, base: ISLAND.base, ring: RING,
   canvas: [ground.width, ground.height], world: [W, H],
@@ -22286,6 +22331,7 @@ function buildGround() {
   if (!sceneDark) {
     /* —— 小岛：河水铺底 → 岛身草地 → 悬崖边缘 —— */
     isWX = RING; isWY = RING;
+    if (!ISLAND_MASK) islandBuildMask();
     g.fillStyle = ISLAND.base;
     g.fillRect(0, 0, GW, GH);
     if (!isOK) { islandLoad(); }
@@ -27050,6 +27096,7 @@ function updateGame(dt, rawDt) {
   }
   p.x = Math.max(30, Math.min(W - 30, p.x));
   p.y = Math.max(30, Math.min(H - 30, p.y));
+  landNudge(p, 10);   // 🏝️ 水面不可站立：走到悬崖边就被挡住（沿岛心方向推回）
   p.vx *= Math.exp(-VEL_DRAG * dt); p.vy *= Math.exp(-VEL_DRAG * dt);
   petMountSnap();   // 🧢 骑乘：坐骑坐标在这一帧的**最终位置**上再钉一次（updateAllies 跑在玩家位移之前，
                     //    不补这一下高速闪避就会差一帧 ≈ 21px —— 看起来就是「人和宝可梦分家」）
@@ -27510,6 +27557,7 @@ function updateGame(dt, rawDt) {
       }
     }
   }
+  for (let i = 0; i < enemies.length; i++) { const e = enemies[i]; if (!e.dead) landNudge(e, 24); }   // 🏝️ 追到崖边也不下水
   enemies = enemies.filter(e => !e.dead);
   tickHexes(dt);   // 终焉齿轮场地魔法阵倒计时/爆发
   tickPlanteraVines(dt);   // 世纪之花·藤蔓（预警 → 绽放 → 每 0.5s 结算）
