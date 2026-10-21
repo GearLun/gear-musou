@@ -22688,7 +22688,7 @@ function sproutLayout() {
   for (let y = 1; y < CY - 1; y++) for (let x = 1; x < CX - 1; x++) {
     const i = y * CX + x;
     if (!water[i]) continue;
-    if (sprHash(x, y, 505) > 0.11) continue;
+    if (sprHash(x, y, 505) > 0.16) continue;
     const key = sprHash(x, y, 506) < 0.5 ? 'lilyA' : 'lilyB';
     const o = O[key], sp = sprSheet(o.sheet);
     sprCmd(overWaterCmds, o.sheet, sp[0] + o.x, sp[1] + o.y, o.w, o.h, x * SPR_T + 8, y * SPR_T + 8, 32, 32, 0);
@@ -22719,7 +22719,7 @@ function sproutLayout() {
     if (water[i]) continue;
     const wN = water[i - CX], wE = water[i + 1], wS = water[i + CX], wW = water[i - 1];
     if (!(wN || wE || wS || wW)) continue;
-    if (sprHash(x, y, 1311) > 0.30) continue;
+    if (sprHash(x, y, 1311) > 0.45) continue;
     const ddx = (wE ? 10 : 0) + (wW ? -10 : 0), ddy = (wS ? 10 : 0) + (wN ? -10 : 0);
     const px = (x + 0.5) * SPR_T + ddx, py = (y + 0.85) * SPR_T + ddy;
     if (sprHash(x, y, 1312) < 0.65) placeDeco(pick(FLOWERK, sprHash(x, y, 1313)), px, py);
