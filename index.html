@@ -16992,79 +16992,126 @@ function drawCorpses() {
   for (const c of corpses) {
     if (c.x < vx0 || c.x > vx1 || c.y < vy0 || c.y > vy1) continue;
     const k = Math.min(1, c.t / c.dur);
-    /* 倒地：前 40% 完成；渐隐：42% 之后线性到 0 */
-    const tp = Math.min(1, k / 0.40);
+    /* 倒地：前 42% 完成，带一点过冲再回弹（像真的倒下） */
+    const tp = Math.min(1, k / 0.42);
+    const over = Math.sin(tp * Math.PI) * 0.18;            // 过冲量
     const ease = tp * tp * (3 - 2 * tp);
-    const alpha = k < 0.42 ? 1 : Math.max(0, 1 - (k - 0.42) / 0.58);
+    const fall = Math.min(1, ease + over * (1 - ease));
+    const land = Math.min(1, Math.max(0, (tp - 0.55) / 0.45));   // 落地压扁进度
+    /* 渐隐：前 50% 保持不透明，之后 smoothstep 掉到 0 */
+    const fk = Math.max(0, (k - 0.50) / 0.50);
+    const alpha = k < 0.50 ? 1 : Math.max(0, 1 - (fk * fk * (3 - 2 * fk)));
     if (alpha <= 0.01) continue;
-    const ang = c.dir * (c.boss ? 1.75 : 1.45) * ease;
-    const sink = c.r0 * (c.boss ? 0.45 : 0.32) * ease;
-    const dark = Math.min(1, k * 1.2) * (c.boss ? 0.55 : 0.78);
+    const ang = c.dir * (c.boss ? 1.55 : 1.42) * fall;
+    const sink = c.r0 * (c.boss ? 0.42 : 0.30) * fall;
+    const dark = Math.min(1, k * 1.1) * (c.boss ? 0.50 : 0.72);
+    /* 落地压扁：横向 +6%，纵向 -9% */
+    const sx = 1 + 0.06 * land, sy = 1 - 0.09 * land;
 
-    /* 👑 Boss：扩散环（不随倒地旋转，单独一层，纯几何不耗随机） */
+    /* ③ 扬尘：4 团，确定性方向，随时间外扩淡出（普通敌人 0~0.6，Boss 更强） */
+    const dustK = Math.min(1, k / (c.boss ? 0.7 : 0.55));
+    if (dustK < 1) {
+      for (let i = 0; i < 4; i++) {
+        const a2 = (i * TAU / 4) + (c.dir > 0 ? 0.5 : -0.5);
+        const rr2 = c.r0 * (0.45 + 1.35 * dustK);
+        const dx2 = Math.cos(a2) * rr2, dy2 = Math.sin(a2) * rr2 * 0.42;
+        ctx.globalAlpha = alpha * 0.34 * (1 - dustK) * (c.boss ? 1.5 : 1);
+        ctx.fillStyle = '#cfc9b4';
+        ctx.beginPath();
+        ctx.ellipse(c.x + dx2, c.y + dy2, c.r0 * (0.18 + 0.30 * dustK), c.r0 * (0.10 + 0.18 * dustK), 0, 0, TAU);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+
+    /* ⑤ Boss：首帧白闪 + 3 圈错峰扩散环 + 上升余烬 */
     if (c.boss) {
-      ctx.save();
-      ctx.globalAlpha = alpha * 0.55 * (1 - k * 0.5);
-      ctx.strokeStyle = c.acc;
-      ctx.lineWidth = Math.max(1, 5 * (1 - k));
-      ctx.beginPath();
-      ctx.arc(c.x, c.y - c.r0 * 0.4, c.r0 * (1.25 + 2.3 * k), 0, TAU);
-      ctx.stroke();
-      ctx.globalAlpha = alpha * 0.30 * (1 - k);
-      ctx.lineWidth = Math.max(1, 2.5 * (1 - k));
-      ctx.beginPath();
-      ctx.arc(c.x, c.y - c.r0 * 0.4, c.r0 * (0.7 + 3.4 * k), 0, TAU);
-      ctx.stroke();
-      ctx.restore();
+      const fl = Math.max(0, 1 - k / 0.14);
+      if (fl > 0.01) {
+        ctx.save();
+        ctx.globalAlpha = fl * 0.75;
+        ctx.fillStyle = '#fffdf0';
+        ctx.beginPath(); ctx.arc(c.x, c.y - c.r0 * 0.5, c.r0 * (1.5 - 0.6 * (1 - fl)), 0, TAU); ctx.fill();
+        ctx.restore();
+      }
+      for (let i = 0; i < 3; i++) {
+        const p2 = Math.max(0, Math.min(1, (k - i * 0.12) / 0.85));
+        if (p2 <= 0 || p2 >= 1) continue;
+        ctx.save();
+        ctx.globalAlpha = alpha * 0.50 * (1 - p2);
+        ctx.strokeStyle = i === 1 ? '#ffffff' : c.acc;
+        ctx.lineWidth = Math.max(1, (i === 1 ? 2.5 : 5) * (1 - p2));
+        ctx.beginPath();
+        ctx.arc(c.x, c.y - c.r0 * 0.35, c.r0 * (0.8 + (1.4 + i * 0.9) * p2), 0, TAU);
+        ctx.stroke();
+        ctx.restore();
+      }
+      /* 上升余烬（确定性相位） */
+      for (let i = 0; i < 6; i++) {
+        const ph = (k * 0.9 + i * 0.1667) % 1;
+        const ax = c.dir * (i - 2.5) * c.r0 * 0.30;
+        const ay = -c.r0 * (0.4 + ph * 2.1);
+        ctx.globalAlpha = alpha * 0.55 * (1 - ph);
+        ctx.fillStyle = i % 2 ? '#fff2c0' : c.acc;
+        ctx.beginPath(); ctx.arc(c.x + ax, c.y + ay, Math.max(1, c.r0 * 0.09 * (1 - ph * 0.6)), 0, TAU); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
     }
 
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.translate(c.x, c.y + sink);
     if (ang) ctx.rotate(ang);
+    if (sx !== 1 || sy !== 1) ctx.scale(sx, sy);
     if (c.petKey) {
-      /* 🧢 敌人形态的宝可梦：直接复用贴图绘制（drawFoePet 不使用随机流） */
+      /* 🧢 敌人形态的宝可梦：直接用贴图（drawFoePet 不吃随机流） */
       const snap = c.e;
       snap.petDirOverride = c.petDir;
-      if (!drawFoePet(snap, c.petKey)) {
-        /* 贴图还没解码好 → 退回剪影，绝不空画 */
-        drawCorpseBody(c, dark);
-      }
+      if (!drawFoePet(snap, c.petKey)) drawCorpseBody(c, dark);
     } else {
       drawCorpseBody(c, dark);
     }
     ctx.restore();
   }
 }
-/* 普通敌人的倒地剪影：椭圆身 + 头 + 配色（全部几何绘制，不耗随机流） */
+/* 普通敌人倒地剪影：按本体比例（body ≈ 1.15r × 0.95r，中心 -0.35r）+ 高光 + 眼睛 */
 function drawCorpseBody(c, dark) {
   const r = c.r0;
   const BODY = corpseDarken(c.col, dark);
   const DRK = corpseDarken(c.dark, dark);
   const ACC = corpseDarken(c.acc, dark);
-  /* 身体（略微拉长，像倒下的身体） */
+  /* 暗部（先画，作为轮廓） */
   ctx.fillStyle = DRK;
   ctx.beginPath();
-  ctx.ellipse(0, -r * 0.55, r * 1.30, r * 1.05, 0, 0, TAU);
+  ctx.ellipse(0, -r * 0.32, r * 1.19, r * 0.99, 0, 0, TAU);
   ctx.fill();
+  /* 主体（略偏左上，出体积） */
   ctx.fillStyle = BODY;
   ctx.beginPath();
-  ctx.ellipse(-r * 0.10, -r * 0.70, r * 1.10, r * 0.90, 0, 0, TAU);
+  ctx.ellipse(-r * 0.06, -r * 0.42, r * 1.06, r * 0.88, 0, 0, TAU);
   ctx.fill();
-  /* 头 */
-  ctx.fillStyle = BODY;
+  /* 顶部高光 */
+  ctx.globalAlpha *= 0.55;
+  ctx.fillStyle = ACC;
   ctx.beginPath();
-  ctx.arc(r * 0.55, -r * 1.45, r * 0.62, 0, TAU);
+  ctx.ellipse(-r * 0.34, -r * 0.74, r * 0.42, r * 0.24, -0.5, 0, TAU);
   ctx.fill();
-  /* 一条装饰亮线（保留各兵种的识别色） */
-  ctx.strokeStyle = ACC;
-  ctx.globalAlpha *= 0.85;
-  ctx.lineWidth = Math.max(1, r * 0.16);
+  ctx.globalAlpha /= 0.55;
+  /* 眼睛（闭眼：一条短线，读作"倒下了"） */
+  ctx.strokeStyle = corpseDarken('#0c0c0c', dark * 0.4);
+  ctx.lineWidth = Math.max(1, r * 0.13);
+  ctx.lineCap = 'round';
   ctx.beginPath();
-  ctx.moveTo(-r * 0.85, -r * 0.45);
-  ctx.lineTo(r * 0.75, -r * 1.05);
+  ctx.moveTo(-r * 0.46, -r * 0.30); ctx.lineTo(-r * 0.14, -r * 0.24);
+  ctx.moveTo(r * 0.14, -r * 0.24); ctx.lineTo(r * 0.46, -r * 0.30);
   ctx.stroke();
-  ctx.globalAlpha /= 0.85;
+  /* 兵种识别色：一条腰带 */
+  ctx.strokeStyle = ACC;
+  ctx.lineWidth = Math.max(1, r * 0.14);
+  ctx.beginPath();
+  ctx.moveTo(-r * 0.86, -r * 0.10);
+  ctx.lineTo(r * 0.86, -r * 0.10);
+  ctx.stroke();
 }
 function killEnemy(e) {
   /* 🃏 夺舍牌：击杀瞬间先掷一次倒戈判定（每层 2%，满 5 层 10%）。
