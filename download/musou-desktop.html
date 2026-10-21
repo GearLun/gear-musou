@@ -22126,15 +22126,17 @@ ground.width = GW; ground.height = GH;
    由 tools\_island-atlas.js 生成，勿手改。
    grass = Grass.png 左下角 12 块（整块不透明、四边本色 → 拼接无接缝）
    water = Water.png 4 帧
-   cliff = Hills.png 的上/左/右/下/左上角/右上角（下边缘是"草顶 + 泥土崖面"整块） */
+   cliff = Hills.png 的上/左/右/下/左上角/右上角（下边缘是"草顶 + 泥土崖面"整块）
+   dirt = Tilled_Dirt_Wide_v2.png 的 6 块整块不透明的翻土（地图中心那块泥地用） */
 const ISLAND = {
-  ts: 16, w: 128, h: 48,
+  ts: 16, w: 128, h: 64,
   grass: [[0,0],[16,0],[32,0],[48,0],[64,0],[80,0],[96,0],[112,0],[0,16],[16,16],[32,16],[48,16]],
   gdetail: [9,6,9,61,74,24,12,6,3,63,58,16],
   water: [[64,16],[80,16],[96,16],[112,16]],
   cliff: {"n":[0,32],"w":[16,32],"e":[32,32],"s":[48,32],"tl":[64,32],"tr":[80,32]},
+  dirt: [[96,32],[112,32],[0,48],[16,48],[32,48],[48,48]],
   base: '#c0d470',
-  data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAAAwCAYAAADZ9HK+AAADLklEQVR42u2cO04EMQyGc0woaKCloGM5AgUXgAqJarttKBECToD2ANAhCq6waFaKlMnGedqOJ+uRrIXJPDL5vzix52Fet1c7teM1o42gAIioyNPbxexXQn18UwAqBcoVt7WRMQQLCV9yzN/v1d4kiv3zt579FgPQIhB1D2oRLVf81LGs+EuAgB2AHi67FIJWAGIeoAYKXyyWIWCpYx0GAFieBMMzcIgPeoAlQoAFAJXliO+KLg6AJUBBKT4XTKGJWvcoQIL41GFiDBpOjwIJTwUEKgAcIlGEhynPwRkOxoTOgaDUgxgpIvUcFkq3oZj0YU4MS7zF8Kng3HkBtounyAVQDANGomDYnuQYUrpD3QxSkfRuoJoCwGMP2/di23y9zKz1GC37t55bAahowJFMAWDopbX7c9QBFYDPr+sDk3As9QAMHiAkWK1wsWNhg6AAIKUUOQFIHbMkCdPiYv3JIMYxOIeI5CSwNPOE1VtbAChNw6oHEDo5a/EoJR5AAegg5tLCQOy4n3uoiO1rJPXiHqCoBxACANWMPzUcYGbYMPbnrgNJGFgzMaQAIGdCqB5AUAKIYggo9QDc2bne9xKMtAzgSKng3unknH3JhwC9GaRhoAIgGYBpWT2e7FwzzuKX+eV2m7vNGcsjV/Ycth6tTxsZYMlpj1jbpdpMzOKLZxvXmls2/T1ZqBHsdtSPdtl61AJw8EQMILx73VB7xNrObS+3zcQBkPNCZMxiAFD1fgiAmvOnOgOWuSCIBaDm1ShKAGLP5pd4gNjLHinxaz4eAZ1LJAQYLtS6PM5vANhGxPBg/jVQXEvIew0JACUEMQD8uYlfp1D5tA7q/ZRfMBEFQeuFcgIQigJcQdc3pzPzBQ+Vp6IYzK+iLAYAqR4gBIAr6PPt+cx8wUPlWPUveYFWJAC1H3CC5gCUbwi7DeiL+nF/uTd/PVRODTDkBYbzABxhYAgAK6gV1f3ft1B5j/orAArAuABQZf9GACAUxSgAjT0ICwCK8E+jgM4AxCaBEAAceYwhAaCIoyELRQHTemjmH7Jpey4A3I9eHB0ApS41Z38oDPQhgKBw1/fwYJIA+AdBgB3t45L/5AAAAABJRU5ErkJggg=='
+  data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAABACAYAAADS1n9/AAADxklEQVR42u2cPW8UMRCG92dCQQMtBR3hJ4BEjQQVEqJIlwIkGoQIPRJKhSiSLkKCv3BoTzLyOv4ae2Y863tXGl1yvt3z+X38euz9WL5cPTkgTjcWNAIAMFGRd18fbV4t1CcMANAoUK24vY3MIVhMeMoxf9+cHcOi2Ld/zzevZAB6BJLuQT2i1YpfOpYTfw8QqAMwwrKpEPQCkHOAFihCsVSGgL2OdRwAcDkJhzNoiJ90gD1CwAWAVNSI74tuDoA9QCEpvhZMsURt+CzAgvjS08QcNJqOkhJeCghWADREkpgelpxDczqYE7oGAqqDLFZEGjksUD8jkfRxJoYUt5h+Kbg2L+C2eIm1AIlhYLEoGLeTnMKS7lQngyASzgYiAIBOvLm6JMfF9edN9B6jZ//e7wYADQ04UwAAhV7aur9GHVgB+HH99E5YOBYcQMEBYoK1Cpc7FjcIAIBpSVETgNIxKYswPRYbJoMcx9AcIopJIHXliau39gBAXYaFAxhNznocheIAAGCAmHubBnLP+7WHity+i6VePAIUOIARAKQy/tJwwLnCxrG/dh1EpoEtiaEEADUJIRzA0AKQxBBAdQDt1bnR5xIWayuAMy0Fj15OrtlXfAjAySBMAwGAZQDW7eztvYMfi7eFZWG5+8zLiwcql1y573D16L3aaElsNe2Ra7tSm7nt9vv7w8i4I55rXBd+2fr3GrFGcJ+TvrTL1aMVgDtXxCSE9393qj1ybee3l99m5gCouSEyFzkApHp/CoCW7885GWf4IJgFoOXWKEkActfmUxwgd7NHSfyWh0ekvisGwXAAOCzUWZ7mMwBcI3I4WPgbJH5LzL2mBEASghwAYW4S1ilWvr6X6v2STzDxITAJAOWHagIQmwX4gp4/u7+JUPBYeWkWw/lUlN0AYNUBYgD4gn58/nAToeCxcq76U26gNQlA6wOcUjmA5B3CfgOGon57/fgY4fupcmmAUy4wnQNoTANjADhBnaj+/2HEykfUHwAAgHkBkFr9mwGA2CwGAHT2IC4AJKZ/mAUMBiCXBKYA0FjHmBIAiXl0KmKzgPX9VOYfi/XzWgD4D704OQCollqzf2oaGEKQgsJ/f4SDmQJgdAWGN8CpbwAAAAAAACAXf35+2AQA2AkAN5evjsEpvkUIAEBGfAkI4AATO4BVkQGAQg5gtaeX6gMACI1ZcgWr4ufqBQCI4nPkBXCASR2gV4xfn178D0oZcgAmACR7NzVH8AWvFb0lBwEAihYvmSO0rjcAACUH0E764AA4FwAAAAAAKG3/ALa8R2ylwqR7AAAAAElFTkSuQmCC'
 };
 
 /* ---------- 图集加载 ---------- */
@@ -22241,6 +22243,15 @@ function landAt(x, y) {
   return ISLAND_MASK[my * ISLAND_MW + mx] === 1;   // 草 = 可站，水 = 不可站
 }
 /* 出界/下水时往岛心推 px 像素（确定性，不吃随机流） */
+/* 玩家能不能站这儿：整格是陆地 → 能；若是水格，只要"往岛心 18px"那一点是陆地就算能（= 脚踩崖沿） */
+function playerCanStand(x, y) {
+  if (landAt(x, y)) return true;
+  const cx = (IX * IS_T) / 2, cy = (IY * IS_T) / 2;
+  const a = Math.atan2(cy - y, cx - x);
+  return landAt(x + Math.cos(a) * 18, y + Math.sin(a) * 18);
+}
+window.__musouCanStand = (x, y) => playerCanStand(x, y);
+
 function landNudge(o, px) {
   if (!o || landAt(o.x, o.y)) return false;
   const cx = (IX * IS_T) / 2, cy = (IY * IS_T) / 2;
@@ -22299,53 +22310,67 @@ function paintCliff(g) {
     if (!E) { blit(C.e, x, y); continue; }
     if (!N) { blit(C.n, x, y); continue; }
   }
-  /* 崖脚水影：四条边朝水那一侧都压一道深色，水与崖才有前后关系 */
+  /* 崖脚水影：只在**南面崖脚**的泥面上压一道深色（水与崖才有前后关系）。
+     ⚠️ 不要往水面上画半透明矩形（东/西/北那几条以前画在格子外面，水面上会出现难看的透明框）。 */
   g.fillStyle = 'rgba(18,68,60,0.26)';
   for (let y = -3; y < IY + 3; y++) for (let x = -3; x < IX + 3; x++) {
     if (!landVisual(x, y)) continue;
-    const N = landVisual(x, y - 1), E = landVisual(x + 1, y), Sd = landVisual(x, y + 1), W = landVisual(x - 1, y);
-    if (N && E && Sd && W) continue;
-    const px = isWX + x * IS_T, py = isWY + y * IS_T;
-    if (!Sd) g.fillRect(px, py + IS_T - 7, IS_T, 9);
-    if (!N) g.fillRect(px, py - 3, IS_T, 5);
-    if (!W) g.fillRect(px - 3, py, 5, IS_T);
-    if (!E) g.fillRect(px + IS_T - 2, py, 5, IS_T);
+    if (landVisual(x, y + 1)) continue;
+    g.fillRect(isWX + x * IS_T, isWY + y * IS_T + IS_T - 7, IS_T, 8);
   }
-  /* 岸线啃边：8px 方波把水啃进崖脚 / 把浪花打在崖脚上（32px 台阶 → 8px 锯齿） */
-  const Q = 8;
-  for (let x = -3; x < IX + 3; x++) {
-    for (let y = IY + 2; y >= -3; y--) {
-      if (!landVisual(x, y)) continue;
-      if (!landVisual(x, y + 1)) {
-        const px = isWX + x * IS_T, py = isWY + y * IS_T + IS_T;
-        for (let i = 0; i < IS_T; i += Q) {
-          const d = 2 + Math.floor(isHash(x * 17 + i, y, 7301) * 3) * Q * 0.5;   // 2 / 6 / 10 px
-          g.fillStyle = '#9bd4c3';
-          g.fillRect(px + i, py - d, Q, d);
-          g.fillStyle = 'rgba(226,246,240,0.65)';
-          g.fillRect(px + i, py - d - 2, Q, 2);
-        }
-      }
-      break;
+}
+
+/* ④ 中央泥地（Tilled_Dirt_Wide_v2）：盖在草地上，和影分身幕布一样大（1664×936），
+      边缘用超椭圆 + 噪声羽化 + 外圈零星碎块，避免出现"一个方块"的硬边 */
+function paintCenterDirt(g) {
+  if (!ISLAND.dirt || !ISLAND.dirt.length) return;
+  const S = ISLAND.ts, n = ISLAND.dirt.length;
+  const cx = W / 2, cy = H / 2;
+  const hw = (VW * 1.3) / 2, hh = (VH * 1.3) / 2;      // 与 CLONE_ZONE_MUL 的中央幕布同尺寸
+  /* 先在**离屏画布**上铺满泥土，再用 8px 精度的遮罩擦出边缘 → 边缘是 8px 锯齿，而不是 32px 大方块 */
+  const PAD = 96, Q = 8;
+  const cw = Math.ceil(hw * 2) + PAD * 2, ch = Math.ceil(hh * 2) + PAD * 2;
+  const cv = document.createElement('canvas');
+  cv.width = cw; cv.height = ch;
+  const d2 = cv.getContext('2d');
+  d2.imageSmoothingEnabled = false;
+  for (let y = 0; y < ch; y += IS_T) for (let x = 0; x < cw; x += IS_T) {
+    const tx = Math.floor(x / IS_T), ty = Math.floor(y / IS_T);
+    const pick = ISLAND.dirt[Math.floor(isHash(tx, ty, 4477) * n) % n];
+    const f = Math.floor(isHash(tx, ty, 4479) * 4) & 3;
+    const fx = f & 1, fy = (f >> 1) & 1;
+    if (!fx && !fy) d2.drawImage(isImg, pick[0], pick[1], S, S, x, y, IS_T, IS_T);
+    else {
+      d2.save();
+      d2.translate(x + (fx ? IS_T : 0), y + (fy ? IS_T : 0));
+      d2.scale(fx ? -1 : 1, fy ? -1 : 1);
+      d2.drawImage(isImg, pick[0], pick[1], S, S, 0, 0, IS_T, IS_T);
+      d2.restore();
     }
   }
-  /* 东/西两侧也来一点（竖向碎边） */
-  for (let y = -3; y < IY + 3; y++) {
-    for (let x = IX + 2; x >= -3; x--) {
-      if (!landVisual(x, y)) continue;
-      if (!landVisual(x + 1, y)) {
-        const px = isWX + x * IS_T + IS_T, py = isWY + y * IS_T;
-        for (let i = 0; i < IS_T; i += Q) {
-          const d = 2 + Math.floor(isHash(x, y * 19 + i, 7302) * 3) * Q * 0.5;
-          g.fillStyle = '#9bd4c3';
-          g.fillRect(px - d, py + i, d, Q);
-          g.fillStyle = 'rgba(226,246,240,0.65)';
-          g.fillRect(px - d + 0, py + i, 2, Q);
-        }
-      }
-      break;
+  /* 逐列 1px 精度遮罩：超椭圆 + 两拍噪声 → 边缘是"手绘"级别的细碎轮廓，不是 8px/32px 台阶 */
+  d2.globalCompositeOperation = 'destination-out';
+  for (let x = 0; x < cw; x++) {
+    const wx = cx - cw / 2 + x;
+    const dx = Math.abs(wx - cx) / hw;
+    let yTop = -1, yBot = -1;
+    for (let y = 0; y < ch; y++) {
+      const wy = cy - ch / 2 + y;
+      const dy = Math.abs(wy - cy) / hh;
+      let d = Math.pow(Math.pow(dx, 6) + Math.pow(dy, 6), 1 / 6);
+      /* 两拍噪声：粗拍决定大轮廓、细拍打碎边缘；都用像素坐标 → 1px 级起伏 */
+      d += (isNoise(x / 34 + 3.1, y / 34 + 7.7, 3.2) - 0.5) * 0.075
+        + (isNoise(x / 9.5 + 11.3, y / 9.5 + 2.9, 1.6) - 0.5) * 0.030;
+      if (d <= 1) { if (yTop < 0) yTop = y; yBot = y; }
     }
+    if (yTop < 0) { d2.clearRect(x, 0, 1, ch); continue; }
+    if (yTop > 0) d2.clearRect(x, 0, 1, yTop);
+    if (yBot < ch - 1) d2.clearRect(x, yBot + 1, 1, ch - yBot - 1);
   }
+  d2.globalAlpha = 1;
+  d2.globalCompositeOperation = 'source-over';
+  g.drawImage(cv, isWX + cx - cw / 2, isWY + cy - ch / 2);
+  cv.width = cv.height = 1;      // 早点释放显存
 }
 
 /* 诊断/测试钩子 */
@@ -22383,6 +22408,7 @@ function buildGround() {
     if (isOK) {
       paintWater(g);           // ① 河（最底层）
       paintIslandGrass(g);     // ② 岛（盖在河上）
+      try { paintCenterDirt(g); } catch (e) { isDirtErr = String(e && e.message); }   // ②b 中央泥地（盖在草地上，边缘羽化）
       try { paintCliff(g); } catch (e) { isCliffErr = String(e && e.message); }   // ③ 悬崖（叠在岛的边缘，切口透出水）
     }
     /* RNG_PARITY_20940：旧地形（渐变 + 3400 根草线 + 90 块暗斑）消耗 20940 次全局随机，
@@ -27145,9 +27171,9 @@ function updateGame(dt, rawDt) {
   p.x = Math.max(-_ex + _pad, Math.min(W + _ex - _pad, p.x));
   p.y = Math.max(-_ex + _pad, Math.min(H + _ex - _pad, p.y));
   /* 空气墙 = 水：撞到水就沿一边滑，绝不被"推走" */
-  if (!landAt(p.x, p.y)) {
-    if (landAt(p.x, _py0)) p.y = _py0;
-    else if (landAt(_px0, p.y)) p.x = _px0;
+  if (!playerCanStand(p.x, p.y)) {
+    if (playerCanStand(p.x, _py0)) p.y = _py0;
+    else if (playerCanStand(_px0, p.y)) p.x = _px0;
     else { p.x = _px0; p.y = _py0; }
   }
   p.vx *= Math.exp(-VEL_DRAG * dt); p.vy *= Math.exp(-VEL_DRAG * dt);
