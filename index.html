@@ -22494,8 +22494,8 @@ function paintMapEd(g) {
       if (sp) {
         const im = mapSheetImgs && mapSheetImgs[sp[0]];
         if (im && im.width) {
-          g.fillStyle = '#000000';
-          g.fillRect(dx, dy, IS_T, IS_T);   // 先铺黑底 → 一定覆盖掉原来的地表
+          g.fillStyle = (sp[5] || '#000000');
+          g.fillRect(dx, dy, IS_T, IS_T);   // 底色 = 替换掉原来的地图
           const k = IS_T / Math.max(sp[3], sp[4]);
           const w = Math.max(1, Math.round(sp[3] * k)), h = Math.max(1, Math.round(sp[4] * k));
           g.drawImage(im, sp[1], sp[2], sp[3], sp[4], dx + Math.round((IS_T - w) / 2), dy + Math.round((IS_T - h) / 2), w, h);
