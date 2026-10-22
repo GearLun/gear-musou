@@ -22327,7 +22327,7 @@ function paintIslandGrass(g) {
 let isCliffN = 0, isCliffErr = '';
 /* ===== 🗺️ 地图编辑器覆盖层 ===== */
 let MAP_ED_CELLS = null, MAP_ED_W = 0, MAP_ED_H = 0;
-let MAP_ED_OBJS = null, MAP_ED_CLONE = null, MAP_ED_MATWALL = null;
+let MAP_ED_OBJS = null, MAP_ED_CLONE = null, MAP_ED_MATWALL = null, MAP_ED_SPRITES = null;
 let MAP_MATCODE = null;                     // 每个 32px 格子是什么素材（供空气墙判定）
 let mapSheetImgs = null, mapSheetReady = 0;
 function mapEdDecode() {
@@ -22346,6 +22346,7 @@ function mapEdDecode() {
       MAP_ED_CELLS = cells; MAP_ED_W = w; MAP_ED_H = h;
     }
     if (Array.isArray(MAP_ED.objs)) MAP_ED_OBJS = MAP_ED.objs;
+    if (Array.isArray(MAP_ED.sprites)) MAP_ED_SPRITES = MAP_ED.sprites;
     if (Array.isArray(MAP_ED.clone)) MAP_ED_CLONE = MAP_ED.clone;
     if (MAP_ED.matWall) MAP_ED_MATWALL = MAP_ED.matWall;
     return true;
@@ -22457,7 +22458,7 @@ function paintMapEd(g) {
   if (!mapEdDecode()) return;
   const S = ISLAND.ts, W2 = MAP_ED_W, H2 = MAP_ED_H, cells = MAP_ED_CELLS;
   const C = ISLAND.cliff;
-  const CLIFF_BY_CODE = { 10: C.n, 11: C.w, 12: C.e, 13: C.s, 14: C.tl, 15: C.tr };
+  const CLIFF_BY_CODE = { 10: C.n, 11: C.w, 12: C.e, 13: C.s, 14: C.tl, 15: C.tr, 16: C.bl, 17: C.br };
   g.imageSmoothingEnabled = false;
   if (cells) for (let cy = 0; cy < H2; cy++) for (let cx = 0; cx < W2; cx++) {
     const code = cells[cy * W2 + cx];
@@ -22479,6 +22480,16 @@ function paintMapEd(g) {
         const fr = DECOR.flower[Math.floor(isHash(cx, cy, 9109) * DECOR.flower.length) % DECOR.flower.length];
         g.drawImage(decorImg, fr[0], fr[1], fr[2], fr[3],
           dx + Math.round((IS_T - fr[2] * 2) / 2), dy + Math.round((IS_T - fr[3] * 2) / 2), fr[2] * 2, fr[3] * 2);
+      }
+    } else if (code >= 200 && MAP_ED_SPRITES) {
+      const sp = MAP_ED_SPRITES[code - 200];
+      if (sp) {
+        const im = mapSheetImgs && mapSheetImgs[sp[0]];
+        if (im && im.width) {
+          const k = IS_T / Math.max(sp[3], sp[4]);
+          const w = Math.max(1, Math.round(sp[3] * k)), h = Math.max(1, Math.round(sp[4] * k));
+          g.drawImage(im, sp[1], sp[2], sp[3], sp[4], dx + Math.round((IS_T - w) / 2), dy + Math.round((IS_T - h) / 2), w, h);
+        }
       }
     } else if (CLIFF_BY_CODE[code]) {
       const q = CLIFF_BY_CODE[code];
