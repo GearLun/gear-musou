@@ -22352,11 +22352,15 @@ function mapEdDecode() {
   } catch (e) { window.__mapEdErr = String(e && e.message); return false; }
 }
 function mapSheetsLoad() {
-  if (mapSheetImgs || typeof SHEETS === 'undefined' || !MAP_ED_OBJS || !MAP_ED_OBJS.length) return;
+  if (mapSheetImgs || typeof SHEETS === 'undefined') return;
+  const hasObj = MAP_ED_OBJS && MAP_ED_OBJS.length;
+  const hasSp = (typeof MAP_ED !== 'undefined' && MAP_ED && Array.isArray(MAP_ED.sprites) && MAP_ED.sprites.length);
+  if (!hasObj && !hasSp) return;
   if (typeof Image === 'undefined') return;
   mapSheetImgs = {};
   const need = {};
-  for (const o of MAP_ED_OBJS) need[o[0]] = 1;
+  if (hasObj) for (const o of MAP_ED_OBJS) need[o[0]] = 1;
+  if (hasSp) for (const sp of MAP_ED.sprites) need[sp[0]] = 1;
   let left = 0;
   for (const k in need) {
     if (!SHEETS[k]) continue;
@@ -22459,6 +22463,7 @@ function paintMapEd(g) {
   const C = ISLAND.cliff;
   const CLIFF_BY_CODE = { 10: C.n, 11: C.w, 12: C.e, 13: C.s, 14: C.tl, 15: C.tr, 16: C.bl, 17: C.br };
   g.imageSmoothingEnabled = false;
+  if (!mapSheetImgs) mapSheetsLoad();   // 素材格（200+）/ 物件都要图集，先把加载开起来
   if (cells) for (let cy = 0; cy < H2; cy++) for (let cx = 0; cx < W2; cx++) {
     const code = cells[cy * W2 + cx];
     if (!code) continue;
@@ -22480,11 +22485,16 @@ function paintMapEd(g) {
         g.drawImage(decorImg, fr[0], fr[1], fr[2], fr[3],
           dx + Math.round((IS_T - fr[2] * 2) / 2), dy + Math.round((IS_T - fr[3] * 2) / 2), fr[2] * 2, fr[3] * 2);
       }
+    } else if (code === 250) {
+      g.fillStyle = '#000000';
+      g.fillRect(dx, dy, IS_T, IS_T);   // 纯黑空白格（用户自己铺）
     } else if (code >= 200 && MAP_ED_SPRITES) {
       const sp = MAP_ED_SPRITES[code - 200];
       if (sp) {
         const im = mapSheetImgs && mapSheetImgs[sp[0]];
         if (im && im.width) {
+          g.fillStyle = '#000000';
+          g.fillRect(dx, dy, IS_T, IS_T);   // 先铺黑底 → 一定覆盖掉原来的地表
           const k = IS_T / Math.max(sp[3], sp[4]);
           const w = Math.max(1, Math.round(sp[3] * k)), h = Math.max(1, Math.round(sp[4] * k));
           g.drawImage(im, sp[1], sp[2], sp[3], sp[4], dx + Math.round((IS_T - w) / 2), dy + Math.round((IS_T - h) / 2), w, h);
