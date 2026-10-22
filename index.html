@@ -22135,10 +22135,12 @@ const ISLAND = {
   gdetail: [9,6,9,61,74,24,12,6,3,63,58,16],
   water: [[64,16],[80,16],[96,16],[112,16]],
   cliff: {"n":[0,32],"w":[16,32],"e":[32,32],"s":[48,32],"tl":[64,32],"tr":[80,32]},
-  dirt: [[96,32],[112,32],[0,48],[16,48],[32,48],[48,48],[64,48]],
+  dirt: [[96,32],[112,32],[0,48],[16,48],[32,48],[48,48]],
   base: '#c0d470',
-  data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAABACAYAAADS1n9/AAADzUlEQVR42u2cvW4VMRCF9zGhoIGWIh3hEUCiRoIqEqJIlwIkGoQIPVKUClEkXYQEr3DRRnLk9fW/Z8Zj71lpFLi+u9fr8/l47P1Zvl2fHBD7jQWNAABUVOTD92ebvxrq4wYAqBQoV9zWRqYQzCd8yTH/3J7eh0ax7/6db/4WA9AiEHcPahEtV/zUsYz4I0AgDkAPyy6FoBWAmAPUQOGKJTIEjDrWUQBA5SQUziAhftABRoSACgCuyBHfFl0dACNAwSm+FEy+RK37LECD+NzTxBg0ko4SEp4LCFIAJETimB6mnENyOhgTOgeCUgdZtIjUc1go/Q5H0keZGJa4xfRLwbl5AbXFc6wFcAwDi0bBqJ1kD0u6U10Mgki4GogAADLx/vqyOC5uvm6i9Rgt+7f+NgCoaMCZAgAI9NLa/SXqQArA1c2Lo9BwLDiAgAP4BKsVLnYsahAAANGSoiQAqWOWLMK0WKybDFIcQ3KISCaBpStPVL21BYDSZVg4gNLkrMVRShwAAHQQc7RpIPW8X3qoiO27aOrFPUCBAygBgCvjTw0HlCtsFPtL14FlGliTGHIAkJMQwgEULQBxDAGlDiC9Otf7WsKibQVwpqXg3svJOfuyDwG4GIRpIADQDMC6nZ49OtixWJtb5pab77y5eCJyy5X5DVOP1ruNlsCW0x6xtku1mdnufn489Iwj8UzjmrDL1n+v4WsE8z3uW7tMPWoBOLojJiC8fd6h9oi1nd1edpupAyDngchYxADg6v0hAGp+P+ZklGGDoBaAmkejOAGI3Ztf4gCxhz1S4te8PCL0Wz4IugNAYaHG8iTfAWAakcLB3HPgOBefe00JACcEMQDc3MStk698/SzU+znfYGJDoBKAkhOVBMA3C7AFPX/5eBOu4L7y1CyG8q0owwCg1QF8ANiCfn71dBOu4L5yqvqXPECrEoDaFziFcgDOJ4TtBnRF/fHu+X24n4fKuQEOucB0DiAxDfQBYAQ1otr/d8NX3qP+AAAAzAsA1+rfDAD4ZjEAoLEHUQHAMf3DLKAzALEkMASAxDrGlABwzKND4ZsFrJ+HMn9frN+XAsB+6cXuACi11Jz9Q9NAF4IQFPbnPRxMFQC9KzB6LKNvEBEAQEgAwBd/f33axIgi316+fYjdABA64RbxR4TAFt/XJlMCEDthOAAcICk2coAd5gBae3ptfXI7wK4ASDWKVvFL61UyBO4GAMq8AA4wqQO0ivH7y+uHKClDDkAEAGfvLrVjW/Bc0XvkINMAIGHxnOL0Wm+AAygc7+EAuBYAAAAAAMjZ/gPfN6ET6GSJaAAAAABJRU5ErkJggg=='
+  data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAABACAYAAADS1n9/AAADxklEQVR42u2cPW8UMRCG92dCQQMtBR3hJ4BEjQQVEqJIlwIkGoQIPRJKhSiSLkKCv3BoTzLyOv4ae2Y863tXGl1yvt3z+X38euz9WL5cPTkgTjcWNAIAMFGRd18fbV4t1CcMANAoUK24vY3MIVhMeMoxf9+cHcOi2Ld/zzevZAB6BJLuQT2i1YpfOpYTfw8QqAMwwrKpEPQCkHOAFihCsVSGgL2OdRwAcDkJhzNoiJ90gD1CwAWAVNSI74tuDoA9QCEpvhZMsURt+CzAgvjS08QcNJqOkhJeCghWADREkpgelpxDczqYE7oGAqqDLFZEGjksUD8jkfRxJoYUt5h+Kbg2L+C2eIm1AIlhYLEoGLeTnMKS7lQngyASzgYiAIBOvLm6JMfF9edN9B6jZ//e7wYADQ04UwAAhV7aur9GHVgB+HH99E5YOBYcQMEBYoK1Cpc7FjcIAIBpSVETgNIxKYswPRYbJoMcx9AcIopJIHXliau39gBAXYaFAxhNznocheIAAGCAmHubBnLP+7WHity+i6VePAIUOIARAKQy/tJwwLnCxrG/dh1EpoEtiaEEADUJIRzA0AKQxBBAdQDt1bnR5xIWayuAMy0Fj15OrtlXfAjAySBMAwGAZQDW7eztvYMfi7eFZWG5+8zLiwcql1y573D16L3aaElsNe2Ra7tSm7nt9vv7w8i4I55rXBd+2fr3GrFGcJ+TvrTL1aMVgDtXxCSE9393qj1ybee3l99m5gCouSEyFzkApHp/CoCW7885GWf4IJgFoOXWKEkActfmUxwgd7NHSfyWh0ekvisGwXAAOCzUWZ7mMwBcI3I4WPgbJH5LzL2mBEASghwAYW4S1ilWvr6X6v2STzDxITAJAOWHagIQmwX4gp4/u7+JUPBYeWkWw/lUlN0AYNUBYgD4gn58/nAToeCxcq76U26gNQlA6wOcUjmA5B3CfgOGon57/fgY4fupcmmAUy4wnQNoTANjADhBnaj+/2HEykfUHwAAgHkBkFr9mwGA2CwGAHT2IC4AJKZ/mAUMBiCXBKYA0FjHmBIAiXl0KmKzgPX9VOYfi/XzWgD4D704OQCollqzf2oaGEKQgsJ/f4SDmQJgdAWGN8CpbwAAAAAAACAXf35+2AQA2AkAN5evjsEpvkUIAEBGfAkI4AATO4BVkQGAQg5gtaeX6gMACI1ZcgWr4ufqBQCI4nPkBXCASR2gV4xfn178D0oZcgAmACR7NzVH8AWvFb0lBwEAihYvmSO0rjcAACUH0E764AA4FwAAAAAAKG3/ALa8R2ylwqR7AAAAAElFTkSuQmCC'
 };
+
+const MAP_ED = null;   /* 地图编辑器覆盖层：tools\_map-ed-apply.js 注入 */
 
 /* ===== 🌼 草地点缀（Assets - From : Sprout Lands - By : Cup Nooble）=====
    由 tools\_decor-atlas.js 生成，勿手改。
@@ -22317,6 +22319,65 @@ function paintIslandGrass(g) {
       下边界一律用"草顶 + 泥土崖面"整块 → 岛的南面是一道真正的悬崖立面
       再在崖脚压一道水影，崖边才有"立起来"的感觉 */
 let isCliffN = 0, isCliffErr = '';
+/* ===== 🗺️ 地图编辑器覆盖层 ===== */
+let MAP_ED_CELLS = null, MAP_ED_W = 0, MAP_ED_H = 0;
+function mapEdDecode() {
+  if (MAP_ED_CELLS) return true;
+  if (typeof MAP_ED === 'undefined' || !MAP_ED || !MAP_ED.rle) return false;
+  try {
+    const bin = atob(MAP_ED.rle);
+    const w = MAP_ED.w | 0, h = MAP_ED.h | 0;
+    const cells = new Uint8Array(w * h);
+    let i = 0, k = 0;
+    while (i < bin.length && k < cells.length) {
+      const code = bin.charCodeAt(i++);
+      const cnt = bin.charCodeAt(i++);
+      for (let j = 0; j < cnt && k < cells.length; j++) cells[k++] = code;
+    }
+    MAP_ED_CELLS = cells; MAP_ED_W = w; MAP_ED_H = h;
+    return true;
+  } catch (e) { return false; }
+}
+window.__mapEdProbe = () => {
+  const ok = mapEdDecode();
+  let nz = -1;
+  if (MAP_ED_CELLS) { nz = 0; for (let i = 0; i < MAP_ED_CELLS.length; i++) if (MAP_ED_CELLS[i]) nz++; }
+  return { ok: ok, n: MAP_ED_CELLS ? MAP_ED_CELLS.length : 0, nz: nz, err: String(window.__mapEdErr || '') };
+};
+function paintMapEd(g) {
+  if (!mapEdDecode()) return;
+  const S = ISLAND.ts, W2 = MAP_ED_W, H2 = MAP_ED_H, cells = MAP_ED_CELLS;
+  const C = ISLAND.cliff;
+  const CLIFF_BY_CODE = { 10: C.n, 11: C.w, 12: C.e, 13: C.s, 14: C.tl, 15: C.tr };
+  g.imageSmoothingEnabled = false;
+  for (let cy = 0; cy < H2; cy++) for (let cx = 0; cx < W2; cx++) {
+    const code = cells[cy * W2 + cx];
+    if (!code) continue;
+    const dx = cx * IS_T, dy = cy * IS_T;
+    if (code === 1) {                                   // 草
+      const bag = ISLAND.grass, c = bag[Math.floor(isHash(cx, cy, 9101) * bag.length) % bag.length];
+      g.drawImage(isImg, c[0], c[1], S, S, dx, dy, IS_T, IS_T);
+    } else if (code === 2) {                            // 泥
+      const bag = ISLAND.dirt, c = bag[Math.floor(isHash(cx, cy, 9103) * bag.length) % bag.length];
+      g.drawImage(isImg, c[0], c[1], S, S, dx, dy, IS_T, IS_T);
+    } else if (code === 3) {                            // 水
+      const bag = ISLAND.water, c = bag[Math.floor(isHash(cx, cy, 9105) * bag.length) % bag.length];
+      g.drawImage(isImg, c[0], c[1], S, S, dx, dy, IS_T, IS_T);
+    } else if (code === 4) {                            // 花（草底 + 花）
+      const bag = ISLAND.grass, c = bag[Math.floor(isHash(cx, cy, 9107) * bag.length) % bag.length];
+      g.drawImage(isImg, c[0], c[1], S, S, dx, dy, IS_T, IS_T);
+      if (isDecor && decorImg && typeof DECOR !== 'undefined' && DECOR.flower && DECOR.flower.length) {
+        const fr = DECOR.flower[Math.floor(isHash(cx, cy, 9109) * DECOR.flower.length) % DECOR.flower.length];
+        g.drawImage(decorImg, fr[0], fr[1], fr[2], fr[3],
+          dx + Math.round((IS_T - fr[2] * 2) / 2), dy + Math.round((IS_T - fr[3] * 2) / 2), fr[2] * 2, fr[3] * 2);
+      }
+    } else if (CLIFF_BY_CODE[code]) {                   // 悬崖块
+      const q = CLIFF_BY_CODE[code];
+      g.drawImage(isImg, q[0], q[1], S, S, dx, dy, IS_T, IS_T);
+    }
+  }
+}
+
 function paintCliff(g) {
   isCliffN = 0;
   g.imageSmoothingEnabled = false;
@@ -22375,39 +22436,20 @@ function paintCenterDirt(g) {
       d2.restore();
     }
   }
-  /* 逐列 1px 精度遮罩：超椭圆 + 低频噪声，再对上下边界做**滑动平均**。
-     ⚠️ 不做平滑的话噪声会让轮廓长出 1~2 格宽的"泥土尖刺"，尖刺与主体之间夹一条草
-        → 看起来就是沙地上有一条**绿色竖线**（用户报过两次）。 */
+  /* 8px 遮罩：超椭圆 + 两拍噪声（上上个版本的原样写法） */
   d2.globalCompositeOperation = 'destination-out';
-  const yTopA = new Int32Array(cw), yBotA = new Int32Array(cw);
-  for (let x = 0; x < cw; x++) {
-    const wx = cx - cw / 2 + x;
-    const dx = Math.abs(wx - cx) / hw;
-    let yTop = -1, yBot = -1;
-    for (let y = 0; y < ch; y++) {
-      const wy = cy - ch / 2 + y;
-      const dy = Math.abs(wy - cy) / hh;
-      let d = Math.pow(Math.pow(dx, 6) + Math.pow(dy, 6), 1 / 6);
-      /* ⚠️ 不加任何噪声：噪声会让轮廓长出尖刺/豁口，尖刺与主体之间夹一条草，
-         看起来就是沙地上有一条绿色竖线（用户报过两次）。现在是干净的超椭圆边界。 */
-      if (d <= 1) { if (yTop < 0) yTop = y; yBot = y; }
+  for (let y = 0; y < ch; y += Q) for (let x = 0; x < cw; x += Q) {
+    const wx = cx - cw / 2 + x, wy = cy - ch / 2 + y;
+    const dx = Math.abs(wx - cx) / hw, dy = Math.abs(wy - cy) / hh;
+    let d = Math.pow(Math.pow(dx, 6) + Math.pow(dy, 6), 1 / 6);
+    d += (isNoise(x / 40, y / 40, 6) - 0.5) * 0.09 + (isNoise(x / 16 + 13, y / 16 + 5, 2.6) - 0.5) * 0.045;
+    let cut = (d - 0.975) / 0.035;
+    if (cut > 0) {
+      if (cut > 1) cut = 1;
+      if (isHash(x, y, 4491) > 0.55) cut = Math.min(1, cut + 0.35);
+      d2.globalAlpha = cut;
+      d2.fillRect(x, y, Q, Q);
     }
-    yTopA[x] = yTop; yBotA[x] = yBot;
-  }
-  /* 滑动平均（窗口 31 列）→ 边界干净、只剩缓和的起伏 */
-  const WIN = 15;
-  for (let x = 0; x < cw; x++) {
-    if (yTopA[x] < 0) continue;
-    let st = 0, sb = 0, n = 0;
-    for (let k = -WIN; k <= WIN; k++) {
-      const i = x + k;
-      if (i < 0 || i >= cw || yTopA[i] < 0) continue;
-      st += yTopA[i]; sb += yBotA[i]; n++;
-    }
-    if (!n) continue;
-    const t = Math.round(st / n), b = Math.round(sb / n);
-    if (t > 0) d2.clearRect(x, 0, 1, t);
-    if (b < ch - 1) d2.clearRect(x, b + 1, 1, ch - b - 1);
   }
   d2.globalAlpha = 1;
   d2.globalCompositeOperation = 'source-over';
@@ -22419,7 +22461,7 @@ function paintCenterDirt(g) {
       全部用 isHash 定位置 → 每次生成一样，不吃全局随机流 */
 const DECOR_SCALE = 2;   // 世界里的图块是 16px 素材 ×2，花也 ×2 才不显小
 function paintDecor(g) {
-  if (!isDecor || !decorImg || typeof DECOR === 'undefined' || !DECOR) return;
+  return;   // ⛔ 用户要求回退：花 / 荷叶 整段停用（回到"只有中央泥地"的版本）
   g.imageSmoothingEnabled = false;
   const F = DECOR.flower || [], L = DECOR.lily || [];
   /* —— 花：50 朵 —— */
@@ -22497,6 +22539,7 @@ window.__musouSproutInfo = () => ({
   grass: ISLAND.grass.length, water: ISLAND.water.length,
   cliffN: isCliffN, cliffErr: isCliffErr
 });
+window.__musouGroundShot = () => ground.toDataURL('image/png');   // 整张地表（地图编辑器底图 / 截图）
 window.__musouGroundPixel = (x, y) => { const d = ground.getContext('2d').getImageData(x, y, 1, 1).data; return [d[0], d[1], d[2], d[3]]; };
 window.__musouSproutRebuild = () => {
   const t0 = (typeof performance !== 'undefined' ? performance.now() : Date.now());
@@ -22521,6 +22564,7 @@ function buildGround() {
       try { paintCenterDirt(g); } catch (e) { isDirtErr = String(e && e.message); }   // ②b 中央泥地（盖在草地上，边缘羽化）
       try { paintDecor(g); } catch (e) { isDecorErr = String(e && e.message); }   // ②c 花草点缀（草地花 + 河里荷叶）
       try { paintCliff(g); } catch (e) { isCliffErr = String(e && e.message); }   // ③ 悬崖（叠在岛的边缘，切口透出水）
+      try { paintMapEd(g); } catch (e) { window.__mapEdErr = String(e && e.message); }   // ④ 地图编辑器覆盖层（用户手改的格子）
     }
     /* RNG_PARITY_20940：旧地形（渐变 + 3400 根草线 + 90 块暗斑）消耗 20940 次全局随机，
        这里补平这个数量，保证依赖种子的测试不漂移 */
