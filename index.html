@@ -22322,10 +22322,12 @@ function blockedBy(x, y) {
     const o = MAP_ED_OBJS[i];
     if (!o[10]) continue;
     const w = o[3] * o[7], h = o[4] * o[7];
+    /* 物件坐标是画布坐标 → 换成世界坐标（减 RING），否则阻挡区会整体错位 192px */
+    const ox = o[5] - RING, oy = o[6] - RING;
     /* 黄框只封**下方两格（64px）**：树干/底座那一段，树冠不挡 */
     const bh = Math.min(64, h);
-    const by = o[6] + h - bh;
-    if (x >= o[5] && x <= o[5] + w && y >= by && y <= o[6] + h) return i;
+    const by = oy + h - bh;
+    if (x >= ox && x <= ox + w && y >= by && y <= oy + h) return i;
   }
   return -1;
 }
@@ -22370,6 +22372,18 @@ function drawMapTopObjs() {
   }
   ctx.imageSmoothingEnabled = _sm;
 }
+window.__blockedAt = (x, y) => (typeof blockedBy === 'function' ? blockedBy(x, y) : -2);
+window.__mapObjRects = () => {
+  const out = [];
+  const list = MAP_ED_OBJS || [];
+  for (const o of list) {
+    if (!o[10]) continue;
+    const w = o[3] * o[7], h = o[4] * o[7];
+    const bh = Math.min(64, h);
+    out.push({ x: o[5] - RING, y: o[6] - RING, w: w, h: h, by: (o[6] - RING) + h - bh, bh: bh, blk: 1 });
+  }
+  return out;
+};
 window.__mapBlkProbe = () => {
   const out = [];
   const list = MAP_ED_OBJS || [];
