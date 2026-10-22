@@ -22485,6 +22485,11 @@ function paintMapEd(g) {
         g.drawImage(decorImg, fr[0], fr[1], fr[2], fr[3],
           dx + Math.round((IS_T - fr[2] * 2) / 2), dy + Math.round((IS_T - fr[3] * 2) / 2), fr[2] * 2, fr[3] * 2);
       }
+    } else if (code === 251) {
+      /* 透明：把已经画好的基础地图挖掉（真正删除，不留底色） */
+      g.save(); g.globalCompositeOperation = 'destination-out';
+      g.fillStyle = '#000'; g.fillRect(dx, dy, IS_T, IS_T);
+      g.restore();
     } else if (code === 250) {
       g.fillStyle = '#000000';
       g.fillRect(dx, dy, IS_T, IS_T);   // 纯黑空白格（用户自己铺）
