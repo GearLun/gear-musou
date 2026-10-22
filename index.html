@@ -22280,6 +22280,8 @@ function landAt(x, y) {
 /* 出界/下水时往岛心推 px 像素（确定性，不吃随机流） */
 /* 玩家能不能站这儿：整格是陆地 → 能；若是水格，只要"往岛心 18px"那一点是陆地就算能（= 脚踩崖沿） */
 function playerCanStand(x, y) {
+  /* 如果当前就站在黄墙里（出生点/被击退进去），一律允许移动，避免被永久卡死 */
+  if (typeof p !== 'undefined' && p && !playerMapWalk(p.x, p.y)) return true;
   /* 先问"玩家专用"判定（含物件黄墙、闪避可穿），再退回半格崖沿 */
   if (typeof playerMapWalk === 'function') {
     if (playerMapWalk(x, y)) return true;
