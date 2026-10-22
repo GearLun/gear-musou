@@ -22279,6 +22279,13 @@ function landAt(x, y) {
 /* 出界/下水时往岛心推 px 像素（确定性，不吃随机流） */
 /* 玩家能不能站这儿：整格是陆地 → 能；若是水格，只要"往岛心 18px"那一点是陆地就算能（= 脚踩崖沿） */
 function playerCanStand(x, y) {
+  /* 先问"玩家专用"判定（含物件黄墙、闪避可穿），再退回半格崖沿 */
+  if (typeof playerMapWalk === 'function') {
+    if (playerMapWalk(x, y)) return true;
+    const cx0 = (IX * IS_T) / 2, cy0 = (IY * IS_T) / 2;
+    const a0 = Math.atan2(cy0 - y, cx0 - x);
+    return playerMapWalk(x + Math.cos(a0) * 18, y + Math.sin(a0) * 18);
+  }
   if (landAt(x, y)) return true;
   const cx = (IX * IS_T) / 2, cy = (IY * IS_T) / 2;
   const a = Math.atan2(cy - y, cx - x);
@@ -22436,13 +22443,33 @@ function drawMapTopObjs() {
     const im = mapSheetImgs[o[0]];
     if (!im || !im.width) continue;
     const w = o[3] * o[7], h = o[4] * o[7];
+    const _sm0 = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = false;      // 像素图放大不发虚
     ctx.save();
     ctx.translate(o[5] - camX + (o[8] ? w : 0), o[6] - camY + (o[9] ? h : 0));
     ctx.scale(o[8] ? -1 : 1, o[9] ? -1 : 1);
     ctx.drawImage(im, o[1], o[2], o[3], o[4], 0, 0, w, h);
     ctx.restore();
+    ctx.imageSmoothingEnabled = _sm0;
   }
 }
+window.__mapBlkProbe = () => {
+  const out = [];
+  const list = MAP_ED_OBJS || [];
+  for (const o of list) {
+    if (!o[10]) continue;
+    const cx = o[5] + o[3] * o[7] / 2, cy = o[6] + o[4] * o[7] / 2;
+    out.push({
+      cx: Math.round(cx), cy: Math.round(cy),
+      enemy: landAt(cx, cy),
+      player: (typeof playerCanStand === 'function') ? playerCanStand(cx, cy) : null
+    });
+    if (out.length >= 3) break;
+  }
+  let nBlk = 0;
+  for (const q of list) if (q[10]) nBlk++;
+  return { blk: nBlk, samples: out };
+};
 window.__mapWalkDbg = (x, y) => {  const tx = Math.floor(x / IS_T) + RING / IS_T, ty = Math.floor(y / IS_T) + RING / IS_T;
   const inRange = MAP_MATCODE && tx >= 0 && ty >= 0 && tx < ISLAND_TW && ty < ISLAND_TH;
   const code = inRange ? MAP_MATCODE[ty * ISLAND_TW + tx] : -1;
