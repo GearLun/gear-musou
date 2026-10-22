@@ -22703,7 +22703,10 @@ function buildGround() {
     g.fillRect(0, 0, GW, GH);
     if (!isOK) { islandLoad(); }
     if (!isDecor) { decorLoad(); }
-    if (isOK) {
+    /* 🗑 地图编辑器把"基础地图"关掉时（emptyBase）：整张铺黑，只画用户摆的内容 */
+    const _emptyBase = (typeof MAP_ED !== 'undefined' && MAP_ED && MAP_ED.emptyBase);
+    if (_emptyBase) { g.fillStyle = '#000'; g.fillRect(0, 0, GW, GH); }
+    if (isOK && !_emptyBase) {
       paintWater(g);           // ① 河（最底层）
       paintIslandGrass(g);     // ② 岛（盖在河上）
       try { paintCenterDirt(g); } catch (e) { isDirtErr = String(e && e.message); }   // ②b 中央泥地（盖在草地上，边缘羽化）
