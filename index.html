@@ -3904,7 +3904,7 @@ function tickSprinterAI(e, dt, tg) {
     const m = 40;
     e.x = Math.max(m, Math.min(W - m, e.x));
     e.y = Math.max(m, Math.min(H - m, e.y));
-    sprinterKeepLand(e);   // 🏝️ 冲刺也别冲进水里
+    /* 跑者按地图数据跑：地图里水就是水，不再强行把他推回草地（否则会脱离跑道） */
     if (Math.random() < 0.9) {
       addPart(e.x - e.spDx * 14, e.y - e.spDy * 14,
         -e.spDx * rnd(80, 260) + rnd(-40, 40), -e.spDy * rnd(80, 260) + rnd(-40, 40),
@@ -22410,7 +22410,7 @@ function mapBuildMatCode() {
    skipObjs = 玩家在闪避/瞬移途中：物件那种"黄墙"可以直接穿过去（水/悬崖照旧挡） */
 function mapWalkAt(x, y, skipObjs) {
   if (!mapEdDecode()) return null;
-  if (MAP_ED_OBJS && !skipObjs) for (let i = MAP_ED_OBJS.length - 1; i >= 0; i--) {
+  if (false && MAP_ED_OBJS && !skipObjs) for (let i = MAP_ED_OBJS.length - 1; i >= 0; i--) {   /* 暂时不启用物件挡路（会把角色/跑者卡死） */
     const o = MAP_ED_OBJS[i];
     if (!o[10]) continue;                       // 不挡路的物件直接跳过
     const w = o[3] * o[7], h = o[4] * o[7];
