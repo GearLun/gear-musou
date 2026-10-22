@@ -22134,13 +22134,11 @@ const ISLAND = {
   grass: [[0,0],[16,0],[32,0],[48,0],[64,0],[80,0],[96,0],[112,0],[0,16],[16,16],[32,16],[48,16]],
   gdetail: [9,6,9,61,74,24,12,6,3,63,58,16],
   water: [[64,16],[80,16],[96,16],[112,16]],
-  cliff: {"n":[0,32],"w":[16,32],"e":[32,32],"s":[48,32],"tl":[64,32],"tr":[80,32]},
-  dirt: [[96,32],[112,32],[0,48],[16,48],[32,48],[48,48]],
+  cliff: {"n":[0,32],"w":[16,32],"e":[32,32],"s":[48,32],"tl":[64,32],"tr":[80,32],"bl":[96,32],"br":[112,32]},
+  dirt: [[0,48],[16,48],[32,48],[48,48],[64,48],[80,48]],
   base: '#c0d470',
-  data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAABACAYAAADS1n9/AAADxklEQVR42u2cPW8UMRCG92dCQQMtBR3hJ4BEjQQVEqJIlwIkGoQIPRJKhSiSLkKCv3BoTzLyOv4ae2Y863tXGl1yvt3z+X38euz9WL5cPTkgTjcWNAIAMFGRd18fbV4t1CcMANAoUK24vY3MIVhMeMoxf9+cHcOi2Ld/zzevZAB6BJLuQT2i1YpfOpYTfw8QqAMwwrKpEPQCkHOAFihCsVSGgL2OdRwAcDkJhzNoiJ90gD1CwAWAVNSI74tuDoA9QCEpvhZMsURt+CzAgvjS08QcNJqOkhJeCghWADREkpgelpxDczqYE7oGAqqDLFZEGjksUD8jkfRxJoYUt5h+Kbg2L+C2eIm1AIlhYLEoGLeTnMKS7lQngyASzgYiAIBOvLm6JMfF9edN9B6jZ//e7wYADQ04UwAAhV7aur9GHVgB+HH99E5YOBYcQMEBYoK1Cpc7FjcIAIBpSVETgNIxKYswPRYbJoMcx9AcIopJIHXliau39gBAXYaFAxhNznocheIAAGCAmHubBnLP+7WHity+i6VePAIUOIARAKQy/tJwwLnCxrG/dh1EpoEtiaEEADUJIRzA0AKQxBBAdQDt1bnR5xIWayuAMy0Fj15OrtlXfAjAySBMAwGAZQDW7eztvYMfi7eFZWG5+8zLiwcql1y573D16L3aaElsNe2Ra7tSm7nt9vv7w8i4I55rXBd+2fr3GrFGcJ+TvrTL1aMVgDtXxCSE9393qj1ybee3l99m5gCouSEyFzkApHp/CoCW7885GWf4IJgFoOXWKEkActfmUxwgd7NHSfyWh0ekvisGwXAAOCzUWZ7mMwBcI3I4WPgbJH5LzL2mBEASghwAYW4S1ilWvr6X6v2STzDxITAJAOWHagIQmwX4gp4/u7+JUPBYeWkWw/lUlN0AYNUBYgD4gn58/nAToeCxcq76U26gNQlA6wOcUjmA5B3CfgOGon57/fgY4fupcmmAUy4wnQNoTANjADhBnaj+/2HEykfUHwAAgHkBkFr9mwGA2CwGAHT2IC4AJKZ/mAUMBiCXBKYA0FjHmBIAiXl0KmKzgPX9VOYfi/XzWgD4D704OQCollqzf2oaGEKQgsJ/f4SDmQJgdAWGN8CpbwAAAAAAACAXf35+2AQA2AkAN5evjsEpvkUIAEBGfAkI4AATO4BVkQGAQg5gtaeX6gMACI1ZcgWr4ufqBQCI4nPkBXCASR2gV4xfn178D0oZcgAmACR7NzVH8AWvFb0lBwEAihYvmSO0rjcAACUH0E764AA4FwAAAAAAKG3/ALa8R2ylwqR7AAAAAElFTkSuQmCC'
+  data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAABACAYAAADS1n9/AAAEQklEQVR42u2cv4sVMRDH82dqYaOthZ3nn6BgLWgliMV1VyjYiHj2glwlFnfdIei/8GQfRLJzk2SS+ZHsvnkwPN7u5uf3k8kku/vCl6snB7fTteCd4ABMUZF3Xx+tvmeoDzQHoFMgqrjcTpYQDBO+Jc/fN2dHm1Hs27/nq+9mADgCaY8gjmhU8Wt5RfG3AIE5ACNcdisEXABKHqAHCiiWyRSw1blOAgApTyLhGSzEz3qALUIgBYCWUcRPRZ8OgC1AoSm+FUxYoDZ8FTCD+NrLxBI0lh4lJ7wWEKIAWIiksTyseQ7L5WBJaAoErR4kzCLSyGmh9RqNoE8yMGzxFrvfCqbGBdIuXmMvQGMaCDMKJu1JTmFLd1c3g1wkvxvo5gDY2Jury2a7uP68Mm4enPTcsh2Ajg7ckzkABqO0N71FHUQB+HH99I7NkJd7AAMPgAnWK1wpL2kQHAChLUVLAGp5tmzCcFwsDAYl8rCcIqpBYOvOk9Ro5QDQug3rHmDS4IzjUVo8gAMwQMytLQOl1/3WU0UpbZhpFI8AxT3AJABoRfy16UByh00ivXUdVJaBPYGhBgCUgNA9wEQbQBpTQKsHsN6dG30vIcy2A7inreDR28mUtOpTgN8M8mWgAzAzAGdv7x2iheRDOR7PLd8vLx6YPHIVy4hlc582CpkPtV+w/igdL5WTu1b1mvRZufTEImg07HhMAwHQfrRryTPWqQeAO0/EZDopbSNsf3o8/Z1eG+sJ+xCWB/sT9jcsA9Mklpda7pq0TosFyguRJSsBoDX6cwD0lA/Fh4JKWSpcWibnRRSsrlg/YO85ZAGguE4rAEod0+IBSi971MTv+fOIXFkYBLXH1Cmv7JXyKOV1bD/3EevYeZbzfwqAhAeDbdBoC+a9WgHofeS9OAC4L1lgnTcCgNq8mJtbc6Nf8x9MUgh6/pMAjmzWAGh5Kxib0ywBwFYBqaDnz+6vDAqOna+tYiT/FQUDIBdsUuCFYvak7/YAaSNGApAK+vH5w5VBwbHzUvVveYEW9h0GKAXe0jXU9IEjANaB2m/3wA6Eon57/fho8HjuvDbAOS9QA5gCb+kaavrQSnQqQNqBFstADIAoaBQ1/Q0NOz+i/ikAEM4cuFrnA0cAB4APAKWOmufFAdDa/dsDANgqZlMAwAZYAUAdQRwANJZ/lFXAbgAYtQooNa4UBOYAsNjHwADI1ZHSBk76wGkAxQNodCi2CliOlwIgaMv1VgDAjZscAL1t4KQfEgNQ7zm0AIB1QK5D0uMjPFhpGdvTBk76cPv9/cFtnIXRHxfBAXAhHID92p+fH1bmAGwEgJvLV0eTFH9GCByAgvgaELgH2LEHmFVkB+CE5/pafRwAQa8wq/ilejkAA+IC9wA79QBcMX59evHfWs55DDDR0k8qRkgFp4reE4M4AIYuXjNG6N1vcACMPIB10OcewM0BcJsfgH9S4oAv+mNslAAAAABJRU5ErkJggg=='
 };
-
-const MAP_ED = null;   /* 地图编辑器覆盖层：tools\_map-ed-apply.js 注入 */
 
 /* ===== 🌼 草地点缀（Assets - From : Sprout Lands - By : Cup Nooble）=====
    由 tools\_decor-atlas.js 生成，勿手改。
@@ -22493,7 +22491,10 @@ function paintCliff(g) {
     if (!landVisual(x, y)) continue;
     const N = landVisual(x, y - 1), E = landVisual(x + 1, y), Sd = landVisual(x, y + 1), W = landVisual(x - 1, y);
     if (N && E && Sd && W) continue;                 // 内部不叠
-    if (!Sd) { blit(C.s, x, y); continue; }          // 南面：悬崖立面（优先，岛的正面）
+    /* 角落优先：四个角各用专门的那一块（Hills.png 里有左下/右下的专用角块） */
+    if (!Sd && !W) { blit(C.bl, x, y); continue; }
+    if (!Sd && !E) { blit(C.br, x, y); continue; }
+    if (!Sd) { blit(C.s, x, y); continue; }          // 南面：悬崖立面（岛的正面）
     if (!N && !W) { blit(C.tl, x, y); continue; }
     if (!N && !E) { blit(C.tr, x, y); continue; }
     if (!W) { blit(C.w, x, y); continue; }
