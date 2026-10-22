@@ -22140,6 +22140,8 @@ const ISLAND = {
   data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAABACAYAAADS1n9/AAAEQklEQVR42u2cv4sVMRDH82dqYaOthZ3nn6BgLWgliMV1VyjYiHj2glwlFnfdIei/8GQfRLJzk2SS+ZHsvnkwPN7u5uf3k8kku/vCl6snB7fTteCd4ABMUZF3Xx+tvmeoDzQHoFMgqrjcTpYQDBO+Jc/fN2dHm1Hs27/nq+9mADgCaY8gjmhU8Wt5RfG3AIE5ACNcdisEXABKHqAHCiiWyRSw1blOAgApTyLhGSzEz3qALUIgBYCWUcRPRZ8OgC1AoSm+FUxYoDZ8FTCD+NrLxBI0lh4lJ7wWEKIAWIiksTyseQ7L5WBJaAoErR4kzCLSyGmh9RqNoE8yMGzxFrvfCqbGBdIuXmMvQGMaCDMKJu1JTmFLd1c3g1wkvxvo5gDY2Jury2a7uP68Mm4enPTcsh2Ajg7ckzkABqO0N71FHUQB+HH99I7NkJd7AAMPgAnWK1wpL2kQHAChLUVLAGp5tmzCcFwsDAYl8rCcIqpBYOvOk9Ro5QDQug3rHmDS4IzjUVo8gAMwQMytLQOl1/3WU0UpbZhpFI8AxT3AJABoRfy16UByh00ivXUdVJaBPYGhBgCUgNA9wEQbQBpTQKsHsN6dG30vIcy2A7inreDR28mUtOpTgN8M8mWgAzAzAGdv7x2iheRDOR7PLd8vLx6YPHIVy4hlc582CpkPtV+w/igdL5WTu1b1mvRZufTEImg07HhMAwHQfrRryTPWqQeAO0/EZDopbSNsf3o8/Z1eG+sJ+xCWB/sT9jcsA9Mklpda7pq0TosFyguRJSsBoDX6cwD0lA/Fh4JKWSpcWibnRRSsrlg/YO85ZAGguE4rAEod0+IBSi971MTv+fOIXFkYBLXH1Cmv7JXyKOV1bD/3EevYeZbzfwqAhAeDbdBoC+a9WgHofeS9OAC4L1lgnTcCgNq8mJtbc6Nf8x9MUgh6/pMAjmzWAGh5Kxib0ywBwFYBqaDnz+6vDAqOna+tYiT/FQUDIBdsUuCFYvak7/YAaSNGApAK+vH5w5VBwbHzUvVveYEW9h0GKAXe0jXU9IEjANaB2m/3wA6Eon57/fho8HjuvDbAOS9QA5gCb+kaavrQSnQqQNqBFstADIAoaBQ1/Q0NOz+i/ikAEM4cuFrnA0cAB4APAKWOmufFAdDa/dsDANgqZlMAwAZYAUAdQRwANJZ/lFXAbgAYtQooNa4UBOYAsNjHwADI1ZHSBk76wGkAxQNodCi2CliOlwIgaMv1VgDAjZscAL1t4KQfEgNQ7zm0AIB1QK5D0uMjPFhpGdvTBk76cPv9/cFtnIXRHxfBAXAhHID92p+fH1bmAGwEgJvLV0eTFH9GCByAgvgaELgH2LEHmFVkB+CE5/pafRwAQa8wq/ilejkAA+IC9wA79QBcMX59evHfWs55DDDR0k8qRkgFp4reE4M4AIYuXjNG6N1vcACMPIB10OcewM0BcJsfgH9S4oAv+mNslAAAAABJRU5ErkJggg=='
 };
 
+const MAP_ED = null;   /* 地图编辑器覆盖层：tools\_map-ed-apply.js 注入 */
+
 /* ===== 🌼 草地点缀（Assets - From : Sprout Lands - By : Cup Nooble）=====
    由 tools\_decor-atlas.js 生成，勿手改。
    flower = Basic Grass Biom things 1.png 里的花朵；lily = 荷叶 */
@@ -22399,13 +22401,15 @@ function mapBuildMatCode() {
     MAP_MATCODE[ty * ISLAND_TW + tx] = code;
   }
 }
-/* 空气墙：物件优先（后放的在上层）→ 素材 2×2 小块 → null 交给程序判定 */
-function mapWalkAt(x, y) {
+/* 空气墙：物件优先（后放的在上层）→ 素材 2×2 小块 → null 交给程序判定
+   skipObjs = 玩家在闪避/瞬移途中：物件那种"黄墙"可以直接穿过去（水/悬崖照旧挡） */
+function mapWalkAt(x, y, skipObjs) {
   if (!mapEdDecode()) return null;
-  if (MAP_ED_OBJS) for (let i = MAP_ED_OBJS.length - 1; i >= 0; i--) {
+  if (MAP_ED_OBJS && !skipObjs) for (let i = MAP_ED_OBJS.length - 1; i >= 0; i--) {
     const o = MAP_ED_OBJS[i];
+    if (!o[10]) continue;                       // 不挡路的物件直接跳过
     const w = o[3] * o[7], h = o[4] * o[7];
-    if (x >= o[5] && x <= o[5] + w && y >= o[6] && y <= o[6] + h) return o[10] ? false : true;
+    if (x >= o[5] && x <= o[5] + w && y >= o[6] && y <= o[6] + h) return false;
   }
   if (!MAP_MATCODE || !MAP_ED_MATWALL) return null;
   const tx = Math.floor(x / IS_T) + RING / IS_T, ty = Math.floor(y / IS_T) + RING / IS_T;
@@ -22415,13 +22419,32 @@ function mapWalkAt(x, y) {
   const q = (Math.abs(x) % IS_T >= IS_T / 2 ? 1 : 0) + (Math.abs(y) % IS_T >= IS_T / 2 ? 2 : 0);
   return !!rule[q];
 }
-window.__mapWalkDbg = (x, y) => {
-  const tx = Math.floor(x / IS_T) + RING / IS_T, ty = Math.floor(y / IS_T) + RING / IS_T;
+/* 玩家能不能站：闪避途中允许穿过物件黄墙 */
+function playerMapWalk(x, y) {
+  const dodge = (typeof p !== 'undefined') && p && (p.dashT > 0 || p.blinkT > 0 || p.rollT > 0);
+  return mapWalkAt(x, y, !!dodge);
+}
+/* 🏔 永远在最上层的物件（树冠之类）：画在所有角色/敌人之后 */
+function drawMapTopObjs() {
+  if (!MAP_ED_OBJS || !MAP_ED_OBJS.length || !mapSheetImgs) return;
+  for (const o of MAP_ED_OBJS) {
+    if (!o[11]) continue;
+    const im = mapSheetImgs[o[0]];
+    if (!im || !im.width) continue;
+    const w = o[3] * o[7], h = o[4] * o[7];
+    ctx.save();
+    ctx.translate(o[5] - camX + (o[8] ? w : 0), o[6] - camY + (o[9] ? h : 0));
+    ctx.scale(o[8] ? -1 : 1, o[9] ? -1 : 1);
+    ctx.drawImage(im, o[1], o[2], o[3], o[4], 0, 0, w, h);
+    ctx.restore();
+  }
+}
+window.__mapWalkDbg = (x, y) => {  const tx = Math.floor(x / IS_T) + RING / IS_T, ty = Math.floor(y / IS_T) + RING / IS_T;
   const inRange = MAP_MATCODE && tx >= 0 && ty >= 0 && tx < ISLAND_TW && ty < ISLAND_TH;
   const code = inRange ? MAP_MATCODE[ty * ISLAND_TW + tx] : -1;
   const rule = (MAP_ED_MATWALL && MAP_ED_MATWALL[code]) ? MAP_ED_MATWALL[code] : null;
   const q = (Math.abs(x) % IS_T >= IS_T / 2 ? 1 : 0) + (Math.abs(y) % IS_T >= IS_T / 2 ? 2 : 0);
-  return { tx: tx, ty: ty, code: code, rule: rule, q: q, walk: mapWalkAt(x, y), land: landAt(x, y) };
+  return { tx: tx, ty: ty, code: code, rule: rule, q: q, walk: mapWalkAt(x, y), land: landAt(x, y), dodgeWalk: mapWalkAt(x, y, true), topN: (MAP_ED_OBJS || []).filter(function (o) { return o[11]; }).length };
 };
 window.__mapEdProbe = () => {
   const ok = mapEdDecode();
@@ -30115,6 +30138,7 @@ function drawGame() {
   /* 系统光标只在"游戏自绘准星"出现时隐藏（暂停/选面板/死亡/触屏都恢复正常光标） */
   const wantCursor = showReticle ? 'none' : '';
   if (cv.style.cursor !== wantCursor) cv.style.cursor = wantCursor;
+  try { drawMapTopObjs(); } catch (e) {}   // 🏔 永远在最上层的素材
   if (state !== 'title') drawBanner();
 }
 
