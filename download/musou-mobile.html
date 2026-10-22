@@ -22134,10 +22134,36 @@ const ISLAND = {
   gdetail: [9,6,9,61,74,24,12,6,3,63,58,16],
   water: [[64,16],[80,16],[96,16],[112,16]],
   cliff: {"n":[0,32],"w":[16,32],"e":[32,32],"s":[48,32],"tl":[64,32],"tr":[80,32]},
-  dirt: [[96,32],[112,32],[0,48],[16,48],[32,48],[48,48]],
+  dirt: [[96,32],[112,32],[0,48],[16,48],[32,48],[48,48],[64,48]],
   base: '#c0d470',
-  data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAABACAYAAADS1n9/AAADxklEQVR42u2cPW8UMRCG92dCQQMtBR3hJ4BEjQQVEqJIlwIkGoQIPRJKhSiSLkKCv3BoTzLyOv4ae2Y863tXGl1yvt3z+X38euz9WL5cPTkgTjcWNAIAMFGRd18fbV4t1CcMANAoUK24vY3MIVhMeMoxf9+cHcOi2Ld/zzevZAB6BJLuQT2i1YpfOpYTfw8QqAMwwrKpEPQCkHOAFihCsVSGgL2OdRwAcDkJhzNoiJ90gD1CwAWAVNSI74tuDoA9QCEpvhZMsURt+CzAgvjS08QcNJqOkhJeCghWADREkpgelpxDczqYE7oGAqqDLFZEGjksUD8jkfRxJoYUt5h+Kbg2L+C2eIm1AIlhYLEoGLeTnMKS7lQngyASzgYiAIBOvLm6JMfF9edN9B6jZ//e7wYADQ04UwAAhV7aur9GHVgB+HH99E5YOBYcQMEBYoK1Cpc7FjcIAIBpSVETgNIxKYswPRYbJoMcx9AcIopJIHXliau39gBAXYaFAxhNznocheIAAGCAmHubBnLP+7WHity+i6VePAIUOIARAKQy/tJwwLnCxrG/dh1EpoEtiaEEADUJIRzA0AKQxBBAdQDt1bnR5xIWayuAMy0Fj15OrtlXfAjAySBMAwGAZQDW7eztvYMfi7eFZWG5+8zLiwcql1y573D16L3aaElsNe2Ra7tSm7nt9vv7w8i4I55rXBd+2fr3GrFGcJ+TvrTL1aMVgDtXxCSE9393qj1ybee3l99m5gCouSEyFzkApHp/CoCW7885GWf4IJgFoOXWKEkActfmUxwgd7NHSfyWh0ekvisGwXAAOCzUWZ7mMwBcI3I4WPgbJH5LzL2mBEASghwAYW4S1ilWvr6X6v2STzDxITAJAOWHagIQmwX4gp4/u7+JUPBYeWkWw/lUlN0AYNUBYgD4gn58/nAToeCxcq76U26gNQlA6wOcUjmA5B3CfgOGon57/fgY4fupcmmAUy4wnQNoTANjADhBnaj+/2HEykfUHwAAgHkBkFr9mwGA2CwGAHT2IC4AJKZ/mAUMBiCXBKYA0FjHmBIAiXl0KmKzgPX9VOYfi/XzWgD4D704OQCollqzf2oaGEKQgsJ/f4SDmQJgdAWGN8CpbwAAAAAAACAXf35+2AQA2AkAN5evjsEpvkUIAEBGfAkI4AATO4BVkQGAQg5gtaeX6gMACI1ZcgWr4ufqBQCI4nPkBXCASR2gV4xfn178D0oZcgAmACR7NzVH8AWvFb0lBwEAihYvmSO0rjcAACUH0E764AA4FwAAAAAAKG3/ALa8R2ylwqR7AAAAAElFTkSuQmCC'
+  data: 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAABACAYAAADS1n9/AAADzUlEQVR42u2cvW4VMRCF9zGhoIGWIh3hEUCiRoIqEqJIlwIkGoQIPVKUClEkXYQEr3DRRnLk9fW/Z8Zj71lpFLi+u9fr8/l47P1Zvl2fHBD7jQWNAABUVOTD92ebvxrq4wYAqBQoV9zWRqYQzCd8yTH/3J7eh0ax7/6db/4WA9AiEHcPahEtV/zUsYz4I0AgDkAPyy6FoBWAmAPUQOGKJTIEjDrWUQBA5SQUziAhftABRoSACgCuyBHfFl0dACNAwSm+FEy+RK37LECD+NzTxBg0ko4SEp4LCFIAJETimB6mnENyOhgTOgeCUgdZtIjUc1go/Q5H0keZGJa4xfRLwbl5AbXFc6wFcAwDi0bBqJ1kD0u6U10Mgki4GogAADLx/vqyOC5uvm6i9Rgt+7f+NgCoaMCZAgAI9NLa/SXqQArA1c2Lo9BwLDiAgAP4BKsVLnYsahAAANGSoiQAqWOWLMK0WKybDFIcQ3KISCaBpStPVL21BYDSZVg4gNLkrMVRShwAAHQQc7RpIPW8X3qoiO27aOrFPUCBAygBgCvjTw0HlCtsFPtL14FlGliTGHIAkJMQwgEULQBxDAGlDiC9Otf7WsKibQVwpqXg3svJOfuyDwG4GIRpIADQDMC6nZ49OtixWJtb5pab77y5eCJyy5X5DVOP1ruNlsCW0x6xtku1mdnufn489Iwj8UzjmrDL1n+v4WsE8z3uW7tMPWoBOLojJiC8fd6h9oi1nd1edpupAyDngchYxADg6v0hAGp+P+ZklGGDoBaAmkejOAGI3Ztf4gCxhz1S4te8PCL0Wz4IugNAYaHG8iTfAWAakcLB3HPgOBefe00JACcEMQDc3MStk698/SzU+znfYGJDoBKAkhOVBMA3C7AFPX/5eBOu4L7y1CyG8q0owwCg1QF8ANiCfn71dBOu4L5yqvqXPECrEoDaFziFcgDOJ4TtBnRF/fHu+X24n4fKuQEOucB0DiAxDfQBYAQ1otr/d8NX3qP+AAAAzAsA1+rfDAD4ZjEAoLEHUQHAMf3DLKAzALEkMASAxDrGlABwzKND4ZsFrJ+HMn9frN+XAsB+6cXuACi11Jz9Q9NAF4IQFPbnPRxMFQC9KzB6LKNvEBEAQEgAwBd/f33axIgi316+fYjdABA64RbxR4TAFt/XJlMCEDthOAAcICk2coAd5gBae3ptfXI7wK4ASDWKVvFL61UyBO4GAMq8AA4wqQO0ivH7y+uHKClDDkAEAGfvLrVjW/Bc0XvkINMAIGHxnOL0Wm+AAygc7+EAuBYAAAAAAMjZ/gPfN6ET6GSJaAAAAABJRU5ErkJggg=='
 };
+
+/* ===== 🌼 草地点缀（Assets - From : Sprout Lands - By : Cup Nooble）=====
+   由 tools\_decor-atlas.js 生成，勿手改。
+   flower = Basic Grass Biom things 1.png 里的花朵；lily = 荷叶 */
+const DECOR = {
+  w: 160, h: 120,
+  flower: [[0,0,16,14],[40,0,16,12],[80,0,13,14],[120,0,16,12],[0,40,16,10],[40,40,13,13]],
+  lily: [[80,40,32,16],[120,40,32,16],[0,80,30,12]],
+  data: 'data:image/png;base64,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'
+};
+
+/* ---------- 🌼 装饰图集（花朵 / 荷叶）---------- */
+let decorImg = null, isDecor = 0, isDecorTried = false;
+function decorLoad() {
+  if (isDecorTried) return;
+  isDecorTried = true;
+  if (typeof DECOR === 'undefined' || !DECOR) return;
+  if (typeof Image === 'undefined') return;
+  try {
+    const im = new Image();
+    im.onload = function () { isDecor = 1; if (typeof buildGround === 'function') { try { buildGround(); } catch (e) {} } };
+    im.onerror = function () { isDecor = 0; };
+    im.src = DECOR.data;
+    decorImg = im;
+  } catch (e) { isDecor = 0; }
+}
 
 /* ---------- 图集加载 ---------- */
 let isImg = null, isOK = false, isTried = false;
@@ -22373,6 +22399,70 @@ function paintCenterDirt(g) {
   cv.width = cv.height = 1;      // 早点释放显存
 }
 
+/* ⑤ 点缀：草地上撒 🌼 花（50 朵左右，避开中央泥地、避开岸边），河里漂荷叶
+      全部用 isHash 定位置 → 每次生成一样，不吃全局随机流 */
+function paintDecor(g) {
+  if (!isDecor || !decorImg || typeof DECOR === 'undefined' || !DECOR) return;
+  g.imageSmoothingEnabled = false;
+  const F = DECOR.flower || [], L = DECOR.lily || [];
+  /* —— 花：50 朵 —— */
+  if (F.length) {
+    const spots = [];
+    const ZX = W / 2, ZY = H / 2, ZW = (VW * 1.3) / 2 + 120, ZH = (VH * 1.3) / 2 + 120;   // 泥地范围（含余量，花不要长到沙地上）
+    for (let t = 0; t < 6000 && spots.length < 50; t++) {
+      const x = 120 + isHash(t, 7, 8101) * (W - 240);
+      const y = 120 + isHash(7, t, 8103) * (H - 240);
+      if (Math.abs(x - ZX) < ZW && Math.abs(y - ZY) < ZH) continue;      // 泥地上不长花
+      const tx = Math.floor(x / IS_T), ty = Math.floor(y / IS_T);
+      if (!landVisual(tx, ty) || !landVisual(tx, ty + 1)) continue;      // 只长在草地上、不贴岸
+      let near = false;
+      for (let i = 0; i < spots.length; i++) {
+        const dx = spots[i][0] - x, dy = spots[i][1] - y;
+        if (dx * dx + dy * dy < 150 * 150) { near = true; break; }
+      }
+      if (near) continue;
+      spots.push([x, y]);
+    }
+    for (let i = 0; i < spots.length; i++) {
+      const r = F[Math.floor(isHash(i, 3, 8105) * F.length) % F.length];
+      const f = Math.floor(isHash(i, 5, 8107) * 4) & 3;
+      const fx = f & 1, fy = (f >> 1) & 1;
+      const px = isWX + spots[i][0] - r[2] / 2, py = isWY + spots[i][1] - r[3] / 2;
+      if (!fx && !fy) g.drawImage(decorImg, r[0], r[1], r[2], r[3], px, py, r[2], r[3]);
+      else {
+        g.save();
+        g.translate(px + (fx ? r[2] : 0), py + (fy ? r[3] : 0));
+        g.scale(fx ? -1 : 1, fy ? -1 : 1);
+        g.drawImage(decorImg, r[0], r[1], r[2], r[3], 0, 0, r[2], r[3]);
+        g.restore();
+      }
+    }
+  }
+  /* —— 荷叶：河里 24 片 —— */
+  if (L.length) {
+    let placed = 0;
+    for (let t = 0; t < 4000 && placed < 24; t++) {
+      const x = -RING + isHash(t, 11, 8111) * (W + RING * 2);
+      const y = -RING + isHash(11, t, 8113) * (H + RING * 2);
+      const tx = Math.floor(x / IS_T), ty = Math.floor(y / IS_T);
+      if (landVisual(tx, ty) || landVisual(tx, ty + 1)) continue;         // 荷叶只在水中
+      const r = L[Math.floor(isHash(t, 13, 8117) * L.length) % L.length];
+      const f = Math.floor(isHash(t, 17, 8119) * 4) & 3;
+      const fx = f & 1, fy = (f >> 1) & 1;
+      const px = isWX + x - r[2] / 2, py = isWY + y - r[3] / 2;
+      if (!fx && !fy) g.drawImage(decorImg, r[0], r[1], r[2], r[3], px, py, r[2], r[3]);
+      else {
+        g.save();
+        g.translate(px + (fx ? r[2] : 0), py + (fy ? r[3] : 0));
+        g.scale(fx ? -1 : 1, fy ? -1 : 1);
+        g.drawImage(decorImg, r[0], r[1], r[2], r[3], 0, 0, r[2], r[3]);
+        g.restore();
+      }
+      placed++;
+    }
+  }
+}
+
 /* 诊断/测试钩子 */
 /* 🏝️ 只读钩子：统计"现在有多少实体站在水里"（0 = 全在草地上） */
 window.__musouLandAt = (x, y) => landAt(x, y);
@@ -22405,10 +22495,12 @@ function buildGround() {
     g.fillStyle = ISLAND.base;
     g.fillRect(0, 0, GW, GH);
     if (!isOK) { islandLoad(); }
+    if (!isDecor) { decorLoad(); }
     if (isOK) {
       paintWater(g);           // ① 河（最底层）
       paintIslandGrass(g);     // ② 岛（盖在河上）
       try { paintCenterDirt(g); } catch (e) { isDirtErr = String(e && e.message); }   // ②b 中央泥地（盖在草地上，边缘羽化）
+      try { paintDecor(g); } catch (e) { isDecorErr = String(e && e.message); }   // ②c 花草点缀（草地花 + 河里荷叶）
       try { paintCliff(g); } catch (e) { isCliffErr = String(e && e.message); }   // ③ 悬崖（叠在岛的边缘，切口透出水）
     }
     /* RNG_PARITY_20940：旧地形（渐变 + 3400 根草线 + 90 块暗斑）消耗 20940 次全局随机，
