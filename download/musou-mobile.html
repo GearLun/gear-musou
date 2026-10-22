@@ -22475,12 +22475,13 @@ function playerCanStand(x, y) {
     const nb = blockedBy(x, y);
     if (nb >= 0) {
       const dodging = (typeof p !== 'undefined' && p && (p.dashT > 0 || p.blinkT > 0 || p.rollT > 0));
-      const cb = (typeof p !== 'undefined' && p) ? blockedBy(p.x, p.y) : -1;
+      const cb = (typeof p !== 'undefined' && p) ? blockedBy(p._pvx !== undefined ? p._pvx : p.x, p._pvy !== undefined ? p._pvy : p.y) : -1;
       if (!dodging && nb !== cb) return false;
     }
   }
   return true;
 }
+window.__musouPos = () => ({ x: Math.round(p.x), y: Math.round(p.y) });
 function buildGround() {
   const g = ground.getContext('2d');
   g.imageSmoothingEnabled = false;
@@ -27253,11 +27254,20 @@ function updateGame(dt, rawDt) {
   artTick(dt);
 
   /* 位移与边界 */
+  p._pvx = p.x; p._pvy = p.y;   // 移动前坐标（黄框判定基准）
   if (!p.roninDash && !p.petBlitz) {   // 一闪 / 闪焰冲锋期间坐标完全由它们接管（避免输入位移叠加漂移）
     p.x += p.vx * dt; p.y += p.vy * dt;
   }
+  /* 记下"移动前"的位置：撞墙时退回这里，黄框判定也用它 */
+  const _px0 = p._pvx !== undefined ? p._pvx : p.x, _py0 = p._pvy !== undefined ? p._pvy : p.y;
   p.x = Math.max(30, Math.min(W - 30, p.x));
   p.y = Math.max(30, Math.min(H - 30, p.y));
+  /* 撞到挡路物件：贴墙滑（单轴尝试），都过不去就退回原位 */
+  if (!playerCanStand(p.x, p.y)) {
+    if (playerCanStand(p.x, _py0)) p.y = _py0;
+    else if (playerCanStand(_px0, p.y)) p.x = _px0;
+    else { p.x = _px0; p.y = _py0; }
+  }
   p.vx *= Math.exp(-VEL_DRAG * dt); p.vy *= Math.exp(-VEL_DRAG * dt);
   petMountSnap();   // 🧢 骑乘：坐骑坐标在这一帧的**最终位置**上再钉一次（updateAllies 跑在玩家位移之前，
                     //    不补这一下高速闪避就会差一帧 ≈ 21px —— 看起来就是「人和宝可梦分家」）
@@ -29877,6 +29887,7 @@ function drawGame() {
     ctx.fillStyle = vigMusou; ctx.fillRect(0, 0, VW, VH);
   }
 
+  try { drawMapTopObjs(); } catch (e) {}   // 🏔 只在玩家/敌人之上，HUD 仍压在最上面
   if (state === 'play' || state === 'pause') drawHUD();
   /* 奇物·无双秘籍：全屏「斩」字演出 */
   if (artCutT > 0) {
@@ -29932,7 +29943,6 @@ function drawGame() {
   /* 系统光标只在"游戏自绘准星"出现时隐藏（暂停/选面板/死亡/触屏都恢复正常光标） */
   const wantCursor = showReticle ? 'none' : '';
   if (cv.style.cursor !== wantCursor) cv.style.cursor = wantCursor;
-  try { drawMapTopObjs(); } catch (e) {}   // 🏔 永远在最上层的素材
   if (state !== 'title') drawBanner();
 }
 
