@@ -1562,6 +1562,8 @@ function rr(x, y, w, h, r) {
   ctx.closePath();
 }
 function shade(x, y, r) {
+  /* 🧹 太小的落影不画：半径 < 4 时只有 7px 宽、2px 高，远看就是"地上有脏点"（怪物一多更明显） */
+  if (!(r >= 4)) return;
   ctx.fillStyle = 'rgba(0,0,0,0.28)';
   ctx.beginPath();
   ctx.ellipse(x, y + r * 0.85, r * 0.92, r * 0.38, 0, 0, TAU);
@@ -1570,6 +1572,9 @@ function shade(x, y, r) {
 /* 腾空单位的落地影：随高度收缩变淡（跃击的“飞天”读感） */
 function shadeAir(x, y, r, h) {
   const k = Math.max(0.35, 1 - h / 200);
+  /* 🧹 腾空越高影子越小：小到读不出"这是影子"的时候（宽 < 5px）索性不画 ——
+     否则就是一枚悬在地上的小黑点/小黑条，玩家会当成贴图残留 */
+  if (!(r * 0.92 * k >= 5)) return;
   ctx.fillStyle = 'rgba(0,0,0,' + (0.28 * k).toFixed(2) + ')';
   ctx.beginPath();
   ctx.ellipse(x, y + r * 0.85, r * 0.92 * k, r * 0.38 * k, 0, 0, TAU);
@@ -24857,7 +24862,7 @@ function drawAllies() {
     ctx.fillStyle = '#7d8a5c'; ctx.fillRect(-5, -1.5, 10, 3);
     ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.arc(0, -7, 2.2, 0, TAU); ctx.fill();
     ctx.restore();
-    shade(g.x, g.y, 6);
+    if ((g.h || 0) < 45) shade(g.x, g.y, 6);   // 飞太高时那枚小影子只是脏点，落地前才画
   }
   /* 火箭弹 */
   for (const r of gunRockets) {
