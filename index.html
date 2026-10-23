@@ -1010,10 +1010,19 @@ function lowSpecSave(v) {
 let PERF_LOWSPEC = !!lowSpecLoad();
 let PERF_LOWSPEC_FORCED = false;   // ?lowspec=1 强制开（调试 / 分享给低配朋友的直链）
 function lowSpecOn() { return PERF_LOWSPEC || PERF_LOWSPEC_FORCED; }
+/* 🔬 三个「二分定位」开关（只在 URL 上加参数，用来查"怪物头顶黑点"到底出自哪一层）：
+     ?noshadow=1 → 不画所有落影（敌人/友军/尸体/榴弹）
+     ?nobar=1    → 不画小兵血条
+     ?noart=1    → 不用外挂立绘（退回原来的程序绘制）
+   三个一起加就是"最干净的画面"，用来确认问题是否还在。 */
+let DBG_NO_SHADOW = false, DBG_NO_BAR = false, DBG_NO_ART = false;
 try {
   const q = String((window.location && window.location.search) || '');
   fxForceHigh = /(^|[?&])fx=high(&|$)/.test(q);
   PERF_LOWSPEC_FORCED = /(^|[?&])lowspec=1(&|$)/.test(q);
+  DBG_NO_SHADOW = /(^|[?&])noshadow=1(&|$)/.test(q);
+  DBG_NO_BAR = /(^|[?&])nobar=1(&|$)/.test(q);
+  DBG_NO_ART = /(^|[?&])noart=1(&|$)/.test(q);
 } catch (e) {}
 function applyPerfProfile() {
   const low = lowSpecOn();
@@ -1563,6 +1572,7 @@ function rr(x, y, w, h, r) {
   ctx.closePath();
 }
 function shade(x, y, r) {
+  if (DBG_NO_SHADOW) return;                       // ?noshadow=1：整体关掉落影（排查用）
   /* 🧹 太小的落影不画：半径 < 4 时只有 7px 宽、2px 高，远看就是"地上有脏点"（怪物一多更明显） */
   if (!(r >= 4)) return;
   ctx.fillStyle = 'rgba(0,0,0,0.28)';
@@ -1572,6 +1582,7 @@ function shade(x, y, r) {
 }
 /* 腾空单位的落地影：随高度收缩变淡（跃击的“飞天”读感） */
 function shadeAir(x, y, r, h) {
+  if (DBG_NO_SHADOW) return;
   const k = Math.max(0.35, 1 - h / 200);
   /* 🧹 腾空越高影子越小：小到读不出"这是影子"的时候（宽 < 5px）索性不画 ——
      否则就是一枚悬在地上的小黑点/小黑条，玩家会当成贴图残留 */
@@ -17019,7 +17030,7 @@ function drawCorpses() {
     /* ④ 地面影子：跟着滑出、逐渐缩小淡出（"重心下降"的读法） */
     const shw = r * (1.55 + 0.75 * land);
     const sha = 0.46 + 0.22 * land;   /* 塌下去 → 影子更大更深 */
-    if (sha > 0.01) {
+    if (sha > 0.01 && !DBG_NO_SHADOW) {
       const shx = c.x + slide * 0.8, shy = c.y + r * 0.80;
       /* 外层：柔和扩散 */
       ctx.globalAlpha = Math.min(1, sha) * 0.60;
@@ -23132,6 +23143,7 @@ function foeBarTop(e) {
   return -e.r * 2.3;
 }
 function drawFoeSprite(e) {
+  if (DBG_NO_ART) return false;                    // ?noart=1：退回程序绘制（排查用）
   const S = foeArtOf(e);
   if (!S) return false;
   foeArtLoad();
@@ -23178,6 +23190,8 @@ window.__foeArt = (type) => {
   }
   return { types: list, last: d };
 };
+/* 测试钩子：取某兵种的立绘（净化后的 canvas），供无头对比"游戏画面上多出来的像素" */
+window.__foeImg = (t) => (typeof FOE_SPRITES !== 'undefined' && FOE_SPRITES[t]) ? FOE_SPRITES[t].__img : null;
 /* 兼容旧钩子（冒烟 S 段曾经用 __archerArt 钉过弓兵立绘） */
 window.__archerArt = () => {
   const S = (typeof FOE_SPRITES !== 'undefined' && FOE_SPRITES.archer) ? FOE_SPRITES.archer : null;
@@ -24863,7 +24877,7 @@ function drawAllies() {
     ctx.fillStyle = '#7d8a5c'; ctx.fillRect(-5, -1.5, 10, 3);
     ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.arc(0, -7, 2.2, 0, TAU); ctx.fill();
     ctx.restore();
-    if ((g.h || 0) < 45) shade(g.x, g.y, 6);   // 飞太高时那枚小影子只是脏点，落地前才画
+    if (!DBG_NO_SHADOW && (g.h || 0) < 45) shade(g.x, g.y, 6);   // 飞太高时那枚小影子只是脏点，落地前才画
   }
   /* 火箭弹 */
   for (const r of gunRockets) {
@@ -29045,7 +29059,7 @@ function drawGame() {
     }
     if (e.flash > 0) drawEnemy(e, '#ffffff');
     else drawEnemy(e);
-    if (e.hp < e.maxhp && !e.boss) {
+    if (e.hp < e.maxhp && !e.boss && !DBG_NO_BAR) {
       const w = e.r * 2.4;
       const barY = e.y + foeBarTop(e) - 8;
       ctx.fillStyle = 'rgba(10,10,10,0.65)';
