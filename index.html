@@ -1015,7 +1015,7 @@ function lowSpecOn() { return PERF_LOWSPEC || PERF_LOWSPEC_FORCED; }
      ?nobar=1    → 不画小兵血条
      ?noart=1    → 不用外挂立绘（退回原来的程序绘制）
    三个一起加就是"最干净的画面"，用来确认问题是否还在。 */
-let DBG_NO_SHADOW = false, DBG_NO_BAR = false, DBG_NO_ART = false;
+let DBG_NO_SHADOW = false, DBG_NO_BAR = false, DBG_NO_ART = false, DBG_NO_PART = false;
 try {
   const q = String((window.location && window.location.search) || '');
   fxForceHigh = /(^|[?&])fx=high(&|$)/.test(q);
@@ -1023,6 +1023,9 @@ try {
   DBG_NO_SHADOW = /(^|[?&])noshadow=1(&|$)/.test(q);
   DBG_NO_BAR = /(^|[?&])nobar=1(&|$)/.test(q);
   DBG_NO_ART = /(^|[?&])noart=1(&|$)/.test(q);
+  DBG_NO_PART = /(^|[?&])nopart=1(&|$)/.test(q);
+  /* ?clean=1：以上四项全关（一次性拿到"最干净画面"，用来确认问题在不在这些层里） */
+  if (/(^|[?&])clean=1(&|$)/.test(q)) { DBG_NO_SHADOW = DBG_NO_BAR = DBG_NO_ART = DBG_NO_PART = true; }
 } catch (e) {}
 function applyPerfProfile() {
   const low = lowSpecOn();
@@ -30234,6 +30237,7 @@ function drawGame() {
 
   /* 粒子 */
   for (const q of parts) {
+    if (DBG_NO_PART) break;                          // ?nopart=1：不画粒子（排查用）
     ctx.globalAlpha = Math.max(0, q.life / q.max);
     ctx.fillStyle = q.color;
     ctx.fillRect(q.x - q.size / 2, q.y - q.size / 2, q.size, q.size);
