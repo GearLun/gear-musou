@@ -952,7 +952,7 @@ const $ = id => document.getElementById(id);
    ⚠️ 改版本号时**只改这两行** + `index.html` 的 `.title small`。
    为什么要它：用户拿旧的下载文件来问「怎么和没改一样」—— 有角标一眼就能看出手上是哪一版。 */
 const VER_TXT = 'v1.0.10';
-const BUILD_TAG = 'build 10-24 00:20';
+const BUILD_TAG = 'build 10-24 00:35';
 function verBadgePaint() {
   const el = $('ver-badge');
   if (!el) return;
@@ -1575,8 +1575,11 @@ function rr(x, y, w, h, r) {
 }
 function shade(x, y, r) {
   if (DBG_NO_SHADOW) return;                       // ?noshadow=1：整体关掉落影（排查用）
-  /* 🧹 太小的落影不画：半径 < 4 时只有 7px 宽、2px 高，远看就是"地上有脏点"（怪物一多更明显） */
-  if (!(r >= 4)) return;
+  /* 🧹 「小到只剩一条黑线」的落影一律不画。
+     rgba(0,0,0,0.28) 这种半透明黑，一旦宽度只有 10px 左右、又和本体分开（腾空/小人/召唤物），
+     在玩家眼里就是"怪物上方一条横着的黑线 / 脏点"（2026-10 反复反馈的那个问题）。
+     宽度公式 = 2×0.92×r ⇒ r < 6.5 时宽 12px 以下 → 直接跳过。 */
+  if (!(r >= 6.5)) return;
   ctx.fillStyle = 'rgba(0,0,0,0.28)';
   ctx.beginPath();
   ctx.ellipse(x, y + r * 0.85, r * 0.92, r * 0.38, 0, 0, TAU);
@@ -1586,9 +1589,8 @@ function shade(x, y, r) {
 function shadeAir(x, y, r, h) {
   if (DBG_NO_SHADOW) return;
   const k = Math.max(0.35, 1 - h / 200);
-  /* 🧹 腾空越高影子越小：小到读不出"这是影子"的时候（宽 < 5px）索性不画 ——
-     否则就是一枚悬在地上的小黑点/小黑条，玩家会当成贴图残留 */
-  if (!(r * 0.92 * k >= 5)) return;
+  /* 🧹 同上：腾空越高影子越小，宽 < 12px 时它就只是一条悬在地上的黑线（读不出是影子），不画 */
+  if (!(r * 0.92 * k >= 6)) return;
   ctx.fillStyle = 'rgba(0,0,0,' + (0.28 * k).toFixed(2) + ')';
   ctx.beginPath();
   ctx.ellipse(x, y + r * 0.85, r * 0.92 * k, r * 0.38 * k, 0, 0, TAU);
@@ -24879,7 +24881,7 @@ function drawAllies() {
     ctx.fillStyle = '#7d8a5c'; ctx.fillRect(-5, -1.5, 10, 3);
     ctx.fillStyle = '#ffd166'; ctx.beginPath(); ctx.arc(0, -7, 2.2, 0, TAU); ctx.fill();
     ctx.restore();
-    if (!DBG_NO_SHADOW && (g.h || 0) < 45) shade(g.x, g.y, 6);   // 飞太高时那枚小影子只是脏点，落地前才画
+    if (!DBG_NO_SHADOW && (g.h || 0) < 30) shade(g.x, g.y, 7);   // 飞太高时那枚小影子只是一条黑线，落地前才画
   }
   /* 火箭弹 */
   for (const r of gunRockets) {
