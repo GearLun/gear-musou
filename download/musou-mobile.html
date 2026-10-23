@@ -952,7 +952,7 @@ const $ = id => document.getElementById(id);
    ⚠️ 改版本号时**只改这两行** + `index.html` 的 `.title small`。
    为什么要它：用户拿旧的下载文件来问「怎么和没改一样」—— 有角标一眼就能看出手上是哪一版。 */
 const VER_TXT = 'v1.0.10';
-const BUILD_TAG = 'build 10-24 00:35';
+const BUILD_TAG = 'build 10-24 01:05';
 function verBadgePaint() {
   const el = $('ver-badge');
   if (!el) return;
@@ -1589,6 +1589,9 @@ function shade(x, y, r) {
 function shadeAir(x, y, r, h) {
   if (DBG_NO_SHADOW) return;
   const k = Math.max(0.35, 1 - h / 200);
+  /* 🧹 腾空很高时（k < 0.75）这枚影子只剩 10~20% 不透明、十几像素宽 —— 在玩家眼里就是
+     "怪物上方一条淡淡的黑线/虚线"（2026-10 反复反馈的问题）。只有快落地时才画。 */
+  if (k < 0.75) return;
   /* 🧹 同上：腾空越高影子越小，宽 < 12px 时它就只是一条悬在地上的黑线（读不出是影子），不画 */
   if (!(r * 0.92 * k >= 6)) return;
   ctx.fillStyle = 'rgba(0,0,0,' + (0.28 * k).toFixed(2) + ')';
@@ -30239,7 +30242,9 @@ function drawGame() {
   /* 粒子 */
   for (const q of parts) {
     if (DBG_NO_PART) break;                          // ?nopart=1：不画粒子（排查用）
-    ctx.globalAlpha = Math.max(0, q.life / q.max);
+    const qa = Math.max(0, q.life / q.max);
+    if (qa < 0.15) continue;                         // 🧹 快消失的粒子不画（淡到只剩脏点）
+    ctx.globalAlpha = qa;
     ctx.fillStyle = q.color;
     ctx.fillRect(q.x - q.size / 2, q.y - q.size / 2, q.size, q.size);
   }
