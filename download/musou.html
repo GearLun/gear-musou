@@ -22820,7 +22820,11 @@ function drawSamurai(e, col) {
   const A = BOSS_ART.samurai;
   const faceLeft = (e.fx || 1) < 0;
   const cm = String(e.cMode || e.cm || 'idle');
-  const hurt = (e.flash || 0) > 0;
+  /* 受击演出：e.flash 只有 0.09 秒（那是白色闪光的时长），8fps 的 Hit 表根本来不及播，
+     所以在 Boss 自己身上挂一个更长的倒计时，把 Hit 动画真正露出来（0.35 秒 ≈ 3 帧）。 */
+  if ((e.flash || 0) > 0) e.bossHurtT = 0.35;
+  else if ((e.bossHurtT || 0) > 0) e.bossHurtT = Math.max(0, e.bossHurtT - 1 / 60);
+  const hurt = (e.bossHurtT || 0) > 0;
   const moving = Math.hypot(e.vx || 0, e.vy || 0) > 6;
   const charging = cm.indexOf('charge') >= 0 || cm.indexOf('aim') >= 0;
   const attacking = cm !== 'idle' && cm !== 'rest';
@@ -22850,7 +22854,10 @@ function drawSamurai(e, col) {
 function drawSlimeArt(e) {
   const A = BOSS_ART.slime;
   const jumping = (e.airH || 0) > 1 || String(e.cMode || '') === 'jump';
-  const key = (e.flash || 0) > 0 ? 'hit' : (jumping ? 'jump' : 'idle');
+  /* 受击演出同武士：flash 只有 0.09 秒，Hit 表播不完，所以挂一个 0.35 秒的倒计时 */
+  if ((e.flash || 0) > 0) e.bossHurtT = 0.35;
+  else if ((e.bossHurtT || 0) > 0) e.bossHurtT = Math.max(0, e.bossHurtT - 1 / 60);
+  const key = (e.bossHurtT || 0) > 0 ? 'hit' : (jumping ? 'jump' : 'idle');
   const n = key === 'hit' ? A.nHit : key === 'jump' ? A.nJump : A.nIdle;
   const im = bossImgs && bossImgs['sl_' + key];
   if (!im || !im.width) return false;
