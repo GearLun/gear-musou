@@ -953,7 +953,7 @@ const $ = id => document.getElementById(id);
    ⚠️ 改版本号时**只改这两行** + `index.html` 的 `.title small`。
    为什么要它：用户拿旧的下载文件来问「怎么和没改一样」—— 有角标一眼就能看出手上是哪一版。 */
 const VER_TXT = 'v1.0.10';
-const BUILD_TAG = 'build 10-24 01:35';
+const BUILD_TAG = 'build 10-24 02:05';
 function verBadgePaint() {
   const el = $('ver-badge');
   if (!el) return;
@@ -22869,6 +22869,34 @@ function spriteSanitize(im) {
   } catch (err) { return im; }
 }
 
+/* 📐 逐帧内容包围盒：加载后顺着 alpha 扫一遍，得到"这一帧真正画了东西的最小矩形"。
+   用途：绘制时**把 drawImage 裁到这个矩形**（外扩 1px 留抗锯齿），
+   任何"帧里多出来的像素"（上一帧的脚、素材串帧、1px 尖刺）都会被裁掉 —— 用户 2026-10 反复反馈的
+   "怪物头顶一条淡线"就是这类东西，这是最后一道兜底。 */
+function foeCellBoxes(img, fw, fh, cols) {
+  try {
+    const cv = document.createElement('canvas');
+    cv.width = img.width; cv.height = img.height;
+    const g = cv.getContext('2d', { willReadFrequently: true });
+    if (!g) return null;
+    g.drawImage(img, 0, 0);
+    const d = g.getImageData(0, 0, cv.width, cv.height).data;
+    const rows = Math.floor(img.height / fh);
+    const out = [];
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      let x0 = 1e9, y0 = 1e9, x1 = -1, y1 = -1;
+      for (let y = 0; y < fh; y++) for (let x = 0; x < fw; x++) {
+        const sx = c * fw + x, sy = r * fh + y;
+        if (sx >= img.width || sy >= img.height) continue;
+        if (!d[(sy * img.width + sx) * 4 + 3]) continue;
+        if (x < x0) x0 = x; if (x > x1) x1 = x;
+        if (y < y0) y0 = y; if (y > y1) y1 = y;
+      }
+      out.push(x1 < 0 ? null : { x0: x0, y0: y0, x1: x1, y1: y1 });
+    }
+    return out;
+  } catch (e) { return null; }
+}
 let bossImgs = null;
 function bossLoad() {
   if (bossImgs || typeof BOSS_ART === 'undefined') return;
@@ -23109,6 +23137,8 @@ function foeArtLoad() {
       /* 加载完立刻净化（半透明二值化 + 抹碎点），再用于绘制 */
       const clean = spriteSanitize(im);
       S.__img = clean;
+      S.cols = Math.max(1, Math.floor(clean.width / S.fw));
+      S.cellBox = foeCellBoxes(clean, S.fw, S.fh, S.cols);
       S.ok = 1;
       foeImgs[k] = clean;
     };
@@ -23182,8 +23212,23 @@ function drawFoeSprite(e) {
   ctx.translate(e.x, e.y - (e.airH || 0));
   if (faceLeft) ctx.scale(-1, 1);
   ctx.imageSmoothingEnabled = false;
+  const dx = -S.bodyCx * K, dy = -S.feetY * K + (e.r || 10) * 0.9;
+  /* ✂️ 只画"这一帧真正有内容的那块"：包围盒外扩 1px，超出部分一律裁掉 */
+  let clipped = false;
+  if (S.cellBox && S.cols) {
+    const box = S.cellBox[row * S.cols + fr];
+    if (box) {
+      const pad = 1;
+      ctx.beginPath();
+      ctx.rect(dx + (box.x0 - pad) * K, dy + (box.y0 - pad) * K,
+        (box.x1 - box.x0 + 1 + pad * 2) * K, (box.y1 - box.y0 + 1 + pad * 2) * K);
+      ctx.clip();
+      clipped = true;
+    }
+  }
   ctx.drawImage(S.__img, fr * S.fw, row * S.fh, S.fw, S.fh,
-    -S.bodyCx * K, -S.feetY * K + (e.r || 10) * 0.9, S.fw * K, S.fh * K);
+    dx, dy, S.fw * K, S.fh * K);
+  if (clipped) { /* clip 由 ctx.restore() 收回 */ }
   ctx.restore();
   window.__foeDrawn = { n: ((window.__foeDrawn && window.__foeDrawn.n) || 0) + 1, type: e.type, key: key, fr: fr, row: row, x: Math.round(e.x), y: Math.round(e.y) };
   return true;
