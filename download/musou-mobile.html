@@ -952,7 +952,7 @@ const $ = id => document.getElementById(id);
    ⚠️ 改版本号时**只改这两行** + `index.html` 的 `.title small`。
    为什么要它：用户拿旧的下载文件来问「怎么和没改一样」—— 有角标一眼就能看出手上是哪一版。 */
 const VER_TXT = 'v1.0.10';
-const BUILD_TAG = 'build 10-24 01:05';
+const BUILD_TAG = 'build 10-24 01:20';
 function verBadgePaint() {
   const el = $('ver-badge');
   if (!el) return;
@@ -1587,7 +1587,9 @@ function shade(x, y, r) {
 }
 /* 腾空单位的落地影：随高度收缩变淡（跃击的“飞天”读感） */
 function shadeAir(x, y, r, h) {
-  if (DBG_NO_SHADOW) return;
+  /* 🚫 落地影整体停用（详见下方注释）——留空函数，调用点不用改。 */
+  return;
+  // eslint-disable-next-line no-unreachable
   const k = Math.max(0.35, 1 - h / 200);
   /* 🧹 腾空很高时（k < 0.75）这枚影子只剩 10~20% 不透明、十几像素宽 —— 在玩家眼里就是
      "怪物上方一条淡淡的黑线/虚线"（2026-10 反复反馈的问题）。只有快落地时才画。 */
