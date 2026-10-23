@@ -952,7 +952,7 @@ const $ = id => document.getElementById(id);
    ⚠️ 改版本号时**只改这两行** + `index.html` 的 `.title small`。
    为什么要它：用户拿旧的下载文件来问「怎么和没改一样」—— 有角标一眼就能看出手上是哪一版。 */
 const VER_TXT = 'v1.0.10';
-const BUILD_TAG = 'build 10-24 02:40';
+const BUILD_TAG = 'build 10-24 02:55';
 function verBadgePaint() {
   const el = $('ver-badge');
   if (!el) return;
@@ -23197,6 +23197,10 @@ function drawFoeSprite(e) {
   else if (hurt) key = 'hurt';
   else if (ak >= 0) key = (ak > 0.82 && R.atk2 && R.atk2[1] > 1) ? 'atk2' : 'atk';
   else if (moving) key = 'run';
+  /* 🐎 没有对应动画行时**不要一律退回 idle**：骑兵没有 atk 行，
+     以前它只要 atkCd 满足条件就被判成 'atk' → 回退 idle → 跑起来像在平移（用户 2026-10 报）。
+     现在：没有这一行就按"在不在动"退回 run / idle。 */
+  if (!R[key]) key = (key === 'death' || key === 'hurt') ? 'idle' : (moving ? 'run' : 'idle');
   const spec = R[key] || R.idle;
   const row = spec[0], n = spec[1];
   let fr;
