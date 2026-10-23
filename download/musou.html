@@ -16924,6 +16924,9 @@ function corpseAdd(e) {
   snap.lunge = null; snap.castCd = 0; snap.cav = null;
   snap.hp = Math.max(1, snap.maxhp || 1);
   snap.shiny = !!e.shiny;
+  /* 自带倒地动画的单位（如弓兵立绘）：把死亡进度传进快照，并让它少转一点角度 */
+  snap.corpseK = 0;
+  snap.flatDeath = (e.type === 'archer') ? 1 : 0;
 
   corpses.push({
     e: snap,
@@ -17000,7 +17003,7 @@ function drawCorpses() {
 
     /* ③ 物理：沿倒下方向滑出 + 下沉 + 落地压扁 */
     /* 倒下幅度：普通 ≈60°(1.05rad) / Boss ≈69°(1.20rad) —— 用户要求"再大些、看得显眼" */
-    const ang = c.dir * ((c.boss ? 1.20 : 1.05) * fall - bounce);
+    const ang = c.dir * ((c.boss ? 1.20 : 1.05) * fall - bounce) * (c.e && c.e.flatDeath ? 0.18 : 1);
     const slide = c.dir * r * 0.42 * fall;
     const sink = r * (c.boss ? 0.26 : 0.10) * fall;
     const land = Math.max(0, Math.min(1, (k - 0.28) / 0.22));
@@ -17082,6 +17085,7 @@ function drawCorpses() {
     /* 渐黑：用滤镜（不支持就只靠透明度），并把随机钉死，绝不吃随机流 */
     const useF = corpseFilterOK() && dark > 0.02;
     if (useF) ctx.filter = 'brightness(' + (1 - dark).toFixed(3) + ') saturate(' + (1 - dark * 0.5).toFixed(3) + ')';
+    if (c.e && c.e.corpseK !== undefined) c.e.corpseK = k;   // 自带倒地动画的单位靠它取帧
     const _mr = Math.random;
     Math.random = function () { return 0.937; };
     try { drawEnemy(c.e); } finally { Math.random = _mr; }
@@ -22976,8 +22980,73 @@ window.__bossFields = (type) => {
   return o;
 };
 window.__bossArtProbe = () => window.__bossArt;
+
+/* ---------- 🏹 弓兵立绘（Tiny Fantasy · 绿袍弓手） ----------
+   素材 = tools\_warlock-archer.js 从 Warlock.aseprite 逐帧解出来改的（法杖→弓、袍子→绿），
+   和 Boss 立绘同一个三件套：懒加载 → 帧推进 → drawEnemy 最前面分流。
+   帧表：row0 Idle4 / row1 Run4 / row2 Jump3 / row3 Attack5 / row4 Attack2×11 / row5 Hurt4 / row6 Death11 */
+const ARCHER_ART = {"fw":64,"fh":32,"scale":2,"bodyCx":32,"feetY":31,"tint":"green","rows":{"idle":[0,4],"run":[1,4],"jump":[2,3],"atk":[3,5],"atk2":[4,11],"hurt":[5,4],"death":[6,11]},"sheet":"data:image/png;base64,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"};
+let archerImg = null, archerOK = 0;
+function archerLoad() {
+  if (archerImg || typeof ARCHER_ART === 'undefined') return;
+  if (typeof Image === 'undefined') { archerOK = -1; return; }
+  archerImg = new Image();
+  archerImg.onload = function () { archerOK = 1; };
+  archerImg.onerror = function () { archerOK = -1; };
+  archerImg.src = ARCHER_ART.sheet;
+}
+/* 帧推进（和 bossFrame 同一套：按 60fps 累加，换动作归零） */
+function archerFrame(e, key, n, fps) {
+  if (!e.aT) e.aT = {};
+  if (e.aKey !== key) { e.aKey = key; e.aT[key] = 0; }
+  e.aT[key] = (e.aT[key] || 0) + (1 / 60);
+  return Math.floor(e.aT[key] * (fps || 10)) % n;
+}
+/* 画一帧：以「身体中心 x / 脚底 y」对齐到敌人脚下（这两个值由 _archer-atlas.js 从素材量出来） */
+function drawArcherArt(e) {
+  if (typeof ARCHER_ART === 'undefined') return false;
+  archerLoad();
+  if (archerOK <= 0) return false;
+  const R = ARCHER_ART.rows;
+  const hurt = (e.flash || 0) > 0;
+  const moving = Math.hypot(e.vx || 0, e.vy || 0) > 8;
+  /* 开火动作：直接用 fireCd 反推「刚开火多久」，不额外挂计时器（面板冻结时也不会走表） */
+  const sinceShot = (e.fireCd === undefined) ? 99 : (FOE_ARCHER_CD - e.fireCd);
+  let key = 'idle';
+  if (e.corpseK !== undefined) key = 'death';
+  else if (hurt) key = 'hurt';
+  else if (sinceShot >= 0 && sinceShot < 0.45) key = 'atk';
+  else if (moving) key = 'run';
+  const spec = R[key] || R.idle;
+  const row = spec[0], n = spec[1];
+  let fr;
+  if (key === 'death') fr = Math.min(n - 1, Math.max(0, Math.floor(e.corpseK * n)));
+  else if (key === 'atk') fr = Math.min(n - 1, Math.floor(sinceShot * 10));
+  else fr = archerFrame(e, key, n, key === 'run' ? 12 : 7);
+  const S = ARCHER_ART.scale * (1 + Math.sin(e.bob || 0) * 0.03);
+  const fw = ARCHER_ART.fw, fh = ARCHER_ART.fh;
+  ctx.save();
+  ctx.translate(e.x, e.y - (e.airH || 0));
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(archerImg, fr * fw, row * fh, fw, fh,
+    -ARCHER_ART.bodyCx * S, -ARCHER_ART.feetY * S + (e.r || 11) * 0.9, fw * S, fh * S);
+  ctx.restore();
+  window.__archerDrawn = { n: ((window.__archerDrawn && window.__archerDrawn.n) || 0) + 1, last: key, fr: fr, row: row, x: Math.round(e.x), y: Math.round(e.y) };
+  return true;
+}
+/* 测试钩子：立绘是否就绪 / 最近一帧画的是哪个动作 */
+window.__archerArt = () => ({
+  ok: archerOK,
+  img: archerImg ? (archerImg.width + 'x' + archerImg.height) : null,
+  tint: (typeof ARCHER_ART !== 'undefined') ? ARCHER_ART.tint : null,
+  scale: (typeof ARCHER_ART !== 'undefined') ? ARCHER_ART.scale : 0,
+  drawN: (window.__archerDrawn && window.__archerDrawn.n) || 0,
+  last: (window.__archerDrawn && window.__archerDrawn.last) || null
+});
+
 function drawEnemy(e, col) {
   if (drawBossArt(e)) return;   // 🐉 换成 Ninja Adventure 素材的 Boss：直接用它自己的立绘
+  if (drawArcherArt(e)) return;   // 🏹 弓兵换成 Tiny Fantasy 素材的绿袍弓手（失败自动退回程序绘制）
   const air = e.airH || 0;   // 跃击腾空高度：整体上移 + 略微放大，落地影由 shade() 收缩
   const s = (1 + Math.sin(e.bob) * 0.03) * (1 + air / 320);
   const dx = p.x - e.x, dy = p.y - e.y;
