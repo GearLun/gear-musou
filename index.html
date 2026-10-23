@@ -22812,33 +22812,32 @@ function drawSamurai(e, col) {
   const A = BOSS_ART.samurai;
   const faceLeft = (e.fx || 1) < 0;
   const cm = String(e.cMode || e.cm || 'idle');
-  const attacking = cm !== 'idle' && cm !== 'rest';
-  const charging = cm.indexOf('charge') >= 0 || cm.indexOf('aim') >= 0;
   const hurt = (e.flash || 0) > 0;
   const moving = Math.hypot(e.vx || 0, e.vy || 0) > 6;
-  let key, n, fh = A.fh;
-  if (hurt) { key = 'hit'; n = A.nHit; }
-  else if (attacking) { key = faceLeft ? (charging ? 'chgL' : 'atkL') : (charging ? 'chgR' : 'atkR'); n = charging ? A.nChg : A.nAtk; fh = A.fhAtk; }
-  else if (moving) { key = 'walk'; n = A.nWalk; }
-  else { key = 'idle'; n = A.nIdle; }
+  const charging = cm.indexOf('charge') >= 0 || cm.indexOf('aim') >= 0;
+  const attacking = cm !== 'idle' && cm !== 'rest';
+  let key, n2, fh = A.fh;
+  if (hurt) { key = 'hit'; n2 = A.nHit; }
+  else if (attacking) { key = charging ? (faceLeft ? 'chgL' : 'chgR') : (faceLeft ? 'atkL' : 'atkR'); n2 = charging ? A.nChg : A.nAtk; fh = A.fhAtk; }
+  else if (moving) { key = 'walk'; n2 = A.nWalk; }
+  else { key = 'idle'; n2 = A.nIdle; }
   const im = bossImgs && bossImgs['s_' + col + '_' + key];
   if (!im || !im.width) return false;
-  const fr = bossFrame(e, key, n, key === 'walk' ? 12 : 10);
-  const fw = A.fw;
-  const sw = fw, sh = fh;
+  const fr = bossFrame(e, key, n2, key === 'walk' ? 10 : 8);
+  const fw = A.fw;                       // 96
   const sx = fr * fw, sy = 0;
-  const scale = e.r * 2.6 / fw;                 // 以碰撞半径定尺寸
+  const scale = Math.max(0.9, e.r * 3.0 / fw);
   const dw = fw * scale, dh = fh * scale;
   ctx.save();
   ctx.translate(e.x, e.y - (e.airH || 0));
-  if (!faceLeft) ctx.scale(-1, 1);              // 素材默认朝左
+  if (!faceLeft) ctx.scale(-1, 1);       // 素材默认朝左
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(im, sx, sy, sw, sh, -dw / 2, -dh + e.r * 0.9, dw, dh);
+  /* 底部对齐：脚踩在 e.y 上（略抬 r*0.2 让重心落在碰撞圆里） */
+  ctx.drawImage(im, sx, sy, fw, fh, -dw / 2, -dh + e.r * 1.15, dw, dh);
   ctx.restore();
-  window.__bossDrawn = { n: window.__bossDrawn.n + 1, last: "samurai:" + key, w: im.width, h: im.height };
+  window.__bossDrawn = { n: window.__bossDrawn.n + 1, last: 'samurai:' + key, w: im.width, h: im.height };
   return true;
 }
-/* 史莱姆 62×52 */
 function drawSlimeArt(e) {
   const A = BOSS_ART.slime;
   const jumping = (e.airH || 0) > 1 || String(e.cMode || '') === 'jump';
@@ -22861,33 +22860,37 @@ function drawSlimeArt(e) {
 function drawDragonArt(e) {
   if (!bossImgs) return false;
   const H = bossImgs['dr_head'], B1 = bossImgs['dr_body1'], B2 = bossImgs['dr_body2'], E1 = bossImgs['dr_end'];
-  if (!H || !H.width || !B1 || !B1.width) return false;
+  if (!H || !H.width || !B1 || !B1.width || !E1 || !E1.width) return false;
+
   const ang = Math.atan2(e.fy || 0, e.fx || 1);
-  const scale = e.r * 1.9 / 44;
   const t = (typeof time === 'number' ? time : 0);
-  const segs = 5;
+  const scale = Math.max(1, e.r * 2.0 / 44);
+  const faceRight = (e.fx || 1) >= 0;
+
+  /* 组成：头 → B1,B2 交替 ×6 → 尾 */
+  const chain = [{ im: H, w: 44, h: 46 }];
+  for (let i = 0; i < 6; i++) chain.push(i % 2 === 0 ? { im: B1, w: 31, h: 27 } : { im: B2, w: 31, h: 27 });
+  chain.push({ im: E1, w: 29, h: 40 });
+
+  const segLen = 22 * scale;          // 每节间距（略小于块宽 → 互相咬合成一条）
   ctx.save();
   ctx.imageSmoothingEnabled = false;
-  /* 尾 → 身 → 头：从后往前画，保证头部在最上 */
-  for (let i = segs; i >= 0; i--) {
-    const back = i * e.r * 0.92;
-    const wob = Math.sin(t * 3.1 - i * 0.75) * e.r * 0.30;
+  /* 从尾到头画，头压在最上面 */
+  for (let i = chain.length - 1; i >= 0; i--) {
+    const q = chain[i];
+    const back = i * segLen;
+    const wob = Math.sin(t * 2.6 - i * 0.55) * segLen * 0.28 * Math.min(1, i / 3);
     const px = e.x - Math.cos(ang) * back - Math.sin(ang) * wob;
-    const py = e.y - Math.sin(ang) * back + Math.cos(ang) * wob - (e.airH || 0) * (1 - i / (segs + 1));
-    let im, w, h;
-    if (i === 0) { im = H; w = 44; h = 46; }
-    else if (i === segs) { im = E1; w = 29; h = 40; }
-    else { im = (i % 2) ? B1 : B2; w = 31; h = 27; }
-    const dw = w * scale, dh = h * scale;
+    const py = e.y - Math.sin(ang) * back + Math.cos(ang) * wob - (e.airH || 0);
+    const dw = q.w * scale, dh = q.h * scale;
     ctx.save();
     ctx.translate(px, py);
-    ctx.rotate(ang);
-    if (i === segs) ctx.rotate(Math.PI);         // 尾巴朝后
-    ctx.drawImage(im, -dw / 2, -dh / 2, dw, dh);
+    if (!faceRight) ctx.scale(-1, 1);
+    ctx.drawImage(q.im, 0, 0, q.w, q.h, -dw / 2, -dh / 2, dw, dh);
     ctx.restore();
   }
   ctx.restore();
-  window.__bossDrawn = { n: window.__bossDrawn.n + 1, last: "dragon", w: H.width, h: H.height };
+  window.__bossDrawn = { n: window.__bossDrawn.n + 1, last: 'dragon', w: H.width, h: H.height, parts: chain.length };
   return true;
 }
 window.__bossArt = { last: null, n: 0 };
