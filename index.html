@@ -22817,6 +22817,8 @@ function bossFrame(e, key, n, fps) {
      朝左/朝右只体现在 AttackLeft / AttackRight 两张表上（翻转会把 atkR 画成 atkL）。
    ⚠ 帧宽必须是 96：写成 48 会把每帧切成左右两半、交替播放 → 玩家看到的「人被从中间劈开」。 */
 const BOSS_FEET_PAD = { idle: 4, walk: 0, hit: 2, atkL: 13, atkR: 13, chgL: 18, chgR: 18 };
+/* 四个换皮 Boss 的立绘倍率基准：要求是在上版基础再 ×1.5（所以下面几处都乘了 BOSS_ART_MUL） */
+const BOSS_ART_MUL = 1.5;
 function drawSamurai(e, col) {
   const A = BOSS_ART.samurai;
   const faceLeft = (e.fx || 1) < 0;
@@ -22828,10 +22830,24 @@ function drawSamurai(e, col) {
   const hurt = (e.bossHurtT || 0) > 0;
   const moving = Math.hypot(e.vx || 0, e.vy || 0) > 6;
   const charging = cm.indexOf('charge') >= 0 || cm.indexOf('aim') >= 0;
-  const attacking = cm !== 'idle' && cm !== 'rest';
+  /* —— 出招动作（atkL / atkR 挥刀表）——
+     ⚠ 上版这里写的是 `attacking = cm !== 'idle' && cm !== 'rest'`，而 charging 又抢在前面判断，
+       于是「出招」永远走 chg 表，**atk 表一帧都没进过画面**（用户报的「攻击动画没做进去」）。
+     现在按「真的出招」触发：
+       · 总大将：双环螺旋弹幕 / 瞄准扇弹 —— 炮台冷却 fireCd 被重置的那一帧（检测它变大即可）；
+       · 指挥官：一整轮召唤（cmdQ 里还有待发的骑兵波 = 正在挥旗）；
+       冲撞 / 瞬移仍然走 chg 表（那是蓄力与位移姿势，不是挥刀）。 */
+  if (e.fireCd !== undefined) {
+    if (e._fireCdPrev !== undefined && e.fireCd > e._fireCdPrev + 0.2) e.bossAtkT = 0.42;
+    e._fireCdPrev = e.fireCd;
+  }
+  if (e.cmdQ && e.cmdQ.length) e.bossAtkT = 0.42;
+  else if ((e.bossAtkT || 0) > 0) e.bossAtkT = Math.max(0, e.bossAtkT - 1 / 60);
+  const swinging = (e.bossAtkT || 0) > 0;
   let key, n2, fh = A.fh;
   if (hurt) { key = 'hit'; n2 = A.nHit; }
-  else if (attacking) { key = charging ? (faceLeft ? 'chgL' : 'chgR') : (faceLeft ? 'atkL' : 'atkR'); n2 = charging ? A.nChg : A.nAtk; fh = A.fhAtk; }
+  else if (swinging) { key = faceLeft ? 'atkL' : 'atkR'; n2 = A.nAtk; fh = A.fhAtk; }
+  else if (charging) { key = faceLeft ? 'chgL' : 'chgR'; n2 = A.nChg; fh = A.fhAtk; }
   else if (moving) { key = 'walk'; n2 = A.nWalk; }
   else { key = 'idle'; n2 = A.nIdle; }
   const im = bossImgs && bossImgs['s_' + col + '_' + key];
@@ -22839,7 +22855,7 @@ function drawSamurai(e, col) {
   const fr = bossFrame(e, key, n2, key === 'walk' ? 10 : 8);
   const fw = A.fw;                       // 96（真·帧宽）
   const sx = fr * fw;
-  const scale = Math.max(1.0, (e.r || 25) * 5.0 / fw);
+  const scale = Math.max(1.0, (e.r || 25) * 5.0 * BOSS_ART_MUL / fw);
   const dw = fw * scale, dh = fh * scale;
   /* 每张表自带的底部留白不同（idle 4 / 攻击 13 / 蓄力 18），不校正的话 idle↔攻击会上下跳一格 */
   const pad = (BOSS_FEET_PAD[key] || 0) * scale;
@@ -22863,7 +22879,7 @@ function drawSlimeArt(e) {
   const im = bossImgs && bossImgs['sl_' + key];
   if (!im || !im.width) return false;
   const fr = bossFrame(e, key, n, key === 'jump' ? 14 : 8);
-  const scale = e.r * 2.8 / A.fw;
+  const scale = (e.r || 46) * 2.8 * BOSS_ART_MUL / A.fw;
   const dw = A.fw * scale, dh = A.fh * scale;
   ctx.save();
   ctx.translate(e.x, e.y - (e.airH || 0));
@@ -22884,7 +22900,7 @@ function drawSlimeArt(e) {
      尺寸一律由 segR 推，不要写死像素。 */
 function dragonScale() {
   const R = (typeof BOSS_TEST === 'object' && BOSS_TEST.segR) || 20;
-  return R * 2.6 / 27;      // 27 = Body1/Body2 的原始高度
+  return R * 2.6 * BOSS_ART_MUL / 27;      // 27 = Body1/Body2 的原始高度
 }
 /* 龙头：正面立绘，**不旋转**（素材是正面对着镜头的头，转 90° 就像躺倒），只轻微上下浮 */
 function drawDragonHead(e) {
