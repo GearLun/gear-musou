@@ -22111,6 +22111,10 @@ function bindTouchUI() {
    素材署名：Assets - From : Sprout Lands - By : Cup Nooble
    ============================================================ */
 let sceneDark = false;
+/* 🌑 黑暗战场（第 15 波清剿后 / 讨伐 Boss 后）的环境压暗强度：
+   **只压场景**（地面 + 地面级特效），角色 / 敌人 / 弹道 / 最上层物件都在这一层之后画。
+   用户 2026-10 的要求：以前是「整张地图刷成黑」，现在改成「环境亮度降低 30%」（= 黑 0.30 叠一层）。 */
+const SCENE_DIM_ALPHA = 0.30;
 const RING = 192;                                  // 岛外那条河的宽度（像素）
 const GW = W + RING * 2, GH = H + RING * 2;        // 地面画布：战场外再扩一圈河（岛 = 战场，居中）
 const ground = document.createElement('canvas');
@@ -22388,6 +22392,16 @@ window.__mapObjRects = () => {
   }
   return out;
 };
+/* 诊断钩子：所有「永远在最上层」物件的世界矩形（x/y 已减掉 RING）—— 验证它们不会被致盲/暗场压暗 */
+window.__mapTopRects = () => {
+  const out = [];
+  const list = MAP_ED_OBJS || [];
+  for (const o of list) {
+    if (!o[11]) continue;
+    out.push({ x: o[5] - RING, y: o[6] - RING, w: o[3] * o[7], h: o[4] * o[7], top: 1 });
+  }
+  return out;
+};
 window.__mapBlkProbe = () => {
   const out = [];
   const list = MAP_ED_OBJS || [];
@@ -22470,6 +22484,11 @@ function paintMapEd(g) {
   if (MAP_ED_OBJS && MAP_ED_OBJS.length) {
     if (!mapSheetImgs) mapSheetsLoad();
     if (mapSheetImgs) for (const o of MAP_ED_OBJS) {
+      /* 🏔 「永远在最上层」的物件（o[11]）**不烘进地面图**：
+         它们在 drawMapTopObjs() 里每帧单独画，而那一遍在所有变暗效果（致盲 / 雨幕 / 低血 /
+         黑暗战场 / 闪光）**之后** → 永远保持原色。以前这里连 top 物件一起烘进 ground，
+         地面上就留了一份"会被压暗的副本"，物件边缘会发暗、看着像掉色。 */
+      if (o[11]) continue;
       const im = mapSheetImgs[o[0]];
       if (!im || !im.width) continue;
       const w = o[3] * o[7], h = o[4] * o[7];
@@ -22504,69 +22523,23 @@ window.__musouPos = () => ({ x: Math.round(p.x), y: Math.round(p.y) });
 function buildGround() {
   const g = ground.getContext('2d');
   g.imageSmoothingEnabled = false;
-  if (!sceneDark) {
-    /* 🗑 程序生成的基础地图（河/草/泥/悬崖/花草）**已按用户要求彻底删除**：
-       现在整张画布只有黑底 + 地图编辑器里画的内容。原来的岛不会再出现，
-       也不会因为"全部还原/替换素材"而跑回来。 */
-    isWX = RING; isWY = RING;
-    g.fillStyle = '#000';
-    g.fillRect(0, 0, GW, GH);
-    if (!isOK) { islandLoad(); }
-    if (!isDecor) { decorLoad(); }
-    if (isOK) {
-      try { paintMapEd(g); } catch (e) { window.__mapEdErr = String(e && e.message); }   // 只画用户内容
-    }
-    /* RNG_PARITY_20940：旧地形（渐变 + 3400 根草线 + 90 块暗斑）消耗 20940 次全局随机，
-       这里补平这个数量，保证依赖种子的测试不漂移 */
-    for (let _rp = 0; _rp < 20940; _rp++) Math.random();
-  } else {
-    /* 黑暗战场：整张画布先铺暗色，再画战场（岛外那圈河也一起压暗） */
-    g.fillStyle = '#0a090d'; g.fillRect(0, 0, GW, GH);
-
-      /* —— 黑暗战场（灭世魔君被讨伐后）—— */
-      const grad = g.createLinearGradient(0, 0, 0, H);
-      grad.addColorStop(0, '#151318'); grad.addColorStop(0.55, '#0b0a0e'); grad.addColorStop(1, '#050408');
-      g.fillStyle = grad; g.fillRect(0, 0, W, H);
-      for (let i = 0; i < 140; i++) {
-        const x = Math.random() * W, y = Math.random() * H;
-        g.fillStyle = 'rgba(0,0,0,' + rnd(0.12, 0.3).toFixed(2) + ')';
-        g.beginPath();
-        g.ellipse(x, y, rnd(18, 64), rnd(10, 30), rnd(0, 3), 0, TAU);
-        g.fill();
-      }
-      for (let i = 0; i < 46; i++) {
-        const x = rnd(0, W), y = rnd(0, H), segs = Math.floor(rnd(4, 10));
-        let px = x, py = y;
-        g.lineCap = 'round';
-        for (let s = 0; s < segs; s++) {
-          const nx2 = px + rnd(-26, 26), ny2 = py + rnd(6, 26);
-          g.strokeStyle = 'rgba(255,' + Math.floor(rnd(60, 90)) + ',40,' + rnd(0.08, 0.2).toFixed(2) + ')';
-          g.lineWidth = rnd(1, 2.4);
-          g.beginPath(); g.moveTo(px, py); g.lineTo(nx2, ny2); g.stroke();
-          px = nx2; py = ny2;
-        }
-      }
-      for (let i = 0; i < 2600; i++) {
-        const x = Math.random() * W, y = Math.random() * H;
-        g.strokeStyle = 'rgba(' + (Math.random() < 0.5 ? '120,110,130' : '70,66,80') + ',' + rnd(0.04, 0.13).toFixed(2) + ')';
-        g.lineWidth = 1;
-        g.beginPath();
-        g.moveTo(x, y);
-        g.lineTo(x + rnd(-3, 3), y - rnd(3, 7));
-        g.stroke();
-      }
-      const vig = g.createRadialGradient(W / 2, H / 2, 90, W / 2, H / 2, 700);
-      vig.addColorStop(0, 'rgba(90,80,120,0.10)');
-      vig.addColorStop(0.55, 'rgba(0,0,0,0)');
-      vig.addColorStop(1, 'rgba(0,0,0,0.72)');
-      g.fillStyle = vig; g.fillRect(0, 0, W, H);
-      g.strokeStyle = 'rgba(10,6,8,0.95)'; g.lineWidth = 22;
-      g.strokeRect(0, 0, W, H);
-      g.strokeStyle = 'rgba(160,60,50,0.30)'; g.lineWidth = 2;
-      g.strokeRect(11, 11, W - 22, H - 22);
-      g.strokeStyle = 'rgba(120,46,40,0.14)'; g.lineWidth = 1;
-      g.strokeRect(15, 15, W - 30, H - 30);
+  /* 🗑 程序生成的基础地图（河/草/泥/悬崖/花草）**已按用户要求彻底删除**：
+     现在整张画布只有黑底 + 地图编辑器里画的内容。原来的岛不会再出现，
+     也不会因为"全部还原/替换素材"而跑回来。 */
+  isWX = RING; isWY = RING;
+  g.fillStyle = '#000';
+  g.fillRect(0, 0, GW, GH);
+  if (!isOK) { islandLoad(); }
+  if (!isDecor) { decorLoad(); }
+  if (isOK) {
+    try { paintMapEd(g); } catch (e) { window.__mapEdErr = String(e && e.message); }   // 只画用户内容
   }
+  /* RNG_PARITY_20940：旧地形（渐变 + 3400 根草线 + 90 块暗斑）消耗 20940 次全局随机，
+     这里补平这个数量，保证依赖种子的测试不漂移 */
+  for (let _rp = 0; _rp < 20940; _rp++) Math.random();
+  /* ⚠️ 这里**不再有「黑暗战场」分支**：以前 sceneDark 会把整张地图重画成黑色战场（连岛外的河、
+     地图编辑器画的草地/泥地/悬崖全被盖掉）。用户 2026-10 要求改成「环境亮度降低 30%」，
+     所以暗场只在 drawGame 里叠一层 SCENE_DIM_ALPHA 的黑（见那里），地图本身原样保留。 */
 }
 
 function setSceneDark() {
@@ -28808,6 +28781,16 @@ function drawGame() {
      这里只跳过**完全在视野外 260px 以外**的敌人 —— 余量给足，预警线/大体型怪不会在边缘被切掉；
      **Boss 一律不剔除**（它们的血条与预警线是屏幕级表演）。
      剔除只影响绘制，**逻辑/判定/小地图一点没变**。 */
+  /* 🌑 黑暗战场 = **环境亮度降低 30%**（只有场景变暗，别的一切照常）：
+     这一层压在「地面 + 地面级特效（黏地/法阵/跑道/天气/预警圈）」之上，
+     而角色、敌人、弹道、粒子、以及**最上层物件**都在它之后画 → 一点都不会被压暗。
+     （以前是 buildGround 里把整张地图重画成黑色战场 —— 地图内容全被盖掉，用户不要那个。） */
+  if (sceneDark) {
+    const pad = 12 + shake;                    // 震屏时别露出边缘
+    ctx.fillStyle = 'rgba(0,0,0,' + SCENE_DIM_ALPHA.toFixed(2) + ')';
+    ctx.fillRect(camX - pad, camY - pad, VW + pad * 2, VH + pad * 2);
+  }
+
   drawCorpses();         // 💀 尸体画在活怪下面（先死先沉）
   const cullL = camX - 260, cullR = camX + VW + 260, cullT = camY - 260, cullB = camY + VH + 260;
   for (const e of enemies) {
@@ -30983,6 +30966,8 @@ window.__musouDarkSet = (v) => {   // 测试钩子：直接设定黑暗战场（
   else { sceneDark = false; buildGround(); }
   return sceneDark ? 1 : 0;
 };
+/* 测试钩子：黑暗战场的压暗口径（on = 是否开启 / alpha = 叠的那层黑；0.30 = 环境亮度 ×0.70） */
+window.__musouSceneDim = () => ({ on: sceneDark ? 1 : 0, alpha: SCENE_DIM_ALPHA });
 window.__musouHurt = (n) => { if (state === 'play' && p.alive && p.iframes <= 0 && p.dashT <= 0) hurtPlayer(n === undefined ? 99999 : n, 1, 0); }; // 测试钩子：受击（默认致命，受无敌帧约束）
 /* 🧪 测试钩子：直接设定无敌帧剩余秒数（不传 = 读当前值）。
    用途：验「升级给的 2 秒无敌**不会把更长的无敌缩短**」（`gainXP` 里用的是 Math.max）。 */
@@ -32231,6 +32216,8 @@ window.__musouSlimeSplit = () => {   // 测试钩子：把超级史莱姆压到�
   return true;
 };
 /* 💡 光明掠夺者：状态机 / 致盲程度与视野半径 / 法阵 / 骷髅头 / 瘫痪进度 */
+/* 🧪 测试钩子：直接设定致盲浓度（0 = 不盲，1 = 最盲）。用来验「最上层物件不会被致盲压暗」。 */
+window.__musouBlindSet = (k) => { blindK = Math.max(0, Math.min(1, +k || 0)); return blindK; };
 window.__musouPlunderInfo = () => {
   const e = enemies.find(x => !x.dead && x.type === 'plunder');
   return {
