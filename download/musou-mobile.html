@@ -739,6 +739,7 @@
     <div class="hint">按 P / Esc 继续</div>
     <div class="cdx-panel" id="pause-body" style="max-height:62vh;"></div>
     <div class="start-btns" style="margin-top:10px;">
+      <button class="btn btn2" id="btn-pause-dmg">💥 伤害数字：开</button>
       <button class="btn btn2" id="btn-pause-resume">▶ 继 续</button>
       <button class="btn btn2" id="btn-pause-home">💾 保存并回主页</button>
     </div>
@@ -952,7 +953,7 @@ const $ = id => document.getElementById(id);
    ⚠️ 改版本号时**只改这两行** + `index.html` 的 `.title small`。
    为什么要它：用户拿旧的下载文件来问「怎么和没改一样」—— 有角标一眼就能看出手上是哪一版。 */
 const VER_TXT = 'v1.1.0';
-const BUILD_TAG = 'build 10-24 03:20';
+const BUILD_TAG = 'build 10-26 23:59';
 function verBadgePaint() {
   const el = $('ver-badge');
   if (!el) return;
@@ -1614,6 +1615,34 @@ function addText(x, y, txt, size, color, stroke) {
   if (!isFinite(x) || !isFinite(y)) return;   // 🛡️ 同上：飘字坐标也来自实体
   if (texts.length > 36) texts.shift();
   texts.push({ x, y, vy: -46, life: 0.85, max: 0.85, txt, size, color, stroke: stroke || '' });
+}
+/* 💥 伤害数字（用户 2026-10）：敌人受伤时头顶飘一个伤害值，**只存在 0.3 秒**。
+   开关：暂停面板的「💥 伤害数字」按钮（记在 localStorage，跨局记住）。 */
+const DMG_NUM_KEY = 'gear-musou-dmgnum';
+let showDmgNum = true;
+try { const v = localStorage.getItem(DMG_NUM_KEY); if (v === '0') showDmgNum = false; } catch (e) {}
+function dmgNumOn() { return showDmgNum; }
+function dmgNumSet(on) {
+  showDmgNum = !!on;
+  try { localStorage.setItem(DMG_NUM_KEY, showDmgNum ? '1' : '0'); } catch (e) {}
+  const b = $('btn-pause-dmg');
+  if (b) b.textContent = '💥 伤害数字：' + (showDmgNum ? '开' : '关');
+}
+function addDmgFloat(x, y, val, big) {
+  if (!showDmgNum) return;
+  if (!isFinite(x) || !isFinite(y) || !isFinite(val)) return;
+  if (texts.length > 64) return;                      // 怪太多时别把飘字队列撑爆（不影响别的飘字）
+  const v = Math.max(1, Math.round(val));
+  /* ⚠️ 横向抖动用**坐标哈希**而不是 rnd()：hitEnemy 里每帧要飘很多次，
+     取一个随机数就会推进全局随机流 → 四种子冒烟里那些"靠随机流"的段落（飞机/宝可梦等）会整体漂移。
+     这里用坐标算出 -5~+5 的抖动，视觉效果一样，随机流一位都不动。 */
+  const jitter = ((Math.round(x) * 7 + Math.round(y) * 13) % 11) - 5;
+  texts.push({
+    x: x + jitter, y: y, vy: -54, life: 0.3, max: 0.3,
+    txt: String(v), size: big ? 21 : 15,
+    color: big ? '#ffe9a8' : '#fff4e0',
+    stroke: 'rgba(60,8,0,0.85)'
+  });
 }
 function addRing(x, y, color, width) {
   if (!isFinite(x) || !isFinite(y)) return;   // 🛡️ 同上
@@ -11662,6 +11691,10 @@ function hitEnemy(e, ax, ay, force, dmg, chest) {
     }
   }
   if (execute) { e.hp = 0; dbgExec++; } else e.hp -= Math.round(dmg);   // 取整：黑暗游戏等倍率可能产生小数
+  /* 💥 伤害数字：飘在**头顶**（-r*1.6），巨大伤害（≥ 本次血量 25%）用大号字色区分 */
+  if (!execute && !e.devDummy) {
+    addDmgFloat(e.x, e.y - (e.r || 10) * 1.6 - 6, dmg, dmg >= (e.maxhp || 1) * 0.25);
+  }
   e.flash = 0.09;
   /* 🛠 开发者·无限血量假人：把这一击的**实际伤害**记进秒伤统计，然后立刻回满血（永远打不死） */
   if (e.devDummy) { devDummyAdd(e.maxhp - Math.max(0, e.hp)); e.hp = e.maxhp; }
@@ -16618,10 +16651,14 @@ function renderPause() {
   h += '<div class="cdx-sec">💠 质变（' + muts.length + ' 种）</div>';
   h += '<div class="cdx-item"><span class="ic">🧬</span><b>已持有</b><small>' + (muts.length ? muts.join(' · ') : '无') + '</small></div>';
   body.innerHTML = h;
+  const dmgBtn = $('btn-pause-dmg');
+  if (dmgBtn) dmgBtn.textContent = '💥 伤害数字：' + (dmgNumOn() ? '开' : '关');
   const tip = $('pause-tip');
   if (tip) tip.textContent = '保存并回主页 = 立刻写入存档（之后主页会出现「▶ 继续」）';
 }
 $('btn-pause-resume').addEventListener('click', () => { $('sc-pause').classList.remove('show'); state = 'play'; });
+/* 💥 伤害数字 开/关（暂停面板那颗按钮；选择记在 localStorage，跨局记住） */
+$('btn-pause-dmg').addEventListener('click', () => dmgNumSet(!dmgNumOn()));
 /* 🧢 宝可梦管理：面板里的「继续战斗」按钮 */
 $('pets-close').addEventListener('click', () => closePetPanel());
 /* 🏠 结算面板（败阵 / 通关）的「回到主页」：收面板 + 回主页刷新「继续」按钮 */
@@ -22144,7 +22181,7 @@ let sceneDark = false;
 /* 🌑 黑暗战场（第 15 波清剿后 / 讨伐 Boss 后）的环境压暗强度：
    **只压场景**（地面 + 地面级特效），角色 / 敌人 / 弹道 / 最上层物件都在这一层之后画。
    用户 2026-10 的要求：以前是「整张地图刷成黑」，现在改成「环境亮度降低 30%」（= 黑 0.30 叠一层）。 */
-const SCENE_DIM_ALPHA = 0.30;
+const SCENE_DIM_ALPHA = 0.50;
 const RING = 192;                                  // 岛外那条河的宽度（像素）
 const GW = W + RING * 2, GH = H + RING * 2;        // 地面画布：战场外再扩一圈河（岛 = 战场，居中）
 const ground = document.createElement('canvas');
@@ -22391,6 +22428,66 @@ function playerMapWalk(x, y) {
   return mapWalkAt(x, y, !!dodge);
 }
 /* 🏔 永远在最上层的物件（树冠之类）：画在所有角色/敌人之后 */
+
+/* 🏆 Boss 血条（**屏幕坐标**）：单独成函数，因为它必须画在「最上层物件」之后
+   —— 以前它跟着敌人循环画，树冠/边缘装饰会把血条盖掉（用户 2026-10 报）。
+   现在是 drawGame 里等 drawMapTopObjs() 跑完再统一补画，血条永远压在最上面。 */
+function drawBossBarScreen(e) {
+    const isF2 = e.type === 'final2';
+    const isF = e.type === 'final' || isF2;
+    const isWorm = e.type === 'final3', isPlant = e.type === 'final4';
+    const isTwin = e.type === 'final5';
+    const isVoid = e.type === 'final6';
+    const isSlime = e.type === 'slimeKing';
+    const isPlunder = e.type === 'plunder';
+    const isSprint = e.type === 'sprinter';
+    /* 🌟 丰缘之战：三只各有配色；固拉多 / 盖欧卡**同时在场** → 血条像双子魔眼那样一左一右排开，别叠一起 */
+    const isGro = e.type === 'groudon', isKyo = e.type === 'kyogre', isRay = e.type === 'rayquaza';
+    const big = isF || isWorm || isPlant || isVoid || isSlime || isPlunder || isSprint || isGro || isKyo || isRay;
+    const w = big ? 500 : 320, bxc = VW / 2, bx = bxc - w / 2;   // 屏幕坐标：不再加 camX
+    /* 双子魔眼：两只各有独立血条，一条在左上、一条在右上（避免叠在一起）
+       🌟 丰缘之战一阶段的两只同理：固拉多在左、盖欧卡在右 */
+    const twinOff = isTwin ? (e.twinRole === 'laser' ? -w / 2 - 8 : w / 2 + 8)
+      : ((isGro || isKyo) ? (isGro ? -w / 2 - 8 : w / 2 + 8) : 0);
+    const by = (big ? 40 : (isTwin ? 34 : 64));                 // 屏幕坐标：不再加 camY
+    const cx2 = bxc + twinOff, bx2 = cx2 - w / 2;
+    ctx.fillStyle = 'rgba(10,10,10,0.75)'; ctx.fillRect(bx2 - 2, by - 2, w + 4, 16);
+    /* Boss 血条配色（查表；原来那串八层嵌套三元太难加新 Boss 了，本轮顺手换成表）
+       🌟 丰缘之战三只排在最前面：固拉多橙红 / 盖欧卡蓝 / 烈空坐绿 */
+    const BOSS_BAR = {
+      groudon: ['#5a1a08', '#ffb066'], kyogre: ['#0c2a52', '#8fd8ff'], rayquaza: ['#12401c', '#8ff0a0'],
+      final6: ['#101a33', '#9ad8ff'], final2: ['#123e5e', '#7fd4ff'], final: ['#7a1f6e', '#ff9d5c'],
+      final3: ['#3a2450', '#c79bff'], final4: ['#5a1030', '#ff9ed2'], final5: ['#4a1418', '#ff6a4a'],
+      slimeKing: ['#1e5a2c', '#8ff0a0'], plunder: ['#3a2a5a', '#e8dcff'], sprinter: ['#5a2010', '#ffb199']
+    };
+    const bar2 = BOSS_BAR[e.type] || ['#a0312a', '#ffd166'];   // 总大将等走默认色
+    ctx.fillStyle = bar2[0];
+    ctx.fillRect(bx2, by, w * Math.max(0, e.hp / e.maxhp), 12);
+    ctx.fillStyle = bar2[1];
+    ctx.font = 'bold 15px "Microsoft YaHei",sans-serif';
+    ctx.textAlign = 'center';
+    /* 🗡️ 虚空执剑者 / 💡 光明掠夺者：血条上直接标出「现在能不能打」——这个机制必须一眼能读 */
+    const barLabel = isTwin ? (e.twinRole === 'laser' ? '🌙 激光眼（远攻）' : '🌙 火焰眼（近战）')
+      : (isVoid ? (e.vShow === 1 ? '🗡️ 虚空执剑者 · 显形（可攻击）' : '🗡️ 虚空执剑者 · 隐于虚空（打不到）')
+      : (isPlunder ? ((e.pDownT || 0) > 0 ? '💡 光明掠夺者 · 瘫痪中（致盲已解除 · 受伤 +30%）'
+          : (e.pShow === 1 ? '💡 光明掠夺者 · 显形（可攻击）' : '💡 光明掠夺者 · 隐身（打不到 · 正在致盲你）'))
+      : ETYPES[e.type].label));
+    ctx.fillText(barLabel, cx2, by - 8);
+    /* 🏃 超级跑者：血条**下面**写着它的口头禅 + 剩余时间（撑满 120 秒它就自己倒） */
+    if (isSprint) {
+      const left = Math.max(0, Math.ceil(SPRINT.timeout - (e.spT || 0)));
+      ctx.font = 'bold 13px "Microsoft YaHei",sans-serif';
+      ctx.fillStyle = '#ffd166';
+      ctx.fillText('「' + SPRINT.taunt + '」', cx2, by + 27);
+      ctx.fillStyle = '#ffb199';
+      ctx.fillText('⏱ 还剩 ' + left + ' 秒它就自己累倒（也可以直接打空血条）' + (e.spIce ? ' · 🍦 已加速' : ''), cx2, by + 45);
+    }
+    ctx.textAlign = 'left';
+}
+
+/* 本帧需要补画的 Boss 血条（敌人循环里收集，最上层物件之后再画） */
+let bossBarQ = [];
+
 function drawMapTopObjs() {
   window.__topN = 0;
   if (!MAP_ED_OBJS || !MAP_ED_OBJS.length || !mapSheetImgs) return;
@@ -22398,7 +22495,10 @@ function drawMapTopObjs() {
   ctx.imageSmoothingEnabled = false;
   /* 🌑 黑暗战场：top 物件属于"场景"，要跟着地面一起压暗（角色/敌人不受影响，所以不能在全局压） */
   const _dim = (sceneDark && typeof corpseFilterOK === 'function' && corpseFilterOK());
+  /* 🌑 黑暗游戏（地狱奇遇）同样要把 top 物件压暗，否则地图外圈的树会在黑场里独自发亮 */
+  const _hdim = (!_dim && typeof hellDarkOn === 'function' && hellDarkOn() && typeof corpseFilterOK === 'function' && corpseFilterOK());
   if (_dim) ctx.filter = 'brightness(' + (1 - SCENE_DIM_ALPHA).toFixed(2) + ')';
+  else if (_hdim) ctx.filter = 'brightness(0.78)';
   for (const o of MAP_ED_OBJS) {
     if (!o[11]) continue;
     const im = mapSheetImgs[o[0]];
@@ -22411,7 +22511,7 @@ function drawMapTopObjs() {
     ctx.restore();
     window.__topN++;
   }
-  if (_dim) ctx.filter = 'none';
+  if (_dim || _hdim) ctx.filter = 'none';
   ctx.imageSmoothingEnabled = _sm;
 }
 window.__blockedAt = (x, y) => (typeof blockedBy === 'function' ? blockedBy(x, y) : -2);
@@ -28782,13 +28882,17 @@ function drawGame() {
   if (hellDarkOn()) {
     const pulse = 0.5 + 0.5 * Math.sin(time * 3.4);
     ctx.save();
+    /* ⚠️ 以前是 fillRect(0, 0, W, H) —— 那是**世界矩形**，而外圈还有 RING(192) 那么宽的边缘装饰，
+       相机贴边时那一条完全没被压暗（用户 2026-10 报「地图最边缘新加的位置不受黑暗游戏影响」）。
+       现在按**当前视野**铺满（+pad 防震屏露边），和黑暗战场同一个口径。 */
+    const hpad = 16 + shake;
     ctx.fillStyle = 'rgba(24,4,10,' + (0.20 + 0.06 * pulse).toFixed(3) + ')';
-    ctx.fillRect(0, 0, W, H);
+    ctx.fillRect(camX - hpad, camY - hpad, VW + hpad * 2, VH + hpad * 2);
     const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.28, W / 2, H / 2, Math.max(W, H) * 0.62);
     vg.addColorStop(0, 'rgba(120,0,20,0)');
     vg.addColorStop(1, 'rgba(150,0,26,' + (0.26 + 0.14 * pulse).toFixed(3) + ')');
     ctx.fillStyle = vg;
-    ctx.fillRect(0, 0, W, H);
+    ctx.fillRect(camX - hpad, camY - hpad, VW + hpad * 2, VH + hpad * 2);
     ctx.restore();
   }
 
@@ -29095,6 +29199,7 @@ function drawGame() {
     ctx.fillRect(camX - pad, camY - pad, VW + pad * 2, VH + pad * 2);
   }
 
+  bossBarQ.length = 0;   // 🏆 本帧的 Boss 血条队列（敌人循环里收集）
   drawCorpses();         // 💀 尸体画在活怪下面（先死先沉）
   const cullL = camX - 260, cullR = camX + VW + 260, cullT = camY - 260, cullB = camY + VH + 260;
   for (const e of enemies) {
@@ -29149,58 +29254,7 @@ function drawGame() {
         ctx.fillRect(e.x - w / 2 + 1, barY + 1, Math.max(1, (w - 2) * hpR), 1.4);
       }
     }
-    if (e.boss) {
-      const isF2 = e.type === 'final2';
-      const isF = e.type === 'final' || isF2;
-      const isWorm = e.type === 'final3', isPlant = e.type === 'final4';
-      const isTwin = e.type === 'final5';
-      const isVoid = e.type === 'final6';
-      const isSlime = e.type === 'slimeKing';
-      const isPlunder = e.type === 'plunder';
-      const isSprint = e.type === 'sprinter';
-      /* 🌟 丰缘之战：三只各有配色；固拉多 / 盖欧卡**同时在场** → 血条像双子魔眼那样一左一右排开，别叠一起 */
-      const isGro = e.type === 'groudon', isKyo = e.type === 'kyogre', isRay = e.type === 'rayquaza';
-      const big = isF || isWorm || isPlant || isVoid || isSlime || isPlunder || isSprint || isGro || isKyo || isRay;
-      const w = big ? 500 : 320, bxc = camX + VW / 2, bx = bxc - w / 2;
-      /* 双子魔眼：两只各有独立血条，一条在左上、一条在右上（避免叠在一起）
-         🌟 丰缘之战一阶段的两只同理：固拉多在左、盖欧卡在右 */
-      const twinOff = isTwin ? (e.twinRole === 'laser' ? -w / 2 - 8 : w / 2 + 8)
-        : ((isGro || isKyo) ? (isGro ? -w / 2 - 8 : w / 2 + 8) : 0);
-      const by = camY + (big ? 40 : (isTwin ? 34 : 64));
-      const cx2 = bxc + twinOff, bx2 = cx2 - w / 2;
-      ctx.fillStyle = 'rgba(10,10,10,0.75)'; ctx.fillRect(bx2 - 2, by - 2, w + 4, 16);
-      /* Boss 血条配色（查表；原来那串八层嵌套三元太难加新 Boss 了，本轮顺手换成表）
-         🌟 丰缘之战三只排在最前面：固拉多橙红 / 盖欧卡蓝 / 烈空坐绿 */
-      const BOSS_BAR = {
-        groudon: ['#5a1a08', '#ffb066'], kyogre: ['#0c2a52', '#8fd8ff'], rayquaza: ['#12401c', '#8ff0a0'],
-        final6: ['#101a33', '#9ad8ff'], final2: ['#123e5e', '#7fd4ff'], final: ['#7a1f6e', '#ff9d5c'],
-        final3: ['#3a2450', '#c79bff'], final4: ['#5a1030', '#ff9ed2'], final5: ['#4a1418', '#ff6a4a'],
-        slimeKing: ['#1e5a2c', '#8ff0a0'], plunder: ['#3a2a5a', '#e8dcff'], sprinter: ['#5a2010', '#ffb199']
-      };
-      const bar2 = BOSS_BAR[e.type] || ['#a0312a', '#ffd166'];   // 总大将等走默认色
-      ctx.fillStyle = bar2[0];
-      ctx.fillRect(bx2, by, w * Math.max(0, e.hp / e.maxhp), 12);
-      ctx.fillStyle = bar2[1];
-      ctx.font = 'bold 15px "Microsoft YaHei",sans-serif';
-      ctx.textAlign = 'center';
-      /* 🗡️ 虚空执剑者 / 💡 光明掠夺者：血条上直接标出「现在能不能打」——这个机制必须一眼能读 */
-      const barLabel = isTwin ? (e.twinRole === 'laser' ? '🌙 激光眼（远攻）' : '🌙 火焰眼（近战）')
-        : (isVoid ? (e.vShow === 1 ? '🗡️ 虚空执剑者 · 显形（可攻击）' : '🗡️ 虚空执剑者 · 隐于虚空（打不到）')
-        : (isPlunder ? ((e.pDownT || 0) > 0 ? '💡 光明掠夺者 · 瘫痪中（致盲已解除 · 受伤 +30%）'
-            : (e.pShow === 1 ? '💡 光明掠夺者 · 显形（可攻击）' : '💡 光明掠夺者 · 隐身（打不到 · 正在致盲你）'))
-        : ETYPES[e.type].label));
-      ctx.fillText(barLabel, cx2, by - 8);
-      /* 🏃 超级跑者：血条**下面**写着它的口头禅 + 剩余时间（撑满 120 秒它就自己倒） */
-      if (isSprint) {
-        const left = Math.max(0, Math.ceil(SPRINT.timeout - (e.spT || 0)));
-        ctx.font = 'bold 13px "Microsoft YaHei",sans-serif';
-        ctx.fillStyle = '#ffd166';
-        ctx.fillText('「' + SPRINT.taunt + '」', cx2, by + 27);
-        ctx.fillStyle = '#ffb199';
-        ctx.fillText('⏱ 还剩 ' + left + ' 秒它就自己累倒（也可以直接打空血条）' + (e.spIce ? ' · 🍦 已加速' : ''), cx2, by + 45);
-      }
-      ctx.textAlign = 'left';
-    }
+    if (e.boss) bossBarQ.push(e);   // 血条延后到"最上层物件"之后画（见 drawBossBarScreen）
     /* 状态标记：灼伤（火苗）/ 离子停滞（闪电） */
     if ((e.burnT || 0) > 0) {
       const fk = Math.sin(time * 20) * 2;
@@ -30389,6 +30443,15 @@ function drawGame() {
        · 黑暗战场的「场景压暗」是画在角色**之前**的（角色不压），所以这里单独按同样的系数压一次，
          让 top 物件作为"场景"的一员跟着暗，角色仍然不受影响。 */
   try { drawMapTopObjs(); } catch (e) {}
+  /* 🏆 Boss 血条最后画：树冠 / 边缘装饰都盖不住它 */
+  if (bossBarQ.length) {
+    for (const be of bossBarQ) {
+      if (be.dead) continue;
+      window.__bossBarN = (window.__bossBarN | 0) + 1;
+      try { drawBossBarScreen(be); } catch (err) { window.__bossBarErr = String(err && err.message || err); }
+    }
+    bossBarQ.length = 0;
+  }
 
   /* ---- 全屏泛光 / 低血量预警（绝对血量：10 血以下才泛红；初始 20 血不再常驻红屏） ---- */
   /* ⚡ 这几个全屏渐变以前**每帧都新建一次**（createLinearGradient/createRadialGradient 是纯 CPU 开销，
@@ -32208,6 +32271,7 @@ window.__musouWaveMax = () => waveMax();   // 测试钩子：本难度的关卡�
 window.__musouRollWaveBoss = (k) => (k === 10 ? wave10Boss() : (k === 20 ? wave20Boss() : (k === 30 ? wave30Boss() : null)));   // 测试钩子：直接抽一次 10/20/30 关 Boss（验证三选一 / 二选一）
 window.__musouHellList = () => HELL_EVENTS.map(e => ({ id: e.id, name: e.name, desc: e.desc }));   // 测试钩子：地狱奇遇全表
 window.__musouHellNow = () => (hellEv ? { id: hellEv.id, name: hellEv.name } : null);              // 测试钩子：本波奇遇
+window.__musouDmgNum = (v) => { if (v === undefined) return { on: showDmgNum ? 1 : 0, alive: texts.filter(t => t.max === 0.3).length }; dmgNumSet(!!v); return dmgNumOn() ? 1 : 0; };
 window.__musouDarkGame = () => ({ on: hellDarkOn() ? 1 : 0, mul: eqDmgMul() });                    // 测试钩子：黑暗游戏是否生效 / 当前双向伤害倍率
 window.__musouCloudR = () => thunderCloudR();                                                      // 测试钩子：当前术有专攻等级下的雷云攻击范围半径
 window.__musouRoarPct = (type) => {   // 测试钩子：哈根虎啸对某类型的伤害百分比（杂兵 50% / 战将·铁骑 20% / Boss 3%）
