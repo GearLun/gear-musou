@@ -484,7 +484,7 @@
       <div class="load-tip">游戏正在加载中，请稍后,若长时间无法加载，请刷新网页。</div>
       <div class="load-bar"><i id="load-fill"></i></div>
     </div>
-    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.2.0</small></div>
+    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.2.1</small></div>
     <!-- 🏷️ 版本角标（内容由 game.js 的 verBadgePaint() 填）：玩家一眼看出自己跑的是哪一版，
          省得拿着旧的下载文件来问「怎么没改」 -->
     <div id="ver-badge" class="ver-badge"></div>
@@ -953,8 +953,8 @@ const $ = id => document.getElementById(id);
 /* 🏷️ 版本角标（主页左下角 `#ver-badge`）：`VER_TXT` = 玩家看到的版本号 · `BUILD_TAG` = 这份产物的构建标记。
    ⚠️ 改版本号时**只改这两行** + `index.html` 的 `.title small`。
    为什么要它：用户拿旧的下载文件来问「怎么和没改一样」—— 有角标一眼就能看出手上是哪一版。 */
-const VER_TXT = 'v1.2.0';
-const BUILD_TAG = 'build 10-28 20:45';
+const VER_TXT = 'v1.2.1';
+const BUILD_TAG = 'build 10-28 21:05';
 function verBadgePaint() {
   const el = $('ver-badge');
   if (!el) return;
@@ -26574,9 +26574,11 @@ function recolorSprite(im, hueShift, satMul, lumMul) {
       }
       let sat = mx === 0 ? 0 : df / mx;
       let lum = mx;
-      /* 只有"有颜色"的像素才改色相（布料/披风）；皮肤/金属这些低饱和的保持原样，免得整个人变色 */
-      if (sat > 0.14) h = hueShift % 1;
-      sat = Math.min(1, sat * satMul);
+      /* ⚠️ 只改**袍子/兜帽的紫蓝色**（hue 0.58~0.92）。
+         上一版按"有饱和就改"，结果把橙色的脸、金色的装饰也一起染了（用户 2026-10 报「把脸都改了」）。
+         现在：皮肤(0.0~0.2)、金饰(0.08~0.17)、金属(低饱和) 全部原样保留。 */
+      const isRobe = (sat > 0.25) && (h >= 0.58) && (h <= 0.92);
+      if (isRobe) { h = hueShift % 1; sat = Math.min(1, sat * satMul); }
       lum = Math.min(1, lum * lumMul);
       /* HSV → RGB */
       const q = lum * (1 - sat), pp = lum * (1 - sat * ((h * 6) % 1));
@@ -26627,17 +26629,19 @@ window.__playerArt = (k) => {
     tintOk: (typeof recolorTestOk !== 'undefined') ? recolorTestOk : 'n/a',
     last: last };
 };
-/* 立绘帧：站立/跑动按走路相位取，攻击按挥击进度取，受击取第 0 帧 */
+/* 立绘帧
+   · run：按**走过的距离**取帧（p.walk 只在实际移动时增长）—— 站着不动绝不会动，
+          移动越快帧越快，停下就停在原地（不是定时器空转）
+   · atk：按挥击进度取
+   · idle / hurt：固定第 0 帧（这套素材每行的 4 格是同一个动作的分解，站着播会看着"抽搐"） */
 function playerFrame(S, row, key) {
   const n = S.cols;
+  if (key === 'run') return Math.floor(p.walk / 7) % n;
   if (key === 'atk') {
     const pr = p.swingT > 0 ? Math.max(0, Math.min(1, 1 - p.swingT / 0.17)) : 0;
     return Math.min(n - 1, Math.floor(pr * n));
   }
-  if (key === 'run') {
-    return Math.floor(p.walk * 0.18) % n;
-  }
-  return Math.floor(time * 6) % n;
+  return 0;
 }
 /* 主绘制：成功画了立绘就返回 true（调用方直接 return，程序绘制的武器不再出现） */
 function drawPlayerSprite() {
@@ -26653,19 +26657,28 @@ function drawPlayerSprite() {
       if (S.tints[el]) img = S.tints[el];
     }
     if (!img || !img.width) return false;
-    /* 状态 → 行：攻击 > 受击 > 跑动 > 站立（多出来的行当死亡/备用，先不取） */
-    const moving = Math.hypot(p.vx, p.vy) > 12;
+    /* 状态 → 行
+       ⚠️ 上一版把"攻击"排在最前，而自动攻击几乎一直在触发 swingT>0
+          → 走路时永远画攻击行、腿一动不动（用户 2026-10 报「走路没有动画」）。
+       现在：**只要在移动就走 walk 行**（攻击时也一样，边跑边砍本来就是常态），
+       站着不动才轮到 攻击 > 受击 > 站立。 */
+    const moving = (Math.abs(p.vx) + Math.abs(p.vy)) > 12 || (p.walkPrev !== undefined && p.walk - p.walkPrev > 0.4);
+    p.walkPrev = p.walk;
     let row = 0, key = 'idle';
-    if (p.swingT > 0) { row = Math.min(2, S.rows - 1); key = 'atk'; }
+    if (moving) { row = Math.min(1, S.rows - 1); key = 'run'; }
+    else if (p.swingT > 0) { row = Math.min(2, S.rows - 1); key = 'atk'; }
     else if (p.hurtT > 0) { row = Math.min(3, S.rows - 1); key = 'hurt'; }
-    else if (moving) { row = Math.min(1, S.rows - 1); key = 'run'; }
     const col = playerFrame(S, row, key);
     const K = 1;                                     // 立绘已是 64 格 / 56px 人物
     const dx = p.x - S.bodyCx * K;
     const dy = p.y - S.feetY * K + (p.r || 12) * 0.9;
     ctx.save();
-    /* 朝向：只做水平镜像（立绘是正面/侧面图，不做整圈旋转） */
-    if (p.face !== undefined && Math.cos(p.face) < -0.2) {
+    /* 朝向：立绘是正面图 → 只做水平镜像。
+       ⚠️ 上一版按**指针方向**(p.face)镜像，所以"往左走、指针在右"时人朝右跑（用户 2026-10 报「面朝方向和走路不对应」）。
+       现在：**在移动就按移动方向**，站着不动才跟指针。 */
+    let faceAng = p.face;
+    if (Math.abs(p.vx) > 1 || Math.abs(p.vy) > 1) faceAng = Math.atan2(p.vy, p.vx);
+    if (faceAng !== undefined && Math.cos(faceAng) < -0.15) {
       ctx.translate(p.x, 0);
       ctx.scale(-1, 1);
       ctx.translate(-p.x, 0);
