@@ -484,7 +484,7 @@
       <div class="load-tip">游戏正在加载中，请稍后,若长时间无法加载，请刷新网页。</div>
       <div class="load-bar"><i id="load-fill"></i></div>
     </div>
-    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.4.0</small></div>
+    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.4.1</small></div>
     <!-- 🏷️ 版本角标（内容由 game.js 的 verBadgePaint() 填）：玩家一眼看出自己跑的是哪一版，
          省得拿着旧的下载文件来问「怎么没改」 -->
     <div id="ver-badge" class="ver-badge"></div>
@@ -952,8 +952,8 @@ const $ = id => document.getElementById(id);
 /* 🏷️ 版本角标（主页左下角 `#ver-badge`）：`VER_TXT` = 玩家看到的版本号 · `BUILD_TAG` = 这份产物的构建标记。
    ⚠️ 改版本号时**只改这两行** + `index.html` 的 `.title small`。
    为什么要它：用户拿旧的下载文件来问「怎么和没改一样」—— 有角标一眼就能看出手上是哪一版。 */
-const VER_TXT = 'v1.4.0';
-const BUILD_TAG = 'build 10-29 00:15';
+const VER_TXT = 'v1.4.1';
+const BUILD_TAG = 'build 10-29 00:40';
 function verBadgePaint() {
   const el = $('ver-badge');
   if (!el) return;
@@ -26194,6 +26194,14 @@ function wmDrawWeapon(id, len, alpha) {
   }
   ctx.restore();
 }
+/* 🗡 只画"武器层"（四角武器 + 无双头顶武器），不画身体 —— 供新立绘叠加使用。
+   直接复用 drawWMPlayer 的武器段：用一个开关跳过身体部分。 */
+let WM_SKIP_BODY = false;
+function drawWMWeaponLayer() {
+  window.__wmLayerN = (window.__wmLayerN | 0) + 1;
+  WM_SKIP_BODY = true;
+  try { drawWMPlayer(); } finally { WM_SKIP_BODY = false; }
+}
 function drawWMPlayer() {
   dbgWMCornerDrawN = 0;                       // 本帧真正画出来的四角武器数（闪烁帧整体不画 = 0）
   dbgWMMusouHeadDrawN = 0;                    // 本帧真正画出来的「头顶武器」数（无双·万武齐鸣）
@@ -26208,6 +26216,8 @@ function drawWMPlayer() {
   const leg = Math.sin(p.walk * 0.35) * Math.min(m / 240, 1) * 4;
   ctx.save();
   ctx.translate(p.x, p.y);
+  const bag = wmStored();          // 后面"无双头顶武器"也要用 → 提到判断之外
+  if (!WM_SKIP_BODY) {
   /* 影子 */
   ctx.fillStyle = 'rgba(0,0,0,0.28)';
   ctx.beginPath(); ctx.ellipse(0, 12, 15, 6, 0, 0, TAU); ctx.fill();
@@ -26226,7 +26236,6 @@ function drawWMPlayer() {
   ctx.beginPath(); ctx.arc(0, -21, 8, Math.PI, TAU); ctx.fill();
   ctx.fillRect(-2, -30, 4, 8);
   /* 腰间挂的家伙（背包里的其它武器，最多 3 把看得见）——无双期间它们都飞到头顶去了，腰间就不重复挂 */
-  const bag = wmStored();
   if (!musou) {
     for (let i = 0; i < bag.length && i < 3; i++) {
       ctx.save();
@@ -26235,6 +26244,7 @@ function drawWMPlayer() {
       wmDrawWeapon(bag[i].id, 22, 0.9);
       ctx.restore();
     }
+  }
   }
   /* 🗡️ 四角武器：已装备的武器分别摆在 **左上 / 左下 / 右上 / 右下**，
      每一把都**跟着鼠标方向转**（p.face = 指针方向；手机端 = 自动锁定最近敌人的方向）。
@@ -26667,9 +26677,7 @@ function playerFrameIndex(S, dir) {
 function dirsSignSafe(v) { return (v === 1 || v === -1) ? v : 1; }
 
 /* 🔴 训练家腰间的小精灵球（跟着朝向左右挪一点，画在立绘之后） */
-function drawTrainerBall(faceSign) {
-  const bx = p.x + (faceSign >= 0 ? 8 : -8);
-  const by = p.y - 13;
+function drawTrainerBall(fsign, bx, by) {
   const R = 4.2;
   ctx.save();
   ctx.imageSmoothingEnabled = true;
@@ -26691,9 +26699,7 @@ function drawTrainerBall(faceSign) {
 
 function drawPlayerSprite() {
   if (DBG_NO_ART) return false;
-  /* 🗡 武器大师：**继续用原来的程序绘制**（手里/腰间的武器跟着鼠标指针转）——
-     用户 2026-10 明确要求"武器大师使用原来的按鼠标指针旋转的武器，其他职业不改动"。 */
-  if (isWM()) return false;
+  /* 🗡 武器大师：**立绘照常画**，画完再叠一层"跟鼠标转"的武器（见下方 isWM 分支） */
   const S = playerArtOf();
   if (!S) return false;
   playerArtLoad();
@@ -26733,11 +26739,16 @@ function drawPlayerSprite() {
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(img, col * S.fw, row * S.fh, S.fw, S.fh, dx, dy, S.fw * K, S.fh * K);
     ctx.restore();
-    /* 🔴 训练家：腰间精灵球（跟着左右朝向挪） */
+    /* 🔴 训练家：腰间的精灵球（按立绘盒算位置：身体 70% 高度处、贴身体外缘） */
     if (isTrainer()) {
       const fsign = (dir === 'right') ? 1 : (dir === 'left' ? -1 : (flipX ? 1 : -1));
-      drawTrainerBall(dirsSignSafe(fsign));
+      const bodyTop = dy + 5, bodyH = S.feetY - 5;
+      const hipY = bodyTop + bodyH * 0.75;   // 0.75 = 胯部高度（腰侧）
+      const hipX = p.x + fsign * (S.fw * 0.26);
+      drawTrainerBall(fsign, hipX, hipY);
     }
+    /* 🗡 武器大师：立绘之上再叠"跟鼠标指针旋转"的武器层（四角 + 无双头顶） */
+    if (isWM()) { try { drawWMWeaponLayer(); } catch (e) {} }
     window.__playerDrawn = { dir: dir, flip: flipX, frame: fIdx, row: row, col: col, job: p.job, face: p.face };
     return true;
   } catch (e) { return false; }
