@@ -484,7 +484,7 @@
       <div class="load-tip">游戏正在加载中，请稍后,若长时间无法加载，请刷新网页。</div>
       <div class="load-bar"><i id="load-fill"></i></div>
     </div>
-    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.3.0</small></div>
+    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.3.1</small></div>
     <!-- 🏷️ 版本角标（内容由 game.js 的 verBadgePaint() 填）：玩家一眼看出自己跑的是哪一版，
          省得拿着旧的下载文件来问「怎么没改」 -->
     <div id="ver-badge" class="ver-badge"></div>
@@ -953,8 +953,8 @@ const $ = id => document.getElementById(id);
 /* 🏷️ 版本角标（主页左下角 `#ver-badge`）：`VER_TXT` = 玩家看到的版本号 · `BUILD_TAG` = 这份产物的构建标记。
    ⚠️ 改版本号时**只改这两行** + `index.html` 的 `.title small`。
    为什么要它：用户拿旧的下载文件来问「怎么和没改一样」—— 有角标一眼就能看出手上是哪一版。 */
-const VER_TXT = 'v1.3.0';
-const BUILD_TAG = 'build 10-28 21:45';
+const VER_TXT = 'v1.3.1';
+const BUILD_TAG = 'build 10-28 22:00';
 function verBadgePaint() {
   const el = $('ver-badge');
   if (!el) return;
@@ -26632,15 +26632,18 @@ window.__playerArt = (k) => {
     tintOk: (typeof recolorTestOk !== 'undefined') ? recolorTestOk : 'n/a',
     last: last };
 };
-/* 立绘取帧：四方向（素材本身就是 下/上/左/右 四套）
-   方向 = 由移动速度决定（主要走哪个轴），站着不动沿用上一次朝向。
-   帧 = 按走过的距离推进（p.walk 只在移动时增长），每 42 单位换一帧 ≈ 自然步频。 */
+/* 立绘取帧：四方向 + 原地自动踏步（用户 2026-10 定稿）
+   · 方向：**始终跟随鼠标指针**（p.face，即瞄准角），不再看移动方向
+   · 帧：按时间自动循环 —— 站着也在踏步，看着有生气
+   · 素材自带 下/上/左/右 四套，不需要任何镜像/旋转 */
 const PLAYER_DIR_KEEP = { dir: 'down' };
-function playerDirFromMove(vx, vy) {
-  if (Math.abs(vx) + Math.abs(vy) < 8) return PLAYER_DIR_KEEP.dir;
+const PLAYER_STEP_FPS = 6;          // 踏步速度：每秒 6 帧（4 帧一轮 ≈ 1.5 步/秒，自然）
+function playerDirFromAim(ang) {
+  if (ang === undefined || ang === null || !isFinite(ang)) return PLAYER_DIR_KEEP.dir;
+  const cx = Math.cos(ang), sy = Math.sin(ang);
   let d;
-  if (Math.abs(vx) >= Math.abs(vy)) d = (vx > 0) ? 'right' : 'left';
-  else d = (vy > 0) ? 'down' : 'up';
+  if (Math.abs(cx) >= Math.abs(sy)) d = (cx > 0) ? 'right' : 'left';
+  else d = (sy > 0) ? 'down' : 'up';
   PLAYER_DIR_KEEP.dir = d;
   return d;
 }
@@ -26651,45 +26654,13 @@ function playerCell(S, dir, frameIdx) {
   const i = n > 0 ? ((frameIdx % n) + n) % n : 0;
   return axis === 'row' ? { row: r0 + i, col: c0 } : { row: r0, col: c0 + i };
 }
-function playerFrameIndex(S, dir, moving) {
+function playerFrameIndex(S, dir) {
   const d = S.dirs && S.dirs[dir];
   const n = d ? d[2] : 1;
-  if (!moving) return 0;
-  return Math.floor(p.walk / 42) % n;
+  if (n <= 1) return 0;
+  return Math.floor(time * PLAYER_STEP_FPS) % n;   // 时间驱动：站着也在踏步
 }
 
-/* 测试钩子：读职业立绘状态（含法师的三种元素配色是否就绪） */
-/* 测试钩子：法师三套元素配色的平均色（证明染色真的不一样） */
-window.__playerTintAvg = () => {
-  const S = (typeof PLAYER_SPRITES !== 'undefined') ? PLAYER_SPRITES.mage : null;
-  if (!S || !S.tints) return null;
-  const out = {};
-  for (const el in S.tints) {
-    const im = S.tints[el];
-    if (!im || !im.width) { out[el] = null; continue; }
-    try {
-      const cv = document.createElement('canvas');
-      cv.width = im.width; cv.height = im.height;
-      const g = cv.getContext('2d'); g.drawImage(im, 0, 0);
-      const d = g.getImageData(0, 0, cv.width, cv.height).data;
-      let r = 0, gg = 0, b = 0, n = 0;
-      for (let i = 0; i < d.length; i += 4) { if (d[i + 3] < 8) continue; r += d[i]; gg += d[i + 1]; b += d[i + 2]; n++; }
-      out[el] = n ? [Math.round(r / n), Math.round(gg / n), Math.round(b / n), n] : null;
-    } catch (e) { out[el] = 'ERR'; }
-  }
-  return out;
-};
-try { playerArtPreload(); } catch (e) {}   // 脚本加载完就预热一次（首页停留时也在解码）
-window.__playerArt = (k) => {
-  const S = (typeof PLAYER_SPRITES !== 'undefined') ? PLAYER_SPRITES[k || ''] : null;
-  const last = window.__playerDrawn || null;
-  if (!S) return { last: last, keys: (typeof PLAYER_SPRITES !== 'undefined') ? Object.keys(PLAYER_SPRITES) : [] };
-  return { ok: S.ok, rows: S.rows, cols: S.cols, fw: S.fw, fh: S.fh, feetY: S.feetY,
-    tints: S.tints ? Object.keys(S.tints).filter(t => S.tints[t]) : null,
-    tintSame: S.tints ? { thunder: S.tints.thunder === S.__img, light: S.tints.light === S.__img } : null,
-    tintOk: (typeof recolorTestOk !== 'undefined') ? recolorTestOk : 'n/a',
-    last: last };
-};
 /* 主绘制：成功画了立绘就返回 true（调用方直接 return，程序绘制的武器不再出现） */
 function drawPlayerSprite() {
   if (DBG_NO_ART) return false;
@@ -26705,13 +26676,13 @@ function drawPlayerSprite() {
       if (S.tints[el]) img = S.tints[el];
     }
     if (!img || !img.width) return false;
-    /* 方向 + 帧：素材自带 下/上/左/右 四套，**不需要任何镜像/旋转**
-       （用户 2026-10：之前按指针旋转武器、按指针镜像 → 走的方向和朝向永远不一致） */
-    const moving = (Math.abs(p.vx) + Math.abs(p.vy)) > 12
-      || (p.walkPrev !== undefined && p.walk - p.walkPrev > 0.4);
-    p.walkPrev = p.walk;
-    const dir = playerDirFromMove(p.vx, p.vy);
-    const fIdx = playerFrameIndex(S, dir, moving);
+    /* 方向 = 鼠标指针（p.face）；帧 = 时间驱动（原地踏步） */
+    /* 朝向：桌面**始终跟鼠标指针**（直接用指针世界坐标算，连骑士也不吃 move 覆盖）；
+      触屏没有指针 → 沿用 p.face（锁敌/移动方向） */
+    /* 有指针（桌面 / 鼠标动过）→ 永远跟指针；没有指针（纯触屏）→ 跟 p.face */
+    const aimAng = (mouse.off === false) ? Math.atan2(mouse.y - p.y, mouse.x - p.x) : p.face;
+    const dir = playerDirFromAim(aimAng);
+    const fIdx = playerFrameIndex(S, dir);
     const cellPos = playerCell(S, dir, fIdx);
     const row = cellPos.row, col = cellPos.col;
     const K = 1;
@@ -26721,7 +26692,7 @@ function drawPlayerSprite() {
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(img, col * S.fw, row * S.fh, S.fw, S.fh, dx, dy, S.fw * K, S.fh * K);
     ctx.restore();
-    window.__playerDrawn = { dir: dir, frame: fIdx, row: row, col: col, job: p.job, moving: moving };
+    window.__playerDrawn = { dir: dir, frame: fIdx, row: row, col: col, job: p.job, face: p.face };
     return true;
   } catch (e) { return false; }
 }
@@ -32259,6 +32230,9 @@ window.__musouMageState = (i) => {   // 测试钩子：妖法师引导 / 法阵�
   };
 };
 window.__musouRoleBans = () => ({ muts: roleBanMuts(), arts: roleBanArts(), exMuts: roleExclusiveMuts(), exArts: roleExclusiveArts() }); // 测试钩子：当前角色禁选 / 专属清单
+window.__playerDirFor = (a) => playerDirFromAim(a);
+window.__playerStepFps = () => PLAYER_STEP_FPS;
+window.__mouseDbg = () => ({ x: Math.round(mouse.x), y: Math.round(mouse.y), cx: Math.round(mouse.cx), cy: Math.round(mouse.cy), off: mouse.off });
 window.__musouFace = (a) => { if (state === 'play') p.face = a; }; // 测试钩子：设定攻击朝向
 window.__musouMiniMap = () => ({   // 测试钩子：小地图矩形 / 视野框 / 友方点位 / 敌人点位配色 / 影分身生效范围 / 炽热擂台火海
   x: mmX(), y: mmY(), w: MM_W, h: MM_H,
