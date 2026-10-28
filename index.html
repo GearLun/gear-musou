@@ -484,7 +484,7 @@
       <div class="load-tip">游戏正在加载中，请稍后,若长时间无法加载，请刷新网页。</div>
       <div class="load-bar"><i id="load-fill"></i></div>
     </div>
-    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.3.5</small></div>
+    <div class="title">齿轮无双<small>GEAR MUSOU · 无尽割草 · 正式版 v1.4.0</small></div>
     <!-- 🏷️ 版本角标（内容由 game.js 的 verBadgePaint() 填）：玩家一眼看出自己跑的是哪一版，
          省得拿着旧的下载文件来问「怎么没改」 -->
     <div id="ver-badge" class="ver-badge"></div>
@@ -953,8 +953,8 @@ const $ = id => document.getElementById(id);
 /* 🏷️ 版本角标（主页左下角 `#ver-badge`）：`VER_TXT` = 玩家看到的版本号 · `BUILD_TAG` = 这份产物的构建标记。
    ⚠️ 改版本号时**只改这两行** + `index.html` 的 `.title small`。
    为什么要它：用户拿旧的下载文件来问「怎么和没改一样」—— 有角标一眼就能看出手上是哪一版。 */
-const VER_TXT = 'v1.3.5';
-const BUILD_TAG = 'build 10-28 23:50';
+const VER_TXT = 'v1.4.0';
+const BUILD_TAG = 'build 10-29 00:15';
 function verBadgePaint() {
   const el = $('ver-badge');
   if (!el) return;
@@ -26664,8 +26664,37 @@ function playerFrameIndex(S, dir) {
 }
 
 /* 主绘制：成功画了立绘就返回 true（调用方直接 return，程序绘制的武器不再出现） */
+
+function dirsSignSafe(v) { return (v === 1 || v === -1) ? v : 1; }
+
+/* 🔴 训练家腰间的小精灵球（跟着朝向左右挪一点，画在立绘之后） */
+function drawTrainerBall(faceSign) {
+  const bx = p.x + (faceSign >= 0 ? 8 : -8);
+  const by = p.y - 13;
+  const R = 4.2;
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+  /* 球体：上半红、下半白、中间黑带 */
+  ctx.beginPath(); ctx.arc(bx, by, R, Math.PI, TAU); ctx.closePath();
+  ctx.fillStyle = '#e8433a'; ctx.fill();
+  ctx.beginPath(); ctx.arc(bx, by, R, 0, Math.PI); ctx.closePath();
+  ctx.fillStyle = '#f2f2f2'; ctx.fill();
+  ctx.strokeStyle = 'rgba(24,20,18,0.85)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(bx, by, R, 0, TAU); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(bx - R, by); ctx.lineTo(bx + R, by); ctx.stroke();
+  /* 中间按钮 */
+  ctx.fillStyle = '#f2f2f2';
+  ctx.beginPath(); ctx.arc(bx, by, 1.6, 0, TAU); ctx.fill();
+  ctx.strokeStyle = 'rgba(24,20,18,0.85)';
+  ctx.beginPath(); ctx.arc(bx, by, 1.6, 0, TAU); ctx.stroke();
+  ctx.restore();
+}
+
 function drawPlayerSprite() {
   if (DBG_NO_ART) return false;
+  /* 🗡 武器大师：**继续用原来的程序绘制**（手里/腰间的武器跟着鼠标指针转）——
+     用户 2026-10 明确要求"武器大师使用原来的按鼠标指针旋转的武器，其他职业不改动"。 */
+  if (isWM()) return false;
   const S = playerArtOf();
   if (!S) return false;
   playerArtLoad();
@@ -26705,6 +26734,11 @@ function drawPlayerSprite() {
     ctx.imageSmoothingEnabled = true;
     ctx.drawImage(img, col * S.fw, row * S.fh, S.fw, S.fh, dx, dy, S.fw * K, S.fh * K);
     ctx.restore();
+    /* 🔴 训练家：腰间精灵球（跟着左右朝向挪） */
+    if (isTrainer()) {
+      const fsign = (dir === 'right') ? 1 : (dir === 'left' ? -1 : (flipX ? 1 : -1));
+      drawTrainerBall(dirsSignSafe(fsign));
+    }
     window.__playerDrawn = { dir: dir, flip: flipX, frame: fIdx, row: row, col: col, job: p.job, face: p.face };
     return true;
   } catch (e) { return false; }
